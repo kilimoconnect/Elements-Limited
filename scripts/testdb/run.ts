@@ -27,6 +27,7 @@ const STEPS: [string, string][] = [
   ["Import foundation (Stage 0)", "scripts/itest-import0.ts"],
   ["Import foundations and secure posting (Stage 2)", "scripts/itest-import2.ts"],
   ["Foreign purchases with TZS books (Stage 3)", "scripts/itest-import3.ts"],
+  ["Import shipments and landed cost (Stage 4)", "scripts/itest-import4.ts"],
 ];
 
 function run(label: string, script: string, env: NodeJS.ProcessEnv): boolean {

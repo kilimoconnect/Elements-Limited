@@ -10,6 +10,7 @@ import {
   BarChart3,
   BookOpen,
   Settings,
+  Ship,
 } from "lucide-react";
 
 export interface NavLeaf {
@@ -18,6 +19,8 @@ export interface NavLeaf {
   enabled: boolean;
   /** Permission required to see it (Owner always sees enabled items). */
   requires?: string;
+  /** Feature flag that must be on for the company (applies to the Owner too). */
+  feature?: string;
 }
 
 export interface NavEntry {
@@ -28,6 +31,7 @@ export interface NavEntry {
   enabled: boolean;
   ownerOnly?: boolean;
   requires?: string;
+  feature?: string;
   /** ...or a group of children. */
   items?: NavLeaf[];
 }
@@ -67,6 +71,18 @@ export const NAV: NavEntry[] = [
       { label: "Create Purchase", href: "/purchases/new", enabled: true, requires: "purchases.create" },
       { label: "Purchase History", href: "/purchases/history", enabled: true, requires: "purchases.view" },
       { label: "Supplier Payments", href: "/purchases/supplier-payments", enabled: true, requires: "purchases.record_payment" },
+    ],
+  },
+  {
+    label: "Importation",
+    icon: Ship,
+    enabled: true,
+    requires: "imports.view",
+    feature: "imports",
+    items: [
+      { label: "Shipments", href: "/imports", enabled: true, requires: "imports.view", feature: "imports" },
+      { label: "New Shipment", href: "/imports/new", enabled: true, requires: "imports.create", feature: "imports" },
+      { label: "Cost Invoices", href: "/imports/cost-invoices", enabled: true, requires: "cost_invoices.view", feature: "imports" },
     ],
   },
   {
@@ -115,7 +131,7 @@ export const NAV: NavEntry[] = [
       { label: "Trial Balance", href: "/accounting/trial-balance", enabled: true, requires: "accounting.view_trial_balance" },
       { label: "Opening Balances", href: "/accounting/opening-balances", enabled: true, requires: "accounting.manage_opening_balances" },
       { label: "Reconciliation Controls", href: "/accounting/reconciliation-controls", enabled: true, requires: "accounting.view_control_accounts" },
-      { label: "FX Revaluation", href: "/accounting/fx-revaluation", enabled: true, requires: "fx.revalue" },
+      { label: "FX Revaluation", href: "/accounting/fx-revaluation", enabled: true, requires: "fx.revalue", feature: "fx_settlement" },
       { label: "Period Close", href: "/accounting/period-close", enabled: true, requires: "periods.view" },
     ],
   },
@@ -141,10 +157,11 @@ export const NAV: NavEntry[] = [
 
 /** Whether a user (with a permission set) may see a nav entry/leaf. */
 export function canSee(
-  entry: { requires?: string; ownerOnly?: boolean },
+  entry: { requires?: string; ownerOnly?: boolean; feature?: string },
   isOwner: boolean,
   perms: Set<string>,
 ): boolean {
+  if (entry.feature && !perms.has(`feature:${entry.feature}`)) return false;
   if (entry.ownerOnly) return isOwner;
   if (isOwner) return true;
   if (entry.requires) return perms.has(entry.requires);

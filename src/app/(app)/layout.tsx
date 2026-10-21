@@ -13,8 +13,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   let companyName =
     process.env.NEXT_PUBLIC_COMPANY_NAME ?? "Letiq Limited";
   let branches: BranchOption[] = [];
+  // Enabled feature flags travel with the permission list as "feature:<key>"
+  // markers so staged navigation stays hidden while a flag is off.
+  let featureMarkers: string[] = [];
 
   if (companyId) {
+    const { data: flags } = await admin.from("feature_flags").select("flag_key")
+      .eq("company_id", companyId).eq("is_enabled", true);
+    featureMarkers = ((flags ?? []) as { flag_key: string }[]).map((f) => `feature:${f.flag_key}`);
+
     const { data: company } = await admin
       .from("companies")
       .select("name")
@@ -53,7 +60,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         roleName: user.role?.name ?? "No role",
         isOwner: user.isOwner,
       }}
-      permissions={Array.from(user.permissions)}
+      permissions={[...Array.from(user.permissions), ...featureMarkers]}
       companyName={companyName}
       branches={branches}
       activeBranchId={activeBranchId}

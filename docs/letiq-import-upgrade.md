@@ -30,7 +30,7 @@ actually run, and what remains. Updated at the end of every stage.
 | 2 | Shared foundations and secure posting primitives (schema, allocation engine, actor checks, idempotency, registry, account mappings, feature flags, attachments) | **Done 21/10/2026** (record below) |
 | 2b | Remaining hardening from Stage 1: fix void/transfer subledger drift (D1, D2, D5), goods-in-transit 1155 on transfers, branch enforcement in the existing transfer actions (D3), caller-supplied idempotency keys in existing server actions (D4), lot maintenance with an "untracked" lot for existing stock | Not started — recommended before Stage 3 posts anything |
 | 3 | Foreign purchases with TZS books: foreign purchase invoices, foreign supplier balances (original currency + TZS carrying), settlements through TZS accounts with realised FX, advances, bank charges, period-end revaluation, foreign returns and credits, currency confinement | **Done 21/10/2026** (record below) |
-| 4 | Import shipments: shipment + lines, title (ownership) event, goods invoice via `purchases` invoice-only mode, GR/IR clearing, cost sources (estimate → accrual → actual) and `cost_invoices`, allocations, goods receipt (GRN) with discrepancy resolution, late-cost propagation for import lots | Not started |
+| 4 | Import shipments: shipment + lines, title (ownership) event, goods invoice via `purchases` invoice-only mode, GR/IR clearing, cost sources (estimate → accrual → actual) and `cost_invoices`, allocations, goods receipt (GRN) with discrepancy resolution, late-cost propagation for import lots | **Done 21/10/2026** (record below; screens not yet walked through in a browser) |
 | 5 | Rebagging orders (multi-size outputs, packaging materials, normal/abnormal loss, unused bulk) + propagation through conversion | Not started |
 | 6 | Transfer upgrade: logistics details, charges, Storage attachments, versioned delivery notes, partial receipts with signed POD, discrepancy approval, shared in-transit view + propagation through transfers | Not started |
 | 7 | Commercial (pricing) cost view and import / landed-cost reports | Not started |
@@ -40,6 +40,123 @@ Each stage extends the existing posting services (`record_stock_movement`,
 payables, transfers) rather than adding a parallel ERP.
 
 ---
+
+## Stage 4 — Import shipments and landed cost (implemented)
+
+Migration `0027_import_shipments.sql` (additive; existing stock, journals and
+balances untouched) plus the Importation screens, all behind the `imports`
+feature flag and the `imports.*` / `cost_invoices.*` permissions.
+
+### Behaviour
+
+- **Shipment** records supplier, reference, origin country/port, discharge
+  port, vessel, containers, bill of lading, delivery terms + named place,
+  whether the price already includes freight / insurance, ETA / shipped /
+  arrival dates, destination warehouse, currency and planning rate, and the
+  ownership event (`bill_of_lading`, `arrival` or `receipt`). Lines carry
+  product, batch reference, ordered and shipped kg (bulk: quantity = net kg;
+  packaged bags are rejected — bags come from rebagging).
+- **Quantities kept apart per line:** ordered, shipped, invoiced, received,
+  shortfall (normal / write-off / claim) and in transit
+  (`_line_transit_kg`). Only receipts create stock, and only bulk stock.
+- **Ownership** (`recognise_import_ownership`): Dr 1157 goods in transit /
+  Cr 2130 GR/IR at the goods value (invoice value where invoiced, accrual
+  rate otherwise). When the ownership event is `receipt`, it happens inside
+  the first receipt.
+- **Goods invoice** (`post_import_goods_invoice`, via an `invoice_only`
+  purchase so it shares the supplier-invoice registry and foreign payables
+  from Stage 3): clears 2130 and creates the supplier balance. If ownership
+  is already recorded, only the difference from the provisional value moves
+  cost (to stock held / cost of sales / in transit pro rata). Void / return
+  of `invoice_only` purchases is blocked.
+- **Cost lines** (`cost_sources`): category, description, supplier,
+  allocation basis / targets, estimate. Estimates never post. `accrue_import_cost`
+  is an explicit action (Dr 1157 or the expense account / Cr 2140).
+  Freight or insurance categories are rejected when the shipment price
+  already includes them (no CIF double count).
+- **Cost invoices** (`post_cost_invoice`, TZS only): each capitalised line
+  must link one open cost line; the accrual is reversed and only the
+  difference from it changes cost. Expense-category lines may be unlinked.
+  Credit notes adjust an invoiced cost and cannot exceed it or the open
+  balance of the credited invoice. Recoverable VAT goes to input VAT, never
+  stock; non-recoverable tax is capitalised with the line.
+- **Storage** and other expense categories post to their expense account
+  (e.g. 6150) and appear in the shipment's commercial cost only.
+- **Receipts** (`post_import_receipt`): net kg, weighbridge ref, batch,
+  location, "last receipt" flag. Each receipt takes its kg share of the
+  in-transit value; the last receipt of a line takes the exact remainder.
+  A shortfall on the last receipt needs `imports.approve` and a resolution
+  (normal loss absorbed into the received kg, write-off to expense, claim to
+  receivable). A lot is created per receipt line.
+- **Late costs** after receipt are replayed over the immutable stock
+  movements from that receipt, pro rata to what happened to the goods: still
+  held → stock value; sold → cost of sales; written off → loss; in a branch
+  transfer → in-transit unit cost or the destination branch (recursive).
+- **Landed-cost sheet** (`landed_cost_sheet`): estimated vs actual per cost,
+  stock cost per kg and commercial cost per kg. **Finalisation**
+  (`import_finalization_checks` / `finalize_import_shipment`) requires all
+  lines closed, goods fully invoiced, no estimate-only or accrued-not-invoiced
+  costs, and 1157 / 2130 / 2140 cleared for the shipment.
+- **Retry safety:** stable idempotency keys per posting and
+  `client_request_id` on receipts and cost invoices; a repeated request
+  returns the first result.
+
+### Screens
+
+Importation menu: Shipments (KPIs: open, in transit, costs awaiting
+invoice, unallocated costs), New Shipment, shipment detail (quantities,
+landed-cost sheet, costs with accrue / void, goods invoices, receipts,
+traceability, finalisation checks, attachments), Goods Invoice, Receive
+Goods, Cost Invoices list and New Cost Invoice.
+
+### Acceptance (actual results, `scripts/itest-import4.ts`)
+
+- 100 MT at TZS 80,000,000 + TZS 10,000,000 capitalised cost → 100,000 kg at
+  **900.00/kg**.
+- Storage TZS 2,000,000 → expensed, stock value unchanged; commercial cost
+  **920/kg**.
+- Partial receipts (60,000 kg, then the final 40,000 kg taking the exact
+  remainder) reconcile to the shipment total of TZS 90,000,000.
+- Freight cost line on a CIF shipment is rejected.
+- Repeating a receipt request creates no second stock movement or journal.
+- Late clearing cost of 4.0M after the first receipt and a sale splits
+  exactly: 2.0M stock held, 0.4M cost of sales, 1.6M still in transit.
+- Receipt-time ownership with a 10 kg write-off: Dr 1150 990k, Dr 6300 10k,
+  1157 / 2130 net to zero.
+- Foreign-currency shipment with a transfer: all stock ends at 1,060/kg.
+- Reconciliations 1150 = stock subledger, and 1157 / 2130 / 2140 per shipment.
+
+### Checks actually run (21/10/2026)
+
+| Check | Result |
+| --- | --- |
+| `npx tsc --noEmit` | Clean |
+| `npm run lint` | 20 problems (11 errors, 9 warnings), all in files not touched by Stage 4 — same count as the tree without Stage 4 changes. Stage 4 files lint clean. |
+| `npm run test:db` | All suites pass: 19 + 26 + 11 + 51 + 114 + 79 + **48 (Stage 4)** + 20 upgrade-path checks |
+| `npm test` | 25 attachment policy checks pass |
+| Deliberate breakage: late-cost propagation stopped adjusting held stock | Stage 4 suite failed 5 checks (900/kg remainder, storage, FX transfer cost, 1,060/kg, 1150 reconciliation); migration restored byte-for-byte and suite green again |
+
+### Decisions and assumptions
+
+- Goods are costed at the goods-invoice rate; the ownership-date amount is
+  provisional and trued up by the invoice (Stage 1 Decision 2 alternative —
+  a deliberate deviation from strict IAS 21 spot-at-recognition).
+- In-transit unit cost on transfers is stored to 4 decimals; rounding
+  differences are absorbed by the final receipt / remainder rules.
+- Normal loss is absorbed into the received kg; write-off and claim are
+  valued at the in-transit unit cost.
+
+### Limitations
+
+- Voiding or crediting an import goods invoice is not supported (blocked);
+  use a supplier credit outside the shipment until a later stage adds it.
+- Late-cost propagation ignores sales voids and sales returns that happen
+  after a receipt (their stock comes back at the cost recorded at the time).
+- Screens type-check and lint clean but have **not** been walked through in
+  a browser; no real concurrent-request test was run (concurrency safety rests
+  on row locks and idempotency keys tested sequentially).
+- Not applied to any live database; no push or deploy.
+- Stage 2b defects (D1 for openings / adjustments, D2–D5) remain open.
 
 ## Stage 3 — Foreign purchases with TZS books (implemented)
 
