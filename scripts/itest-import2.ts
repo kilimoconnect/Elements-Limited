@@ -147,8 +147,9 @@ async function main() {
       "insert into import_shipment_lines(company_id, shipment_id, product_id, quantity, net_kg, gross_kg) values ($1,$2,$3,1,10,9)", [co, ship, bulk]));
     check("negative FC amount rejected", await fails(db,
       "insert into import_shipment_lines(company_id, shipment_id, product_id, quantity, net_kg, fc_amount) values ($1,$2,$3,1,1,-5)", [co, ship, bulk]));
-    check("foreign-currency purchase needs an import shipment", await fails(db,
-      "insert into purchases(company_id, branch_id, supplier_id, currency_code, exchange_rate) values ($1,$2,$3,'USD',2500)", [co, hq, sup]));
+    // (Stage 3 allows purchase-origin foreign invoices; import-only posting mode still needs a shipment.)
+    check("invoice-only purchase needs an import shipment", await fails(db,
+      "insert into purchases(company_id, branch_id, supplier_id, currency_code, exchange_rate, posting_mode) values ($1,$2,$3,'USD',2500,'invoice_only')", [co, hq, sup]));
     check("zero exchange rate rejected", await fails(db,
       "insert into purchases(company_id, branch_id, supplier_id, currency_code, exchange_rate, import_shipment_id, posting_mode) values ($1,$2,$3,'USD',0,$4,'invoice_only')", [co, hq, sup, ship]));
     check("TZS purchase cannot carry a rate", await fails(db,

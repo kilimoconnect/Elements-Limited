@@ -15,10 +15,10 @@ export default async function PurchaseReturnPage(props: { params: Params }) {
   const { id } = await props.params;
   const admin = createAdminClient();
 
-  const { data: pur } = await admin.from("purchases").select("id, company_id, branch_id, document_number, document_status").eq("id", id).maybeSingle();
+  const { data: pur } = await admin.from("purchases").select("id, company_id, branch_id, document_number, document_status, currency_code").eq("id", id).maybeSingle();
   if (!pur || pur.company_id !== ctx.companyId || pur.document_status !== "posted") notFound();
 
-  const { data: lines } = await admin.from("purchase_lines").select("id, description, quantity, unit_cost, gross_amount").eq("purchase_id", id).order("line_no");
+  const { data: lines } = await admin.from("purchase_lines").select("id, description, quantity, unit_cost, gross_amount, fc_gross_amount").eq("purchase_id", id).order("line_no");
   const { data: prior } = await admin.from("purchase_return_lines")
     .select("purchase_line_id, quantity, purchase_return:purchase_returns!inner(document_status)")
     .in("purchase_line_id", (lines ?? []).map((l) => l.id));
@@ -31,6 +31,7 @@ export default async function PurchaseReturnPage(props: { params: Params }) {
   const rLines: RLine[] = (lines ?? []).map((l) => ({
     purchase_line_id: l.id, description: l.description ?? "", bought: Number(l.quantity),
     returned: returnedMap.get(l.id) ?? 0, unit_cost: Number(l.unit_cost), line_total: Number(l.gross_amount),
+    fc_line_total: l.fc_gross_amount == null ? null : Number(l.fc_gross_amount),
   }));
 
   const { data: accounts } = await admin.from("payment_accounts").select("id, name, branch_id").eq("company_id", ctx.companyId).eq("is_active", true).order("code");
@@ -39,7 +40,7 @@ export default async function PurchaseReturnPage(props: { params: Params }) {
   return (
     <div>
       <PageHeader title="Purchase Return" description={`Against purchase ${pur.document_number}`} />
-      <PurchaseReturnForm purchaseId={id} lines={rLines} accounts={branchAccounts as never} />
+      <PurchaseReturnForm purchaseId={id} lines={rLines} accounts={branchAccounts as never} currency={pur.currency_code} />
     </div>
   );
 }

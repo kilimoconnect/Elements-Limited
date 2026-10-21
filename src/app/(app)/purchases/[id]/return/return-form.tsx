@@ -13,11 +13,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-export interface RLine { purchase_line_id: string; description: string; bought: number; returned: number; unit_cost: number; line_total: number }
+export interface RLine { purchase_line_id: string; description: string; bought: number; returned: number; unit_cost: number; line_total: number; fc_line_total?: number | null }
 export interface AccountOpt { id: string; name: string }
 type Method = "reduce_payable" | "supplier_credit" | "refund" | "mixed";
 
-export function PurchaseReturnForm({ purchaseId, lines, accounts }: { purchaseId: string; lines: RLine[]; accounts: AccountOpt[] }) {
+export function PurchaseReturnForm({ purchaseId, lines, accounts, currency = "TZS" }: { purchaseId: string; lines: RLine[]; accounts: AccountOpt[]; currency?: string }) {
+  const isFc = currency !== "TZS";
   const router = useRouter();
   const [date, setDate] = React.useState(new Date().toISOString().slice(0, 10));
   const [reason, setReason] = React.useState("");
@@ -30,6 +31,7 @@ export function PurchaseReturnForm({ purchaseId, lines, accounts }: { purchaseId
   const [error, setError] = React.useState<string | null>(null);
 
   const value = lines.reduce((s, l) => { const q = Number(qty[l.purchase_line_id] || 0); if (q <= 0) return s; return round2(s + l.line_total * (q / l.bought)); }, 0);
+  const fcValue = lines.reduce((s, l) => { const q = Number(qty[l.purchase_line_id] || 0); if (q <= 0 || l.fc_line_total == null) return s; return round2(s + l.fc_line_total * (q / l.bought)); }, 0);
 
   async function submit() {
     setError(null);
@@ -75,10 +77,12 @@ export function PurchaseReturnForm({ purchaseId, lines, accounts }: { purchaseId
             <SelectContent>
               <SelectItem value="reduce_payable">Reduce supplier payable</SelectItem>
               <SelectItem value="supplier_credit">Create supplier credit</SelectItem>
-              <SelectItem value="refund">Immediate refund</SelectItem>
-              <SelectItem value="mixed">Mixed (refund + payable)</SelectItem>
+              {!isFc && <SelectItem value="refund">Immediate refund</SelectItem>}
+              {!isFc && <SelectItem value="mixed">Mixed (refund + payable)</SelectItem>}
             </SelectContent>
-          </Select></div>
+          </Select>
+          {isFc && <p className="text-xs text-muted-foreground">{currency} purchase: goods and VAT are reversed at the original invoice rate; the {currency} balance or a {currency} credit is reduced at its carrying amount.</p>}
+        </div>
         <div className="space-y-1.5 sm:col-span-2"><Label>Notes</Label><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} /></div>
         {(method === "refund" || method === "mixed") && (
           <>
@@ -91,7 +95,8 @@ export function PurchaseReturnForm({ purchaseId, lines, accounts }: { purchaseId
       </CardContent></Card>
 
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">Return value: <span className="font-semibold text-foreground tabular-nums">{formatMoney(value)}</span></p>
+        <p className="text-sm text-muted-foreground">Return value: {isFc && <><span className="font-semibold text-foreground tabular-nums">{currency} {formatMoney(fcValue)}</span> · </>}
+          <span className={`tabular-nums ${isFc ? "" : "font-semibold text-foreground"}`}>TZS {formatMoney(value)}</span>{isFc && " at the original rate"}</p>
         <div className="flex items-center gap-2">
           {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
           <Button variant="outline" onClick={() => router.push(`/purchases/${purchaseId}`)} disabled={pending}>Cancel</Button>

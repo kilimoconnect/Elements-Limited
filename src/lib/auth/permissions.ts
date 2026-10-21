@@ -98,6 +98,7 @@ export const ACTIONS = [
   "upload",
   "settle",
   "revalue",
+  "enter_rate",
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -172,7 +173,7 @@ export const PERMISSION_DEFS: PermissionDef[] = [
   ...p("cost_invoices", ["view", "create", "post", "void"]),
   ...p("rebagging", ["view", "create", "post", "void"]),
   ...p("documents", ["view_financial", "upload"]),
-  ...p("fx", ["settle", "revalue"]),
+  ...p("fx", ["settle", "revalue", "enter_rate"]),
   ...p("inventory", ["transfer_view", "transfer_resolve"]),
 ];
 
@@ -226,7 +227,7 @@ export const ROLE_DEFS: RoleDef[] = [
       "cost_invoices.view", "cost_invoices.create", "cost_invoices.post",
       "rebagging.view", "rebagging.create", "rebagging.post",
       "inventory.transfer_view", "inventory.transfer_resolve",
-      "documents.view_financial", "documents.upload", "fx.settle",
+      "documents.view_financial", "documents.upload", "fx.settle", "fx.enter_rate",
     ],
   },
   {
@@ -256,7 +257,7 @@ export const ROLE_DEFS: RoleDef[] = [
       "periods.view",
       "imports.view", "imports.view_cost", "imports.finalize_cost",
       "cost_invoices.view", "cost_invoices.create", "cost_invoices.post",
-      "inventory.transfer_view", "documents.view_financial", "documents.upload", "fx.settle", "fx.revalue",
+      "inventory.transfer_view", "documents.view_financial", "documents.upload", "fx.settle", "fx.revalue", "fx.enter_rate",
     ],
   },
   {

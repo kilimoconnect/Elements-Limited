@@ -29,8 +29,8 @@ actually run, and what remains. Updated at the end of every stage.
 | 1 | Investigation of the actual code + integrated design (this section) | **Done 21/10/2026** — documentation only, no behaviour change |
 | 2 | Shared foundations and secure posting primitives (schema, allocation engine, actor checks, idempotency, registry, account mappings, feature flags, attachments) | **Done 21/10/2026** (record below) |
 | 2b | Remaining hardening from Stage 1: fix void/transfer subledger drift (D1, D2, D5), goods-in-transit 1155 on transfers, branch enforcement in the existing transfer actions (D3), caller-supplied idempotency keys in existing server actions (D4), lot maintenance with an "untracked" lot for existing stock | Not started — recommended before Stage 3 posts anything |
-| 3 | Import shipments: shipment + lines, title (ownership) event, goods invoice via extended `purchases` (FC, rate snapshot, invoice-only mode), GR/IR clearing, cost sources (estimate → accrual → actual) and `cost_invoices`, allocations, goods receipt (GRN) with discrepancy resolution, late-cost propagation for import lots (held / sold / written off) | Not started |
-| 4 | Foreign-currency settlement: supplier advances, FC payments (original currency settled + actual TZS debited), realised FX, period-end reversing revaluation, FC credits | Not started |
+| 3 | Foreign purchases with TZS books: foreign purchase invoices, foreign supplier balances (original currency + TZS carrying), settlements through TZS accounts with realised FX, advances, bank charges, period-end revaluation, foreign returns and credits, currency confinement | **Done 21/10/2026** (record below) |
+| 4 | Import shipments: shipment + lines, title (ownership) event, goods invoice via `purchases` invoice-only mode, GR/IR clearing, cost sources (estimate → accrual → actual) and `cost_invoices`, allocations, goods receipt (GRN) with discrepancy resolution, late-cost propagation for import lots | Not started |
 | 5 | Rebagging orders (multi-size outputs, packaging materials, normal/abnormal loss, unused bulk) + propagation through conversion | Not started |
 | 6 | Transfer upgrade: logistics details, charges, Storage attachments, versioned delivery notes, partial receipts with signed POD, discrepancy approval, shared in-transit view + propagation through transfers | Not started |
 | 7 | Commercial (pricing) cost view and import / landed-cost reports | Not started |
@@ -38,6 +38,177 @@ actually run, and what remains. Updated at the end of every stage.
 Each stage extends the existing posting services (`record_stock_movement`,
 `create_journal`, `claim_idempotency`, `assert_period_open`, supplier
 payables, transfers) rather than adding a parallel ERP.
+
+---
+
+## Stage 3 — Foreign purchases with TZS books (implemented)
+
+Migration `supabase/migrations/0026_foreign_purchases.sql`. Extends the
+existing purchases, supplier payables, supplier payments, supplier credits,
+purchase returns and supplier statements — no separate foreign ledger. All
+foreign-currency entry points require the `fx_settlement` feature flag (off by
+default) and permissions; TZS purchasing keeps its behaviour.
+
+### Behaviour
+
+**Purchase invoice.** Defaults to TZS (rate fixed at 1). With `fx_settlement`
+on and `fx.enter_rate` permission, a purchase can be in a configured currency:
+line prices, discounts, tax and totals are entered in that currency; the
+purchase stores `currency_code`, `exchange_rate` (TZS per 1 unit, > 0, ≤ 6
+decimals), `rate_source` (`manual` = authorised manual rate, or
+`rate_table` = must equal the Admin → Exchange Rates entry on/before the
+date), `rate_reference`, and per line `fc_*` amounts. On posting each line's
+TZS net and tax = round(foreign × rate, 2); the posted TZS figures, rate and
+currency are **immutable** (trigger). Foreign purchases cannot carry instant
+payments — they are settled through Supplier Payments. Draft TZS figures are
+previews; posting recomputes them.
+
+**Supplier balance.** A foreign invoice's `supplier_payables` row keeps
+`fc_outstanding` (original currency) and `outstanding` (TZS carrying amount).
+Every change is an immutable `supplier_payable_events` row (invoice,
+settlement, return, credit application, revaluation and their voids), so
+balances as of any date and statements are rebuilt from the log; a test
+checks the log reproduces every balance. `recalc_purchase` no longer
+recomputes foreign balances from TZS totals (it mirrors the event-maintained
+payable).
+
+**Settlement.** A supplier payment has a currency. Funding is always existing
+TZS bank / cash / mobile-money accounts (actual TZS paid). For a foreign
+payment each allocation records the foreign amount settled; on posting the
+actual TZS paid is shared across the allocations (and any advance) in
+proportion to the foreign amounts (exact-sum allocation), the payable's TZS
+carrying share for that foreign amount is released (the whole remainder when
+fully settled), and paid share − carrying released is realised FX:
+Dr 2110 released, Dr 6400 loss / Cr 4400 gain, Cr bank. Bank charges are a
+separate field posted Dr 6200 / Cr the chosen account — never mixed into FX.
+TZS payments can settle only TZS invoices and foreign payments only invoices in
+their own currency (both enforced in the database).
+
+**Advances.** An unallocated part of a payment is a supplier advance: a
+non-monetary prepayment carried at the TZS actually paid (Dr 1175), never
+revalued. Advances are applied **when posting the invoice**: the prepaid
+foreign share of the goods is costed at the advance's historical TZS (the
+difference to the invoice rate adjusts the goods' cost, spread by value), the
+payable is created only for the unpaid part, and no FX gain/loss arises
+(transaction-date treatment). Applying an advance to an already-posted
+invoice is not offered (it would manufacture an FX result); void and re-post
+the invoice instead. Voiding the purchase restores the advance; a payment
+whose advance has been applied cannot be voided.
+
+**Revaluation.** Accounting → FX Revaluation (`fx.revalue`). At a period-end
+date the user enters an authorised closing rate for every currency with open
+balances (manual with reference, or the rate table). Each open foreign
+payable and supplier credit is restated to round(foreign × closing rate, 2);
+the difference is posted Dr 6410 / Cr 2110 (liability up) or Dr 2110 / Cr
+4410, and for credits Dr 1170 / Cr 4410 or Dr 6410 / Cr 1170, in one
+balanced journal linked to the revaluation document (`FXR…`). The carrying
+amount itself is updated — there is no automatic reversal — so a later
+settlement measures realised FX from the revalued amount and unrealised +
+realised = total TZS paid − original carrying (no double counting; tested).
+Rules: one posted revaluation per date; all open currencies must be rated;
+no foreign transactions may be dated after the revaluation date (revalue in
+date order); later settlements / returns / credit applications cannot be
+dated before the last revaluation of that balance; a revaluation can be
+voided only while nothing later used the revalued amounts.
+
+**Returns and credits.** Policy for foreign purchases, consistent with the
+original purchase and the existing stock-return logic: goods, VAT and price
+variance are valued at the **original invoice rate** (the purchase's TZS line
+amounts, pro rata; the last unit takes the exact remainder); stock leaves at
+current average with any difference to 5300 as today. *Reduce payable*
+releases the payable's carrying share for the foreign amount returned; any
+difference from the original-rate value is the reversal of previously booked
+unrealised FX (4410 / 6410) — never inventory cost. *Supplier credit*
+creates a foreign credit (Dr 1170) carried at the original-rate TZS; credits
+are revalued like payables. Cash refunds on foreign returns are not offered
+(use a credit). **Applying a credit** to an open invoice of the same supplier
+and currency (purchase page) releases the credit's carrying share and the
+invoice's carrying share; the difference is realised FX. TZS credits can now
+be applied too (previously they could not be used at all).
+
+**Currency confinement.** Sales, customer receipts, sales returns, expenses,
+other income, cash transfers, stock transfers, stock adjustments and rebag
+orders have **no currency columns** (always TZS, test-asserted). Foreign
+payables may only originate from purchases (constraint). Cost invoices
+(import service charges) are constrained to TZS — foreign import-origin
+charges must go through the purchase invoice path. Existing bank / cash
+accounts remain TZS.
+
+**Retry safety.** Foreign postings require an idempotency key; a replay of
+the same key returns the same document without posting again (checked
+before the status check). Server actions use stable per-document keys
+(`post_purchase:<id>`, `post_purchase_return:<id>`,
+`post_supplier_payment:<id>`); the payment form sends one request id per
+submission (`supplier_payments.client_request_id`, unique), so a retried
+"create and post" finds the first payment instead of creating another;
+credit applications and revaluations carry request ids from their forms.
+
+**Defect fixes carried in this stage.** Purchases now receive stock at the
+exact TZS value posted (`record_stock_movement_value`), so stock value always
+equals the inventory debit (previously qty × rounded unit cost could differ by
+cents). `void_purchase` now mirrors the posting journal exactly and posts the
+difference between the original inventory value and the stock removed at
+current average to 5300 — fixing D1 for purchases (TZS and foreign);
+purchase-return voids restore stock at the exact cost removed. Voids also
+check that the void date's period is open (part of D6). D1 for openings and
+adjustments, D2–D5 remain for Stage 2b.
+
+### Screens
+
+- Purchases → Create Purchase: currency, rate (TZS per 1), "use table rate",
+  rate reference, prices in the invoice currency with TZS preview, advance
+  application; payments section hidden for foreign invoices.
+- Purchase page: currency, rate and source; foreign and TZS line amounts;
+  open foreign balance and TZS carrying; foreign balance history; apply
+  supplier credits.
+- Supplier Payments → Record: invoice currency; open invoices with foreign
+  balance and TZS carrying; foreign amount to settle; TZS actually paid;
+  advance; bank charges; FX preview.
+- Purchase return: foreign purchases offer reduce-payable or supplier credit
+  only; value shown in both currencies.
+- Accounting → FX Revaluation: open balances per currency (invoices and
+  credits, foreign and carrying), closing rates with source and reference,
+  effect preview, post; history with void.
+- Reports: Payables ageing shows currency and open foreign amount per invoice
+  plus per-currency foreign totals; the TZS total uses carrying amounts and
+  still reconciles to 2110 (TZS ageing now also deducts advances and credits
+  applied). Supplier statement: one TZS statement plus one statement per
+  foreign currency in that currency, with the TZS carrying amount of open
+  invoices — USD and TZS are never added together.
+
+### Acceptance fixture (actual results)
+
+| Step | Expected | Result |
+| --- | --- | --- |
+| Invoice USD 100,000 @ 2,600 | TZS 260,000,000 invoice and payable; Dr 1150 / Cr 2110 | pass |
+| Settle USD 40,000 for TZS 105,200,000 | release 104,000,000; FX loss 1,200,000; remaining USD 60,000 carries 156,000,000 | pass |
+| Revalue at 2,650 | carrying 159,000,000; further 3,000,000 unrealised loss | pass |
+| Later settlement of USD 60,000 for TZS 162,000,000 (+ TZS 25,000 bank charges) | releases 159,000,000 (updated carrying); realised loss 3,000,000; charges 6200 | pass |
+| No double counting | realised 4.2M + unrealised 3M = TZS paid 267.2M − original 260M | pass |
+| Inventory | unchanged by any FX difference; 1150 = stock subledger | pass |
+
+### Checks actually run (21/10/2026)
+
+| Check | Result |
+| --- | --- |
+| `npm run test:db` clean install (0001–0026) + seed + re-seed | pass |
+| Existing Phase 2 / 3 / 4 suites (TZS purchasing, payments, returns re-implemented) | 19 / 26 / 11 pass |
+| Stage 0 / Stage 2 suites | 51 / 114 pass (one Stage 2 check updated: Stage 3 intentionally allows purchase-origin foreign invoices) |
+| **Stage 3 suite** (`scripts/itest-import3.ts`) — acceptance fixture; gates (flag, `fx.enter_rate`, key, rate source, rate-table match, zero / TZS rates, no instant payments on foreign invoices); immutability of posted rate and lines; retries of purchase, payment, revaluation and credit application (no duplicate journals or stock); USD advance applied at historical TZS with no FX; advance limits; payment with applied advance not voidable; foreign returns before and after revaluation (unrealised reversal); credit creation and application with realised gain; currency mismatches rejected both ways; TZS advance and partial payment; currency confinement (9 tables, cost invoices, expense payables); voids of the final settlement, a return, a foreign purchase with advance; revaluation void blocked by dependants; every journal balanced; 2110 = payable carrying, 1175 = unapplied advances, 1170 = credit carrying, 1150 = stock; event log reproduces every foreign balance | **79 pass** |
+| Upgrade path (pre-0024 data → 0024 + 0025 + 0026) | 20 pass |
+| Mutation: revaluation not updating carrying | 8 checks failed as expected (incl. the double-counting check); restored |
+| `npm test` (calc + attachment policy) | 7 + 25 pass |
+| `npm run typecheck`; ESLint on all Stage 3 files | pass (pre-existing lint errors in untouched `src/lib/reports/queries.ts` and two other report pages) |
+
+**Not run / limitations:** the new screens were not opened in a browser
+(sign-in is against the live Supabase project, out of bounds here); PGlite is
+single-connection, so concurrent posting races were not executed (row locks
+and keys reviewed); migration 0026 was not applied to the live database;
+new permission `fx.enter_rate` and role grants reach the live database only
+when the seed is re-run there. Not implemented in this stage: voiding a credit
+application; cash refunds of foreign returns; applying an advance to an
+already-posted invoice (by design); FX revaluation of advances (non-monetary,
+by design); a foreign-currency bank ledger (out of scope).
 
 ---
 

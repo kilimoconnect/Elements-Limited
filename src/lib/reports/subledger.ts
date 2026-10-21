@@ -113,11 +113,26 @@ export async function receivablesAgeing(companyId: string, asOf: string) {
 /* ----------------------------- Payables --------------------------------- */
 export async function payablesAgeing(companyId: string, asOf: string) {
   const admin = createAdminClient();
-  const [purchases, expenses, openings] = await Promise.all([
-    admin.from("purchases").select("id, document_number, document_date, due_date, grand_total, supplier:suppliers(name)").eq("company_id", companyId).eq("document_status", "posted").lte("document_date", asOf),
+  const [purchases, expenses, openings, fcEvents, creditApps] = await Promise.all([
+    admin.from("purchases").select("id, document_number, document_date, due_date, grand_total, currency_code, fc_grand_total, advance_applied_at_rate, supplier:suppliers(name)").eq("company_id", companyId).eq("document_status", "posted").lte("document_date", asOf),
     admin.from("expenses").select("id, document_number, document_date, due_date, grand_total, supplier:suppliers(name)").eq("company_id", companyId).eq("document_status", "posted").lte("document_date", asOf),
     admin.from("supplier_opening_balances").select("document_number, document_date, due_date, outstanding, supplier:suppliers(name)").eq("company_id", companyId).eq("document_status", "posted").lte("document_date", asOf),
+    // Foreign invoices: balance as of the date is rebuilt from the event log.
+    admin.from("supplier_payable_events").select("fc_delta, tzs_delta, payable:supplier_payables!inner(purchase_id)").eq("company_id", companyId).lte("event_date", asOf),
+    admin.from("supplier_credit_applications").select("payable_tzs_released, payable:supplier_payables!inner(purchase_id, currency_code)").eq("company_id", companyId).lte("application_date", asOf),
   ]);
+  const fcMap = new Map<string, { fc: number; tzs: number }>();
+  for (const e of (fcEvents.data ?? []) as Record<string, unknown>[]) {
+    const pid = (e.payable as { purchase_id: string } | null)?.purchase_id; if (!pid) continue;
+    const cur = fcMap.get(pid) ?? { fc: 0, tzs: 0 };
+    fcMap.set(pid, { fc: round2(cur.fc + N(e.fc_delta)), tzs: round2(cur.tzs + N(e.tzs_delta)) });
+  }
+  const creditMap = new Map<string, number>();
+  for (const c of (creditApps.data ?? []) as Record<string, unknown>[]) {
+    const pb = c.payable as { purchase_id: string; currency_code: string } | null;
+    if (!pb || pb.currency_code !== "TZS") continue;
+    creditMap.set(pb.purchase_id, (creditMap.get(pb.purchase_id) ?? 0) + N(c.payable_tzs_released));
+  }
   const pIds = (purchases.data ?? []).map((p) => p.id);
   const eIds = (expenses.data ?? []).map((e) => e.id);
   const [pPays, ePays, allocs, pRets] = await Promise.all([
@@ -137,17 +152,30 @@ export async function payablesAgeing(companyId: string, asOf: string) {
   const retMap = new Map<string, number>();
   for (const r of (pRets.data ?? []) as Record<string, unknown>[]) if (r.document_status === "posted" && (r.document_date as string) <= asOf) retMap.set(r.purchase_id as string, (retMap.get(r.purchase_id as string) ?? 0) + N(r.payable_reduction));
 
-  const rows: { entity: string; doc: string; date: string; due: string; original: number; outstanding: number; bucket: string }[] = [];
+  // outstanding is always TZS (carrying amount for foreign invoices); the
+  // foreign figures are shown alongside, never added to TZS.
+  const rows: { entity: string; doc: string; date: string; due: string; original: number; outstanding: number; bucket: string;
+    currency: string; fcOriginal: number | null; fcOutstanding: number | null }[] = [];
   const buckets = { ...EMPTY_BUCKETS };
-  const push = (entity: string, doc: string, date: string, due: string, original: number, out: number) => {
-    if (out <= 0.005) return;
+  const push = (entity: string, doc: string, date: string, due: string, original: number, out: number,
+    currency = "TZS", fcOriginal: number | null = null, fcOutstanding: number | null = null) => {
+    if (out <= 0.005 && !(fcOutstanding && fcOutstanding > 0.005)) return;
     const b = bucketOf(due, asOf);
     buckets[b as keyof typeof buckets] = round2(buckets[b as keyof typeof buckets] + out);
-    rows.push({ entity, doc, date, due, original, outstanding: out, bucket: b });
+    rows.push({ entity, doc, date, due, original, outstanding: out, bucket: b, currency, fcOriginal, fcOutstanding });
   };
   for (const p of (purchases.data ?? []) as Record<string, unknown>[]) {
-    const out = round2(N(p.grand_total) - (pPayMap.get(p.id as string) ?? 0) - (allocMap.get(p.id as string) ?? 0) - (retMap.get(p.id as string) ?? 0));
-    push((p.supplier as { name: string } | null)?.name ?? "—", (p.document_number as string) ?? "—", p.document_date as string, (p.due_date as string) ?? (p.document_date as string), N(p.grand_total), out);
+    const entity = (p.supplier as { name: string } | null)?.name ?? "—";
+    const due = (p.due_date as string) ?? (p.document_date as string);
+    if (p.currency_code !== "TZS") {
+      const ev = fcMap.get(p.id as string) ?? { fc: 0, tzs: 0 };
+      push(entity, (p.document_number as string) ?? "—", p.document_date as string, due, N(p.grand_total), ev.tzs,
+        p.currency_code as string, N(p.fc_grand_total), ev.fc);
+      continue;
+    }
+    const out = round2(N(p.grand_total) - (pPayMap.get(p.id as string) ?? 0) - (allocMap.get(p.id as string) ?? 0)
+      - (retMap.get(p.id as string) ?? 0) - N(p.advance_applied_at_rate) - (creditMap.get(p.id as string) ?? 0));
+    push(entity, (p.document_number as string) ?? "—", p.document_date as string, due, N(p.grand_total), out);
   }
   for (const e of (expenses.data ?? []) as Record<string, unknown>[]) {
     const out = round2(N(e.grand_total) - (ePayMap.get(e.id as string) ?? 0) - (allocMap.get(e.id as string) ?? 0));
@@ -213,24 +241,58 @@ export async function customerStatement(companyId: string, customerId: string, s
   return buildStatement(evs, start, end);
 }
 
+/**
+ * Supplier statement, one section per currency. TZS documents form the TZS
+ * statement; each foreign currency gets its own statement in that currency
+ * (never added to TZS), plus the TZS carrying amount of its open invoices as
+ * of the end date (from the payable event log). Advances and returns reduce
+ * the balance when they occur; applying a credit or advance later moves no
+ * balance between sections.
+ */
 export async function supplierStatement(companyId: string, supplierId: string, start: string, end: string) {
   const admin = createAdminClient();
-  const [purchases, expenses, allocs, rets, openings] = await Promise.all([
-    admin.from("purchases").select("document_number, document_date, grand_total").eq("company_id", companyId).eq("supplier_id", supplierId).eq("document_status", "posted"),
+  const [purchases, expenses, allocs, rets, openings, advances, events] = await Promise.all([
+    admin.from("purchases").select("id, document_number, document_date, grand_total, currency_code, fc_grand_total").eq("company_id", companyId).eq("supplier_id", supplierId).eq("document_status", "posted"),
     admin.from("expenses").select("document_number, document_date, grand_total").eq("company_id", companyId).eq("supplier_id", supplierId).eq("document_status", "posted"),
-    admin.from("supplier_payment_allocations").select("amount, payment:supplier_payments!inner(document_number, document_date, document_status, supplier_id)").eq("payment.supplier_id", supplierId).eq("payment.document_status", "posted"),
-    admin.from("purchase_returns").select("document_number, document_date, total").eq("company_id", companyId).eq("supplier_id", supplierId).eq("document_status", "posted"),
+    admin.from("supplier_payment_allocations").select("amount, fc_amount, payment:supplier_payments!inner(document_number, document_date, document_status, supplier_id, currency_code)").eq("payment.supplier_id", supplierId).eq("payment.document_status", "posted"),
+    admin.from("purchase_returns").select("document_number, document_date, total, currency_code, fc_total").eq("company_id", companyId).eq("supplier_id", supplierId).eq("document_status", "posted"),
     admin.from("supplier_opening_balances").select("document_number, document_date, amount").eq("company_id", companyId).eq("supplier_id", supplierId).eq("document_status", "posted"),
+    admin.from("supplier_advances").select("currency_code, advance_date, fc_amount, status, payment:supplier_payments(document_number)").eq("company_id", companyId).eq("supplier_id", supplierId).neq("status", "voided"),
+    admin.from("supplier_payable_events").select("tzs_delta, event_date, payable:supplier_payables!inner(supplier_id, currency_code)").eq("company_id", companyId).eq("payable.supplier_id", supplierId).lte("event_date", end),
   ]);
   type Ev = { date: string; doc: string; type: string; debit: number; credit: number };
-  const evs: Ev[] = [];
+  const byCur = new Map<string, Ev[]>();
+  const add = (cur: string, e: Ev) => { if (!byCur.has(cur)) byCur.set(cur, []); byCur.get(cur)!.push(e); };
+  byCur.set("TZS", []);
   // Supplier statement: credit increases what we owe, debit reduces it.
-  for (const p of (purchases.data ?? []) as Record<string, unknown>[]) evs.push({ date: p.document_date as string, doc: (p.document_number as string) ?? "—", type: "Purchase", debit: 0, credit: N(p.grand_total) });
-  for (const e of (expenses.data ?? []) as Record<string, unknown>[]) evs.push({ date: e.document_date as string, doc: (e.document_number as string) ?? "—", type: "Expense", debit: 0, credit: N(e.grand_total) });
-  for (const o of (openings.data ?? []) as Record<string, unknown>[]) evs.push({ date: o.document_date as string, doc: (o.document_number as string) ?? "Opening", type: "Opening", debit: 0, credit: N(o.amount) });
-  for (const a of (allocs.data ?? []) as Record<string, unknown>[]) { const p = a.payment as { document_number: string; document_date: string }; evs.push({ date: p.document_date, doc: p.document_number ?? "Payment", type: "Payment", debit: N(a.amount), credit: 0 }); }
-  for (const r of (rets.data ?? []) as Record<string, unknown>[]) evs.push({ date: r.document_date as string, doc: (r.document_number as string) ?? "Return", type: "Return", debit: N(r.total), credit: 0 });
-  return buildStatement(evs, start, end);
+  for (const p of (purchases.data ?? []) as Record<string, unknown>[]) {
+    const cur = p.currency_code as string;
+    add(cur, { date: p.document_date as string, doc: (p.document_number as string) ?? "—", type: "Purchase", debit: 0, credit: cur === "TZS" ? N(p.grand_total) : N(p.fc_grand_total) });
+  }
+  for (const e of (expenses.data ?? []) as Record<string, unknown>[]) add("TZS", { date: e.document_date as string, doc: (e.document_number as string) ?? "—", type: "Expense", debit: 0, credit: N(e.grand_total) });
+  for (const o of (openings.data ?? []) as Record<string, unknown>[]) add("TZS", { date: o.document_date as string, doc: (o.document_number as string) ?? "Opening", type: "Opening", debit: 0, credit: N(o.amount) });
+  for (const a of (allocs.data ?? []) as Record<string, unknown>[]) {
+    const p = a.payment as { document_number: string; document_date: string; currency_code: string };
+    add(p.currency_code, { date: p.document_date, doc: p.document_number ?? "Payment", type: "Payment", debit: p.currency_code === "TZS" ? N(a.amount) : N(a.fc_amount), credit: 0 });
+  }
+  for (const v of (advances.data ?? []) as Record<string, unknown>[]) {
+    const pay = v.payment as { document_number: string | null } | null;
+    add(v.currency_code as string, { date: v.advance_date as string, doc: pay?.document_number ?? "Advance", type: "Advance", debit: N(v.fc_amount), credit: 0 });
+  }
+  for (const r of (rets.data ?? []) as Record<string, unknown>[]) {
+    const cur = r.currency_code as string;
+    add(cur, { date: r.document_date as string, doc: (r.document_number as string) ?? "Return", type: "Return", debit: cur === "TZS" ? N(r.total) : N(r.fc_total), credit: 0 });
+  }
+  const carrying = new Map<string, number>();
+  for (const e of (events.data ?? []) as Record<string, unknown>[]) {
+    const cur = (e.payable as { currency_code: string } | null)?.currency_code; if (!cur) continue;
+    carrying.set(cur, round2((carrying.get(cur) ?? 0) + N(e.tzs_delta)));
+  }
+  const tzs = buildStatement(byCur.get("TZS") ?? [], start, end);
+  const foreign = Array.from(byCur.keys()).filter((c) => c !== "TZS").sort().map((currency) => ({
+    currency, ...buildStatement(byCur.get(currency) ?? [], start, end), carryingOpenInvoices: carrying.get(currency) ?? 0,
+  }));
+  return { ...tzs, foreign };
 }
 
 function buildStatement(evs: { date: string; doc: string; type: string; debit: number; credit: number }[], start: string, end: string) {
