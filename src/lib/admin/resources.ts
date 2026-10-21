@@ -168,6 +168,13 @@ const ENUM = {
     { value: "KES", label: "KES — Kenyan Shilling" },
     { value: "ZAR", label: "ZAR — South African Rand" },
   ],
+  featureFlag: [
+    { value: "imports", label: "Imports & landed cost" },
+    { value: "rebagging", label: "Rebagging" },
+    { value: "transfer_logistics", label: "Transfer logistics & charges" },
+    { value: "attachments", label: "Document attachments" },
+    { value: "fx_settlement", label: "Foreign-currency settlement" },
+  ],
   periodStatus: [
     { value: "open", label: "Open" },
     { value: "closed", label: "Closed" },
@@ -440,6 +447,26 @@ export const RESOURCES: Record<string, ResourceConfig> = {
     ],
   },
 
+  "feature-flags": {
+    key: "feature-flags",
+    table: "feature_flags",
+    title: "Feature Flags",
+    singular: "Feature Flag",
+    description: "Turn on new workflows only when they are ready. Workflows that are switched off stay hidden and their database functions refuse to run.",
+    auditType: "feature_flag",
+    codeField: "flag_key",
+    searchColumns: ["flag_key"],
+    columns: [
+      { key: "flag_key", label: "Feature", type: "code" },
+      { key: "is_enabled", label: "Enabled", type: "boolean" },
+    ],
+    fields: [
+      { name: "flag_key", label: "Feature", type: "select", required: true, options: ENUM.featureFlag, colSpan: 1 },
+      { name: "is_enabled", label: "Enabled", type: "switch", colSpan: 1,
+        help: "Imports, rebagging, transfer logistics and FX settlement are being built in stages; keep them off until their stage is complete." },
+    ],
+  },
+
   customers: {
     key: "customers",
     table: "customers",
@@ -631,7 +658,7 @@ export function getResource(key: string): ResourceConfig | undefined {
 }
 
 /** Resources that do NOT have an is_active column (status handled differently). */
-export const NO_ACTIVE_TOGGLE = new Set<string>(["accounting-periods", "exchange-rates"]);
+export const NO_ACTIVE_TOGGLE = new Set<string>(["accounting-periods", "exchange-rates", "feature-flags"]);
 
 /**
  * Master-data resources whose code/SKU is auto-generated on create (prefix +

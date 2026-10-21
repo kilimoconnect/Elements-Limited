@@ -30,6 +30,7 @@ const LABELS: Record<string, string> = {
   "audit-log": "Audit Log",
   "cost-categories": "Cost Categories",
   "exchange-rates": "Exchange Rates",
+  "feature-flags": "Feature Flags",
 };
 
 function labelFor(segment: string) {

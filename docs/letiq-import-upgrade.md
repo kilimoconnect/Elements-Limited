@@ -27,7 +27,8 @@ actually run, and what remains. Updated at the end of every stage.
 | --- | --- | --- |
 | 0 | Foundation: clean-install defaults fix, new system accounts, cost-category rules, currencies + exchange rates, kg base weight and product stock roles, PGlite test harness | **Done 21/10/2026** (record below) |
 | 1 | Investigation of the actual code + integrated design (this section) | **Done 21/10/2026** — documentation only, no behaviour change |
-| 2 | Hardening prerequisites: fix void/transfer subledger drift (D1, D2, D5), goods-in-transit 1155 on transfers, server/DB branch enforcement for transfers (D3), caller-supplied idempotency keys (D4), provenance lots + `stock_lot_flows` with an "untracked" lot for existing stock | Not started |
+| 2 | Shared foundations and secure posting primitives (schema, allocation engine, actor checks, idempotency, registry, account mappings, feature flags, attachments) | **Done 21/10/2026** (record below) |
+| 2b | Remaining hardening from Stage 1: fix void/transfer subledger drift (D1, D2, D5), goods-in-transit 1155 on transfers, branch enforcement in the existing transfer actions (D3), caller-supplied idempotency keys in existing server actions (D4), lot maintenance with an "untracked" lot for existing stock | Not started — recommended before Stage 3 posts anything |
 | 3 | Import shipments: shipment + lines, title (ownership) event, goods invoice via extended `purchases` (FC, rate snapshot, invoice-only mode), GR/IR clearing, cost sources (estimate → accrual → actual) and `cost_invoices`, allocations, goods receipt (GRN) with discrepancy resolution, late-cost propagation for import lots (held / sold / written off) | Not started |
 | 4 | Foreign-currency settlement: supplier advances, FC payments (original currency settled + actual TZS debited), realised FX, period-end reversing revaluation, FC credits | Not started |
 | 5 | Rebagging orders (multi-size outputs, packaging materials, normal/abnormal loss, unused bulk) + propagation through conversion | Not started |
@@ -37,6 +38,175 @@ actually run, and what remains. Updated at the end of every stage.
 Each stage extends the existing posting services (`record_stock_movement`,
 `create_journal`, `claim_idempotency`, `assert_period_open`, supplier
 payables, transfers) rather than adding a parallel ERP.
+
+---
+
+## Stage 2 — Shared foundations and secure posting (implemented)
+
+Migration `supabase/migrations/0025_import_foundations.sql` (additive). No
+existing posting function was changed; nothing new is reachable from the UI
+except Admin → Feature Flags; every new workflow function refuses to run
+while its feature flag is off (default **off** for every company).
+
+### What was added
+
+**Secure posting primitives** (all `security definer`, execute revoked from
+`anon` / `authenticated`, callable only by the server's service role):
+
+| Function | Purpose |
+| --- | --- |
+| `assert_actor(user, company, permission, branch)` with `_user_can`, `_user_has_company`, `_user_has_branch` | RPCs no longer trust `p_user` blindly: active user, company access, permission and branch are checked inside the database (SQLSTATE 42501). |
+| `claim_operation(key, operation, document)` | Strict idempotency: key ≥ 16 chars required; a replay of the same operation on the same document returns `false`; reusing a key for anything else raises. |
+| `post_balanced_journal(...)` | Wraps `create_journal`: period must be open, every account must belong to the company and be an active posting account, amounts non-negative with ≤ 2 decimals, at least two lines, non-empty. |
+| `lock_stock_balances(company, keys)` | Locks (creating if needed) all `stock_balances` rows a posting will touch, in (branch, product) order, after checking they belong to the company — deadlock-free ordering for multi-line postings. |
+| `allocate_amount(total, basis, targets)` | Allocation engine: `direct`, `weight`, `value`, `volume`, `quantity`, `percent`, `manual`. Rejects zero denominators, negative / missing factors, duplicate targets, percentages outside 0–100 or not totalling exactly 100, manual amounts not equal to the total, totals with > 2 decimals. Largest-remainder rounding in cents (ties: larger factor, then id) — results always sum exactly to the total, signs preserved for credits. |
+| `allocate_cost_source(source, kind, amount, basis, targets, user, key)` | Locks the cost source, checks feature flag + actor + idempotency, reads factors (net kg / value / quantity / volume) **from the database**, rejects targets that are not the source document's own lines, writes an insert-only allocation run and verifies conservation. Expensed costs cannot be allocated to stock. |
+| `register_supplier_invoice(...)` + `supplier_invoice_registry` | One supplier invoice number (normalised by the existing `norm_invoice`) per supplier across purchases and cost invoices. Posted purchases were back-filled; future purchase postings register via trigger; voiding frees the number. |
+| `account_for(company, key)` + `account_mappings` | New workflows resolve accounts by mapping key. 19 keys seeded idempotently from existing accounts; each mapping is type-checked and company-checked. |
+| `feature_enabled` / `assert_feature` + `feature_flags` | `imports`, `rebagging`, `transfer_logistics`, `attachments`, `fx_settlement`; all off by default; Admin → Feature Flags. |
+
+**Accounts.** Only two new accounts: 1145 Claims Receivable and 1175 Supplier
+Advances (Imports). Bulk, packaged and packaging inventory **map to the
+existing 1150** — no duplicate inventory control account. No rebagging
+clearing account is needed (rebagging moves value within 1150; abnormal loss
+maps to 6300). Mappings: `inventory.{standard,bulk,packaged,packaging}` →
+1150, `transfer.goods_in_transit` → 1155, `import.goods_in_transit` → 1157,
+`import.gr_ir` → 2130, `import.accrued_costs` → 2140,
+`import.supplier_advances` → 1175, `import.claims_receivable` → 1145,
+`fx.realised_{gain,loss}` → 4400/6400, `fx.unrealised_{gain,loss}` → 4410/6410,
+`inventory.loss` → 6300, `inventory.cost_of_sales` → 5100,
+`inventory.price_variance` → 5300, `tax.input_vat` → 1160,
+`payables.trade` → 2110. A changed mapping affects future postings only.
+
+**Schema** (all with `company_id`, `check_company_consistency` on every
+foreign key, RLS read-by-company, no client write privileges):
+
+- Imports: `import_shipments` (incoterm, explicit `goods_includes_freight` /
+  `goods_includes_insurance`, currency, title date, separate
+  `logistics_status` and `cost_status`, unique bill of lading per company),
+  `import_shipment_lines` (net kg > 0, gross ≥ net, optional volume, FC price
+  ≥ 0), `import_receipts` / `import_receipt_lines` (received, shortage,
+  damage, resolution).
+- Foreign purchase fields on the **existing** `purchases` / `purchase_lines`:
+  `import_shipment_id`, `posting_mode` (`stock_on_post` default = today's
+  behaviour; `invoice_only`), `currency_code`, `exchange_rate > 0` (TZS ⇒ 1),
+  FC totals ≥ 0, `fc_unit_cost`, `import_shipment_line_id`. Foreign currency is
+  only allowed on an import-linked `invoice_only` purchase whose supplier and
+  currency match the shipment. An `invoice_only` purchase **cannot be posted
+  by the legacy `post_purchase`** (guard trigger) until Stage 3 provides its
+  posting function.
+- Costs: `cost_sources` (owner = shipment / transfer / rebag order; status
+  estimated → accrued → invoiced / voided; non-negative amounts), with the
+  category's treatment, expense account, commercial flag and basis
+  **snapshotted** at creation and frozen once accrued — editing a category
+  default never changes an old posting. Freight / insurance categories are
+  rejected on shipments whose goods value already includes them. The goods
+  value cannot be a cost source. `cost_invoices` / `cost_invoice_lines`
+  (credit adjustments are explicit `credit_note` documents with positive
+  amounts that must credit an invoice of the same supplier; a posted cost
+  invoice cannot be edited), `cost_source_actuals` (one invoice line per cost
+  source), `cost_allocation_runs` / `cost_allocations` (insert-only; a new run
+  supersedes; one current run per source and kind).
+- `supplier_payables` gains `cost_invoice_id`, `currency_code`, `fc_original`,
+  `fc_outstanding` (0 ≤ outstanding ≤ original); the "exactly one source"
+  check now includes cost invoices.
+- Packages and rebagging: packaged products must use a whole-number unit;
+  `rebag_orders` (bulk product only), `rebag_outputs` (integer bags,
+  net kg = bags × pack kg, packaged SKU filled from the order's bulk product),
+  `rebag_inputs` (bulk input = the order's bulk; packaging input must be a
+  packaging material aimed at an output of the same order).
+- Provenance: `stock_lots`, `stock_lot_balances`, `stock_lot_flows`
+  (quantity only; maintained from Stage 2b / 3).
+- Transfers: `stock_transfers` gains transporter / driver / vehicle (master +
+  snapshot fields), agent, ready / closed stamps, `cost_status`,
+  `has_open_discrepancy`; status adds `ready` and `closed` (existing values
+  unchanged); `stock_transfer_lines.company_id` (back-filled) with a
+  same-company product check; `drivers`, `vehicles` (unique registration per
+  company); `stock_transfer_receipts` / `…_lines` for partial receipts with
+  short / damaged quantities and resolution.
+- Documents: `document_attachments` (company, owner type + id, category,
+  uploader, version, supersedes, timestamp, SHA-256, size, type, safe
+  download name; **insert-only** — updates and deletes are blocked, a
+  replacement is a new version, each version can be superseded once) and
+  `document_versions` (insert-only snapshots of generated documents).
+
+**Attachments (application layer).** `src/lib/attachments/policy.ts`
+(pure rules), `service.ts` (server-only), `actions.ts` (server actions,
+require the `attachments` flag):
+
+- Private bucket `documents` created by the migration on Supabase (skipped
+  where no `storage` schema exists, e.g. PGlite) with a 10 MB limit and an
+  allow-list of PDF, JPEG, PNG, WebP. **No `storage.objects` policies** are
+  created, so browsers cannot list, read or write objects directly; only the
+  server (service role) touches Storage, after the checks below.
+- Upload: declared type must be allowed **and** the file's leading bytes
+  must match it (HTML, SVG, scripts or executables renamed to `.pdf` are
+  rejected); size ≤ 10 MB; object key `company/owner_type/owner_id/<uuid>.ext`
+  never contains the user's file name; `upsert: false`; metadata registered
+  through `register_attachment`, which re-checks the flag, `documents.upload`,
+  the parent record (company, view permission, branch — transfers: sender or
+  receiver branch), financial categories (`documents.view_financial`), and
+  that the storage path belongs to that parent. If registration fails the
+  just-uploaded object is removed.
+- Download: parent-record check + financial-category check, then a signed
+  URL valid for **60 seconds** created with `download: <safe name>`
+  (Content-Disposition: attachment — never rendered inline). Uploads and
+  downloads are written to the audit log.
+
+**Permissions.** New codes: `imports.{view, create, edit_draft, post,
+receive, approve, void, view_cost, finalize_cost}`, `cost_invoices.{view,
+create, post, void}`, `rebagging.{view, create, post, void}`,
+`documents.{view_financial, upload}`, `fx.{settle, revalue}`,
+`inventory.{transfer_view, transfer_resolve}`. `imports.receive` is separate
+from `imports.post` so a Storekeeper (who holds `purchases.post`) can receive
+goods without being able to post foreign goods invoices. Role grants:
+Director (imports, cost invoices, rebagging, transfer view/resolve,
+documents, FX settle), Accountant (import view/cost/finalize, cost
+invoices, documents, FX settle/revalue), Storekeeper (imports view/receive,
+rebagging, transfer view, upload), Auditor (read-only incl. costs). They take
+effect when `npm run db:seed` is next run and remain inert while flags are off.
+
+### Test harness additions
+
+- `scripts/itest-import2.ts` (114 checks) — added to `npm run test:db`.
+- `scripts/test-attachments.ts` (25 checks) — added to `npm test`.
+- `scripts/testdb/upgrade-check.ts` now also posts a purchase with a supplier
+  invoice number and a dispatched transfer through the real pre-upgrade
+  functions before applying 0024 + 0025.
+
+### Checks actually run (21/10/2026)
+
+| Check | Result |
+| --- | --- |
+| Clean install: migrate (0001–0025) → seed → seed re-run → test owner | pass |
+| Existing Phase 2 / 3 / 4 suites on the upgraded schema | 19 / 26 / 11 pass |
+| Stage 0 suite | 51 pass |
+| **Stage 2 suite** — allocation (exact sums, deterministic remainder, credits, percent/manual/volume/zero-denominator/duplicate/direct rules, **300 random cases** within one cent per target), validation (rates, FC-only-on-imports, legacy posting blocked, net/gross kg, negative amounts, CIF freight double-count, snapshots frozen after category edit, credit notes, posted-invoice edits, whole-number bags, kg = bags × pack weight, packaging targeting, bulk lineage), cross-company with guessed ids (supplier, product, shipment, category, cost source, account mapping, journal account, stock lock, transfer line, allocation targets, attachment owner), direct API (execute revoked on 8 RPCs for `authenticated` and `anon`; client inserts denied; other-company user sees nothing), actor checks (missing permission, no company, inactive user, feature flag off), idempotent allocation retry (same run, no second run), claim replay / key reuse, registry duplicates across purchase and cost invoice, journal balance / decimals / header account / closed period, mapping type check, attachment versioning, immutability, type/size/name/path rules, sender + receiver access and third-branch denial | **114 pass** |
+| Upgrade path (pre-0024 database with committed stock, journals, a posted purchase and a dispatched transfer → apply 0024 + 0025): trial balance, stock balances, movements, journal lines, accounts, payment ledgers, products unchanged; 11 new accounts only; 19 mappings; 5 flags off; registry back-fill; transfer lines company back-fill; transfer status kept; existing purchases stay `stock_on_post`/TZS; duplicate invoice blocked | **20 pass** |
+| Mutation: remainder cents dropped in `allocate_amount` | 4 checks failed as expected (incl. the random property test); restored |
+| Mutation: cost-source cross-company trigger removed | 1 check failed as expected; restored |
+| `npm test` (calc + attachment policy) | 7 + 25 pass |
+| `npm run typecheck`; ESLint on changed files | pass |
+
+**Not run / not verifiable here:** the Storage bucket statement and signed
+URLs (PGlite has no Supabase Storage — the bucket block is skipped there, so
+it has only been reviewed, not executed); true concurrent sessions (PGlite is
+single-connection — ordering and locks were verified by code review and
+sequential tests, not by racing transactions); the migration was not applied
+to the live database; Admin → Feature Flags was not opened in a browser.
+
+### Limitations and decisions carried forward
+
+- D1–D5 from Stage 1 are **not** fixed by this stage (it adds new primitives
+  without changing existing posting); they are Stage 2b and should land
+  before Stage 3 posts import stock.
+- Expenses have no supplier-invoice-number field, so the registry cannot stop
+  an expense from re-using an import invoice number; Stage 3 will make
+  import-related charges post only through cost invoices and can add an
+  invoice-number field to expenses.
+- Lot tables exist but nothing writes to them yet (Stage 2b / 3).
+- Role grants for the new permissions reach the live database only when the
+  seed is re-run there.
 
 ---
 

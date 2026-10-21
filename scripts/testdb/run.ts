@@ -25,6 +25,7 @@ const STEPS: [string, string][] = [
   ["Phase 3 integration", "scripts/itest3.ts"],
   ["Phase 4 integration", "scripts/itest4.ts"],
   ["Import foundation (Stage 0)", "scripts/itest-import0.ts"],
+  ["Import foundations and secure posting (Stage 2)", "scripts/itest-import2.ts"],
 ];
 
 function run(label: string, script: string, env: NodeJS.ProcessEnv): boolean {

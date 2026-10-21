@@ -88,6 +88,22 @@ async function main() {
       { account_id: await acc("1150"), debit: 0, credit: Number(cogs) }])]);
   await db.query("commit");
 
+  // A posted purchase with a supplier invoice number and a dispatched transfer,
+  // posted through the real pre-upgrade functions.
+  const sup = (await db.query<{ id: string }>(`insert into suppliers(company_id, code, name) values ($1,'UPG-S','Upgrade supplier') returning id`, [co])).rows[0].id;
+  const owner = (await db.query<{ id: string }>(
+    `insert into user_profiles(id, email, full_name, role_id, default_company_id, default_branch_id, is_active, is_primary_owner)
+     values ($1,'upgrade@test.local','Upgrade',(select id from roles where code='OWNER'),$2,$3,true,true) returning id`, [user, co, br])).rows[0].id;
+  const pur = (await db.query<{ id: string }>(
+    `insert into purchases(company_id, branch_id, supplier_id, supplier_invoice_number) values ($1,$2,$3,'INV-77') returning id`, [co, br, sup])).rows[0].id;
+  await db.query(`insert into purchase_lines(purchase_id, product_id, quantity, unit_cost) values ($1,$2,5,1100)`, [pur, prod]);
+  await db.query(`select post_purchase($1,$2,'upgrade-purchase-key-1')`, [pur, owner]);
+  const br2 = (await db.query<{ id: string }>(`insert into branches(company_id, code, name) values ($1,'UP2','Upgrade branch 2') returning id`, [co])).rows[0].id;
+  const tr = (await db.query<{ id: string }>(
+    `insert into stock_transfers(company_id, source_branch_id, destination_branch_id) values ($1,$2,$3) returning id`, [co, br, br2])).rows[0].id;
+  await db.query(`insert into stock_transfer_lines(transfer_id, product_id, qty_requested) values ($1,$2,3)`, [tr, prod]);
+  await db.query(`select dispatch_stock_transfer($1,$2,'upgrade-transfer-key-1')`, [tr, owner]);
+
   const before = await snapshot(db);
   const coaCountBefore = (await db.query<{ n: string }>(`select count(*) n from chart_of_accounts`)).rows[0].n;
   await db.end();
@@ -109,12 +125,34 @@ async function main() {
   const newCoa = new Map((JSON.parse(after.coa) as { id: string }[]).map((r) => [r.id, JSON.stringify(r)]));
   check("existing accounts unchanged", oldCoa.every((r) => newCoa.get(r.id) === JSON.stringify(r)));
 
+  // New system accounts from 0024 (9) and 0025 (1145, 1175).
+  const NEW_CODES = ["1145", "1155", "1157", "1175", "2130", "2140", "4400", "4410", "6150", "6400", "6410"];
   const added = (await db.query<{ code: string }>(
-    `select code from chart_of_accounts where company_id=$1 and code in ('1155','1157','2130','2140','4400','4410','6150','6400','6410') order by code`, [co])).rows.map((r) => r.code);
-  check("9 new system accounts added", added.length === 9, added.join(","));
+    `select code from chart_of_accounts where company_id=$1 and code = any($2) order by code`, [co, NEW_CODES])).rows.map((r) => r.code);
+  check(`${NEW_CODES.length} new system accounts added`, added.length === NEW_CODES.length, added.join(","));
   const coaCountAfter = (await db.query<{ n: string }>(`select count(*) n from chart_of_accounts`)).rows[0].n;
-  check("only the 9 new accounts were added", Number(coaCountAfter) - Number(coaCountBefore) === 9,
+  check("only the new system accounts were added", Number(coaCountAfter) - Number(coaCountBefore) === NEW_CODES.length,
     `${coaCountBefore} -> ${coaCountAfter}`);
+
+  // Stage 2 upgrade specifics.
+  check("19 account mappings created",
+    Number((await db.query<{ n: string }>(`select count(*) n from account_mappings where company_id=$1`, [co])).rows[0].n) === 19);
+  check("all feature flags created and OFF",
+    (await db.query<{ n: string; enabled_count: string }>(`select count(*) n, count(*) filter (where is_enabled) enabled_count from feature_flags where company_id=$1`, [co])).rows
+      .every((r) => Number(r.n) === 5 && Number(r.enabled_count) === 0));
+  check("posted purchase invoice backfilled into the registry",
+    (await db.query(`select 1 from supplier_invoice_registry where source_type='purchase' and source_id=$1 and invoice_norm='inv77'`, [pur])).rows.length === 1);
+  check("existing transfer lines got their company",
+    (await db.query(`select 1 from stock_transfer_lines where transfer_id=$1 and company_id=$2`, [tr, co])).rows.length === 1);
+  check("existing transfer keeps its status",
+    (await db.query<{ s: string }>(`select status s from stock_transfers where id=$1`, [tr])).rows[0].s === "dispatched");
+  check("existing purchases stay stock_on_post / TZS",
+    Number((await db.query<{ n: string }>(
+      `select count(*) n from purchases where posting_mode <> 'stock_on_post' or currency_code <> 'TZS' or exchange_rate <> 1`)).rows[0].n) === 0);
+  let dupBlocked = false;
+  try { await db.query(`select register_supplier_invoice($1,$2,'inv-77','cost_invoice',gen_random_uuid())`, [co, sup]); }
+  catch { dupBlocked = true; }
+  check("same supplier invoice cannot be reused by a cost invoice", dupBlocked);
   const stdRole = (await db.query<{ r: string }>(`select stock_role r from products where id=$1`, [prod])).rows[0].r;
   check("existing product defaults to stock_role 'standard'", stdRole === "standard");
   const cats = (await db.query<{ n: string }>(`select count(*) n from cost_categories where company_id=$1`, [co])).rows[0].n;

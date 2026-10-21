@@ -27,6 +27,12 @@ export const RESOURCES = [
   "accounting",
   "reconciliation",
   "periods",
+  // Import / rebagging / transfer upgrade (feature-flagged)
+  "imports",
+  "cost_invoices",
+  "rebagging",
+  "documents",
+  "fx",
 ] as const;
 export type Resource = (typeof RESOURCES)[number];
 
@@ -83,6 +89,15 @@ export const ACTIONS = [
   "close",
   "lock",
   "unlock",
+  // Import upgrade actions
+  "receive",
+  "finalize_cost",
+  "transfer_view",
+  "transfer_resolve",
+  "view_financial",
+  "upload",
+  "settle",
+  "revalue",
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -152,6 +167,13 @@ export const PERMISSION_DEFS: PermissionDef[] = [
   ...p("audit_log", ["view", "export"]),
   // Owner-only guarded actions. No "delete posted" permission exists.
   ...p("transactions", ["delete_draft", "void"]),
+  // Import / rebagging / transfer upgrade (workflows stay behind feature flags).
+  ...p("imports", ["view", "create", "edit_draft", "post", "receive", "approve", "void", "view_cost", "finalize_cost"]),
+  ...p("cost_invoices", ["view", "create", "post", "void"]),
+  ...p("rebagging", ["view", "create", "post", "void"]),
+  ...p("documents", ["view_financial", "upload"]),
+  ...p("fx", ["settle", "revalue"]),
+  ...p("inventory", ["transfer_view", "transfer_resolve"]),
 ];
 
 export const OWNER_ROLE = "OWNER";
@@ -199,6 +221,12 @@ export const ROLE_DEFS: RoleDef[] = [
       "reports.view", "reports.export",
       "reports.view_profit_loss", "reports.view_receivables", "reports.view_payables", "reports.view_inventory_valuation",
       "periods.view",
+      "imports.view", "imports.create", "imports.edit_draft", "imports.post", "imports.receive", "imports.approve",
+      "imports.view_cost", "imports.finalize_cost",
+      "cost_invoices.view", "cost_invoices.create", "cost_invoices.post",
+      "rebagging.view", "rebagging.create", "rebagging.post",
+      "inventory.transfer_view", "inventory.transfer_resolve",
+      "documents.view_financial", "documents.upload", "fx.settle",
     ],
   },
   {
@@ -226,6 +254,9 @@ export const ROLE_DEFS: RoleDef[] = [
       "accounting.view_general_ledger", "accounting.view_trial_balance", "accounting.view_control_accounts", "accounting.export",
       "reconciliation.view", "reconciliation.create", "reconciliation.import_statement", "reconciliation.match", "reconciliation.finalize",
       "periods.view",
+      "imports.view", "imports.view_cost", "imports.finalize_cost",
+      "cost_invoices.view", "cost_invoices.create", "cost_invoices.post",
+      "inventory.transfer_view", "documents.view_financial", "documents.upload", "fx.settle", "fx.revalue",
     ],
   },
   {
@@ -253,6 +284,8 @@ export const ROLE_DEFS: RoleDef[] = [
       "inventory.transfer_create", "inventory.transfer_dispatch", "inventory.transfer_receive",
       "kardex.view", "kardex.export",
       "purchases.view", "purchases.create", "purchases.edit_draft", "purchases.post",
+      "imports.view", "imports.receive", "rebagging.view", "rebagging.create", "rebagging.post",
+      "inventory.transfer_view", "documents.upload",
     ],
   },
   {
@@ -274,6 +307,8 @@ export const ROLE_DEFS: RoleDef[] = [
       "reports.view_vat", "reports.view_receivables", "reports.view_payables", "reports.view_inventory_valuation",
       "accounting.view", "accounting.view_journals", "accounting.view_general_ledger",
       "accounting.view_trial_balance", "accounting.view_control_accounts", "accounting.export",
+      "imports.view", "imports.view_cost", "cost_invoices.view", "rebagging.view",
+      "inventory.transfer_view", "documents.view_financial",
       "reconciliation.view", "periods.view",
     ],
   },
