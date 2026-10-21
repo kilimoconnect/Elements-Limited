@@ -28,6 +28,8 @@ const LABELS: Record<string, string> = {
   "document-numbering": "Document Numbering",
   "accounting-periods": "Accounting Periods",
   "audit-log": "Audit Log",
+  "cost-categories": "Cost Categories",
+  "exchange-rates": "Exchange Rates",
 };
 
 function labelFor(segment: string) {

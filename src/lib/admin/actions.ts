@@ -60,7 +60,7 @@ function coerceField(
       const s = (raw ?? "").toString().trim();
       if (!s) {
         if (req) return { error: `${field.label} is required.` };
-        return { value: field.defaultValue ?? 0 };
+        return { value: field.nullable ? null : field.defaultValue ?? 0 };
       }
       const n = Number(s);
       if (!Number.isFinite(n)) return { error: `${field.label} must be a number.` };

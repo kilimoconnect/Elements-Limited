@@ -19,6 +19,8 @@ import {
   Hash,
   CalendarRange,
   ScrollText,
+  Layers,
+  ArrowLeftRight,
   type LucideIcon,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
@@ -65,6 +67,8 @@ const GROUPS: Group[] = [
       { label: "Chart of Accounts", href: "/admin/chart-of-accounts", description: "General-ledger accounts", icon: BookText },
       { label: "Other Income Types", href: "/admin/other-income-types", description: "Income categories", icon: Coins },
       { label: "Expense Categories", href: "/admin/expense-categories", description: "Expense categories", icon: Receipt },
+      { label: "Cost Categories", href: "/admin/cost-categories", description: "Capitalise or expense import & transfer costs", icon: Layers },
+      { label: "Exchange Rates", href: "/admin/exchange-rates", description: "TZS rates for import invoices", icon: ArrowLeftRight },
     ],
   },
   {

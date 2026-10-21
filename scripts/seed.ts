@@ -244,6 +244,15 @@ async function main() {
       );
     }
 
+    // System accounts, document sequences, weight units and cost categories
+    // that later migrations rely on (migration 0024). Idempotent.
+    // (LETIQ_SEED_PRE_0024 is a test hook that reproduces the seed as it was
+    // before migration 0024, for the upgrade-path check.)
+    if (!process.env.LETIQ_SEED_PRE_0024) {
+      console.log("Ensuring company defaults...");
+      await db.query("select public.ensure_company_defaults($1)", [companyId]);
+    }
+
     await db.query("commit");
     console.log("\nSeed complete.");
   } catch (err) {

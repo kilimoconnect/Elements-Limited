@@ -203,7 +203,7 @@ function FieldControl({
                 ? "number"
                 : "text"
           }
-          step={field.type === "money" ? "0.01" : field.type === "quantity" ? "0.0001" : undefined}
+          step={field.step ?? (field.type === "money" ? "0.01" : field.type === "quantity" ? "0.0001" : undefined)}
           min={field.min}
           max={field.max}
           value={(value as string | number) ?? ""}

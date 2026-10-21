@@ -12,6 +12,7 @@
     "test:integration": "tsx scripts/itest.ts",
     "test:phase3": "tsx scripts/itest3.ts",
     "test:phase4": "tsx scripts/itest4.ts",
+    "test:db": "tsx scripts/testdb/run.ts",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "tsx scripts/seed.ts",
     "bootstrap:owner": "tsx scripts/bootstrap-owner.ts"
@@ -45,6 +46,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.11",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/pg": "^8.23.1",

@@ -24,6 +24,8 @@ export interface FieldDef {
   help?: string;
   min?: number;
   max?: number;
+  /** Input step for number fields (e.g. "0.000001" for exchange rates). */
+  step?: string;
   colSpan?: 1 | 2;
   /** Static enum options. */
   options?: { value: string; label: string }[];
@@ -59,12 +61,16 @@ export type OptionSourceKey =
   | "categories"
   | "brands"
   | "units"
-  | "branches";
+  | "branches"
+  | "bulkProducts"
+  | "expenseAccounts";
 
 export interface OptionSource {
   table: string;
   /** Column used as the display label. */
   labelColumn: string;
+  /** Column shown before the label (default "code"; products use "sku"). */
+  codeColumn?: string;
   /** Optionally restrict (e.g. only accounts that allow posting). */
   where?: Record<string, string | boolean>;
 }
@@ -81,6 +87,12 @@ export const OPTION_SOURCES: Record<OptionSourceKey, OptionSource> = {
   brands: { table: "brands", labelColumn: "name" },
   units: { table: "units", labelColumn: "name" },
   branches: { table: "branches", labelColumn: "name" },
+  bulkProducts: { table: "products", labelColumn: "name", codeColumn: "sku", where: { stock_role: "bulk" } },
+  expenseAccounts: {
+    table: "chart_of_accounts",
+    labelColumn: "name",
+    where: { allow_posting: true, account_type: "expense" },
+  },
 };
 
 export interface ResourceConfig {
@@ -128,6 +140,33 @@ const ENUM = {
   normalBalance: [
     { value: "debit", label: "Debit" },
     { value: "credit", label: "Credit" },
+  ],
+  stockRole: [
+    { value: "standard", label: "Standard item" },
+    { value: "bulk", label: "Bulk (stocked in kg)" },
+    { value: "packaged", label: "Packaged bag (fixed kg per unit)" },
+    { value: "packaging_material", label: "Packaging material" },
+  ],
+  costTreatment: [
+    { value: "capitalize", label: "Capitalise into inventory cost" },
+    { value: "expense", label: "Expense (not inventory cost)" },
+  ],
+  allocationBasis: [
+    { value: "net_weight", label: "By net weight (kg)" },
+    { value: "value", label: "By goods value" },
+    { value: "quantity", label: "By quantity / bags" },
+    { value: "manual", label: "Manual" },
+  ],
+  // Foreign currencies seeded in migration 0024 (TZS is functional, no rate).
+  foreignCurrency: [
+    { value: "USD", label: "USD — US Dollar" },
+    { value: "EUR", label: "EUR — Euro" },
+    { value: "GBP", label: "GBP — Pound Sterling" },
+    { value: "CNY", label: "CNY — Chinese Yuan" },
+    { value: "INR", label: "INR — Indian Rupee" },
+    { value: "AED", label: "AED — UAE Dirham" },
+    { value: "KES", label: "KES — Kenyan Shilling" },
+    { value: "ZAR", label: "ZAR — South African Rand" },
   ],
   periodStatus: [
     { value: "open", label: "Open" },
@@ -201,11 +240,14 @@ export const RESOURCES: Record<string, ResourceConfig> = {
       { key: "name", label: "Name" },
       { key: "symbol", label: "Symbol" },
       { key: "allow_decimal", label: "Decimals", type: "boolean" },
+      { key: "kg_factor", label: "Kg per unit", type: "number", align: "right" },
     ],
     fields: [
       { name: "code", label: "Code", type: "text", required: true, colSpan: 1 },
       { name: "name", label: "Unit Name", type: "text", required: true, colSpan: 1 },
       { name: "symbol", label: "Symbol", type: "text", colSpan: 1 },
+      { name: "kg_factor", label: "Kg per unit (weight units only)", type: "number", nullable: true, min: 0, step: "0.000001", colSpan: 1,
+        help: "Kilogram = 1, Metric tonne = 1000. Leave blank for pieces, bags, litres, cartons." },
       { name: "allow_decimal", label: "Allow decimal quantities", type: "switch", colSpan: 2, defaultValue: true },
       { name: "description", label: "Description", type: "textarea", colSpan: 2 },
     ],
@@ -316,6 +358,7 @@ export const RESOURCES: Record<string, ResourceConfig> = {
       { key: "name", label: "Name" },
       { key: "category_id", label: "Category", type: "ref", refKey: "categories" },
       { key: "brand_id", label: "Brand", type: "ref", refKey: "brands" },
+      { key: "net_weight_kg", label: "Net kg", type: "number", align: "right" },
       { key: "selling_price", label: "Selling Price", type: "money", align: "right" },
       { key: "track_inventory", label: "Tracked", type: "boolean" },
     ],
@@ -326,12 +369,74 @@ export const RESOURCES: Record<string, ResourceConfig> = {
       { name: "category_id", label: "Category", type: "select", optionsKey: "categories", nullable: true, colSpan: 1 },
       { name: "brand_id", label: "Brand", type: "select", optionsKey: "brands", nullable: true, colSpan: 1 },
       { name: "base_unit_id", label: "Base Unit", type: "select", optionsKey: "units", nullable: true, colSpan: 1 },
+      { name: "stock_role", label: "Stock Role", type: "select", required: true, options: ENUM.stockRole, colSpan: 1, defaultValue: "standard",
+        help: "Bulk products use the kg unit. Packaged bags need their net kg and source bulk product. Locked once stock has moved." },
+      { name: "net_weight_kg", label: "Net kg per unit", type: "quantity", nullable: true, min: 0, colSpan: 1,
+        help: "Packaged bags only, e.g. 50, 25 or 5." },
+      { name: "bulk_product_id", label: "Filled from bulk product", type: "select", optionsKey: "bulkProducts", nullable: true, colSpan: 1 },
       { name: "tax_code_id", label: "Tax Code", type: "select", optionsKey: "taxCodes", nullable: true, colSpan: 1 },
       { name: "purchase_price", label: "Default Purchase Price", type: "money", min: 0, colSpan: 1, defaultValue: 0 },
       { name: "selling_price", label: "Default Selling Price", type: "money", min: 0, colSpan: 1, defaultValue: 0 },
       { name: "reorder_level", label: "Reorder Level", type: "quantity", min: 0, colSpan: 1, defaultValue: 0 },
       { name: "track_inventory", label: "Track inventory", type: "switch", colSpan: 1, defaultValue: true },
       { name: "description", label: "Description", type: "textarea", colSpan: 2 },
+    ],
+  },
+
+  "cost-categories": {
+    key: "cost-categories",
+    table: "cost_categories",
+    title: "Cost Categories",
+    singular: "Cost Category",
+    description: "Which import, transfer and rebagging costs are capitalised into inventory and which are expensed.",
+    auditType: "cost_category",
+    codeField: "code",
+    searchColumns: ["code", "name"],
+    columns: [
+      { key: "code", label: "Code", type: "code" },
+      { key: "name", label: "Name" },
+      { key: "inventory_treatment", label: "Treatment" },
+      { key: "allocation_basis", label: "Allocate by" },
+      { key: "include_in_commercial_cost", label: "Pricing view", type: "boolean" },
+    ],
+    fields: [
+      { name: "code", label: "Code", type: "text", required: true, colSpan: 1 },
+      { name: "name", label: "Name", type: "text", required: true, colSpan: 1 },
+      { name: "inventory_treatment", label: "Accounting treatment", type: "select", required: true, options: ENUM.costTreatment, colSpan: 1,
+        help: "Recoverable VAT, ordinary storage, selling overheads, abnormal waste and exchange losses are not inventory cost." },
+      { name: "expense_account_id", label: "Expense account (when expensed)", type: "select", optionsKey: "expenseAccounts", nullable: true, colSpan: 1 },
+      { name: "allocation_basis", label: "Allocate to stock by", type: "select", required: true, options: ENUM.allocationBasis, colSpan: 1, defaultValue: "net_weight" },
+      { name: "default_tax_code_id", label: "Suggested tax code", type: "select", optionsKey: "taxCodes", nullable: true, colSpan: 1,
+        help: "Only a suggestion; each invoice line keeps its own tax code." },
+      { name: "applies_to_import", label: "Used on imports", type: "switch", colSpan: 1 },
+      { name: "applies_to_transfer", label: "Used on branch transfers", type: "switch", colSpan: 1 },
+      { name: "applies_to_rebagging", label: "Used on rebagging", type: "switch", colSpan: 1 },
+      { name: "include_in_commercial_cost", label: "Include in pricing (commercial) cost view", type: "switch", colSpan: 1, defaultValue: true },
+      { name: "description", label: "Description", type: "textarea", colSpan: 2 },
+    ],
+  },
+
+  "exchange-rates": {
+    key: "exchange-rates",
+    table: "exchange_rates",
+    title: "Exchange Rates",
+    singular: "Exchange Rate",
+    description: "TZS per 1 unit of foreign currency, for import supplier invoices and their settlements only.",
+    auditType: "exchange_rate",
+    codeField: "currency_code",
+    searchColumns: ["currency_code", "source"],
+    columns: [
+      { key: "rate_date", label: "Date", type: "date" },
+      { key: "currency_code", label: "Currency", type: "code" },
+      { key: "rate", label: "TZS per unit", type: "number", align: "right" },
+      { key: "source", label: "Source" },
+    ],
+    fields: [
+      { name: "currency_code", label: "Currency", type: "select", required: true, options: ENUM.foreignCurrency, colSpan: 1 },
+      { name: "rate_date", label: "Rate date", type: "date", required: true, colSpan: 1 },
+      { name: "rate", label: "TZS per 1 unit", type: "number", required: true, min: 0, step: "0.000001", colSpan: 1 },
+      { name: "source", label: "Source", type: "text", nullable: true, placeholder: "e.g. BOT mean rate", colSpan: 1 },
+      { name: "notes", label: "Notes", type: "textarea", nullable: true, colSpan: 2 },
     ],
   },
 
@@ -526,7 +631,7 @@ export function getResource(key: string): ResourceConfig | undefined {
 }
 
 /** Resources that do NOT have an is_active column (status handled differently). */
-export const NO_ACTIVE_TOGGLE = new Set<string>(["accounting-periods"]);
+export const NO_ACTIVE_TOGGLE = new Set<string>(["accounting-periods", "exchange-rates"]);
 
 /**
  * Master-data resources whose code/SKU is auto-generated on create (prefix +
@@ -548,6 +653,7 @@ export const AUTO_CODE_PREFIXES: Record<string, string> = {
   "expense-categories": "EXC",
   "other-income-types": "OIT",
   "chart-of-accounts": "ACC",
+  "cost-categories": "CC",
 };
 
 export function autoCodePrefix(key: string): string | undefined {

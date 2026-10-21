@@ -20,8 +20,12 @@ async function main() {
     );
     const applied = new Set(rows.map((r) => r.name));
 
+    // Test hook: LETIQ_MIGRATE_UNTIL=0023 stops after that migration (used by
+    // the upgrade-path check to rebuild a pre-upgrade database).
+    const until = process.env.LETIQ_MIGRATE_UNTIL;
     const files = readdirSync(MIGRATIONS_DIR)
       .filter((f) => f.endsWith(".sql"))
+      .filter((f) => !until || f.slice(0, until.length) <= until)
       .sort();
 
     let ran = 0;

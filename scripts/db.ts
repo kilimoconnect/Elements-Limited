@@ -16,6 +16,14 @@ export function requireDatabaseUrl(): string {
 }
 
 export function createDbClient(): Client {
+  // Tests: an in-process PGlite database folder instead of the real project.
+  // Never falls through to DATABASE_URL when set.
+  const pgliteDir = process.env.LETIQ_PGLITE_DIR;
+  if (pgliteDir) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { PGliteClient } = require("./testdb/pglite-client") as typeof import("./testdb/pglite-client");
+    return new PGliteClient(pgliteDir) as unknown as Client;
+  }
   return new Client({
     connectionString: requireDatabaseUrl(),
     // Supabase requires TLS; the pooled/direct hosts use certs Node may not

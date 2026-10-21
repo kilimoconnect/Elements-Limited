@@ -41,9 +41,10 @@ export async function loadResourceOptions(
   await Promise.all(
     Array.from(keys).map(async (key) => {
       const src = OPTION_SOURCES[key];
+      const codeCol = src.codeColumn ?? "code";
       let query = admin
         .from(src.table)
-        .select(`id, code, ${src.labelColumn}`)
+        .select(`id, ${codeCol}, ${src.labelColumn}`)
         .eq("company_id", companyId)
         .eq("is_active", true);
       if (src.where) {
@@ -51,10 +52,10 @@ export async function loadResourceOptions(
           query = query.eq(col, val as never);
         }
       }
-      const { data } = await query.order("code");
+      const { data } = await query.order(codeCol);
       out[key] = ((data as Record<string, string>[] | null) ?? []).map((r) => ({
         value: r.id,
-        label: `${r.code} — ${r[src.labelColumn]}`,
+        label: `${r[codeCol]} — ${r[src.labelColumn]}`,
       }));
     }),
   );
