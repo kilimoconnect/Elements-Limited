@@ -113,14 +113,21 @@ export async function receivablesAgeing(companyId: string, asOf: string) {
 /* ----------------------------- Payables --------------------------------- */
 export async function payablesAgeing(companyId: string, asOf: string) {
   const admin = createAdminClient();
-  const [purchases, expenses, openings, fcEvents, creditApps] = await Promise.all([
+  const [purchases, expenses, openings, fcEvents, creditApps, costPayables, adjustments] = await Promise.all([
     admin.from("purchases").select("id, document_number, document_date, due_date, grand_total, currency_code, fc_grand_total, advance_applied_at_rate, supplier:suppliers(name)").eq("company_id", companyId).eq("document_status", "posted").lte("document_date", asOf),
     admin.from("expenses").select("id, document_number, document_date, due_date, grand_total, supplier:suppliers(name)").eq("company_id", companyId).eq("document_status", "posted").lte("document_date", asOf),
     admin.from("supplier_opening_balances").select("document_number, document_date, due_date, outstanding, supplier:suppliers(name)").eq("company_id", companyId).eq("document_status", "posted").lte("document_date", asOf),
     // Foreign invoices: balance as of the date is rebuilt from the event log.
     admin.from("supplier_payable_events").select("fc_delta, tzs_delta, payable:supplier_payables!inner(purchase_id)").eq("company_id", companyId).lte("event_date", asOf),
     admin.from("supplier_credit_applications").select("payable_tzs_released, payable:supplier_payables!inner(purchase_id, currency_code)").eq("company_id", companyId).lte("application_date", asOf),
+    // Service invoices (import, rebagging, transfer and purchase costs): balance from their payable.
+    admin.from("supplier_payables").select("outstanding, original_amount, invoice:cost_invoices!inner(document_number, document_date, due_date, document_status), supplier:suppliers(name)")
+      .eq("company_id", companyId).not("cost_invoice_id", "is", null).neq("status", "voided").lte("invoice.document_date", asOf),
+    // Supplier price debit / credit notes on purchases (Stage 7).
+    admin.from("purchase_cost_adjustments").select("purchase_id, payable_delta").eq("company_id", companyId).eq("document_status", "posted").lte("document_date", asOf),
   ]);
+  const adjMap = new Map<string, number>();
+  for (const a of (adjustments.data ?? []) as { purchase_id: string; payable_delta: number }[]) adjMap.set(a.purchase_id, (adjMap.get(a.purchase_id) ?? 0) + N(a.payable_delta));
   const fcMap = new Map<string, { fc: number; tzs: number }>();
   for (const e of (fcEvents.data ?? []) as Record<string, unknown>[]) {
     const pid = (e.payable as { purchase_id: string } | null)?.purchase_id; if (!pid) continue;
@@ -174,12 +181,16 @@ export async function payablesAgeing(companyId: string, asOf: string) {
       continue;
     }
     const out = round2(N(p.grand_total) - (pPayMap.get(p.id as string) ?? 0) - (allocMap.get(p.id as string) ?? 0)
-      - (retMap.get(p.id as string) ?? 0) - N(p.advance_applied_at_rate) - (creditMap.get(p.id as string) ?? 0));
+      - (retMap.get(p.id as string) ?? 0) - N(p.advance_applied_at_rate) - (creditMap.get(p.id as string) ?? 0) - (adjMap.get(p.id as string) ?? 0));
     push(entity, (p.document_number as string) ?? "—", p.document_date as string, due, N(p.grand_total), out);
   }
   for (const e of (expenses.data ?? []) as Record<string, unknown>[]) {
     const out = round2(N(e.grand_total) - (ePayMap.get(e.id as string) ?? 0) - (allocMap.get(e.id as string) ?? 0));
     push((e.supplier as { name: string } | null)?.name ?? "—", (e.document_number as string) ?? "—", e.document_date as string, (e.due_date as string) ?? (e.document_date as string), N(e.grand_total), out);
+  }
+  for (const c of (costPayables.data ?? []) as Record<string, unknown>[]) {
+    const inv = c.invoice as { document_number: string | null; document_date: string; due_date: string | null };
+    push((c.supplier as { name: string } | null)?.name ?? "—", inv.document_number ?? "—", inv.document_date, inv.due_date ?? inv.document_date, N(c.original_amount), round2(N(c.outstanding)));
   }
   for (const o of (openings.data ?? []) as Record<string, unknown>[]) {
     push((o.supplier as { name: string } | null)?.name ?? "—", (o.document_number as string) ?? "Opening", o.document_date as string, (o.due_date as string) ?? (o.document_date as string), N(o.outstanding), round2(N(o.outstanding)));

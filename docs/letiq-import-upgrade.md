@@ -33,13 +33,161 @@ actually run, and what remains. Updated at the end of every stage.
 | 4 | Import shipments: shipment + lines, title (ownership) event, goods invoice via `purchases` invoice-only mode, GR/IR clearing, cost sources (estimate → accrual → actual) and `cost_invoices`, allocations, goods receipt (GRN) with discrepancy resolution, late-cost propagation for import lots | **Done 21/10/2026** (record below; screens not yet walked through in a browser) |
 | 5 | Rebagging orders (multi-size outputs, packaging materials, normal/abnormal loss, unused bulk) + propagation through conversion | **Done 22/10/2026** (record below; screens not yet run in a browser) |
 | 6 | Transfer upgrade: logistics details, charges, Storage attachments, versioned delivery notes, partial receipts with signed POD, discrepancy approval, shared in-transit view + propagation through transfers | **Done 22/10/2026** (record below; screens not yet run in a browser) |
-| 7 | Commercial (pricing) cost view and import / landed-cost reports | Not started |
+| 7 | Late costs, corrections and accounting close (cost-delta algorithm across imports, purchases, rebagging, transfers; reconciliation) | **Done 22/10/2026** (record below; screens not yet run in a browser) |
 
 Each stage extends the existing posting services (`record_stock_movement`,
 `create_journal`, `claim_idempotency`, `assert_period_open`, supplier
 payables, transfers) rather than adding a parallel ERP.
 
 ---
+
+## Stage 7 — Late costs, corrections and accounting close (implemented)
+
+Migration `0031_cost_adjustments.sql` (additive; original documents and
+journals untouched) plus screens and reports. It completes the Stage 1
+cost-delta algorithm (§7) across imports, purchases, rebagging and transfers.
+
+### The algorithm (as built)
+
+A TZS delta on a receipt (import receipt, purchase line, rebag output,
+transfer receipt) is **replayed over the immutable stock movements** of its
+weighted-average pool: each outflow takes `remaining × qty_out / balance
+before` of the receipt's units (the quantity view of weighted-average
+blending — never batch costing). Units that come back (sale void, sales
+return, unused bulk returned, cancelled / voided rebagging) rejoin the pool.
+The delta is split by those units with exact largest-remainder rounding:
+
+| Where the units are now | Posting |
+| --- | --- |
+| held in the pool | stock value (Dr/Cr 1150); excess over a zero / emptied pool → 5100 |
+| sold (per sale) | cost of sales 5100 |
+| written off / abnormal loss | 6300 |
+| returned to supplier | price variance 5300 |
+| on a transfer trip | the trip's value pool in 1155 (in transit, quarantined, short), or on through the destination's pool once received; normal transit loss → destination stock; abnormal loss → 6300 |
+| issued to rebagging | the order's held value (in production) or, once completed, its bags by kg (abnormal share → 6300) and on wherever the bags went |
+| import line still in transit | 1157 |
+
+Every part is written to **`cost_delta_lines`** (source document, target,
+branch, product, reference — sale, movement, trip line, rebag order, shipment
+line — units, amount). Together with `cost_allocation_runs / cost_allocations`
+(how a source was split over lines) and **`cost_source_history`** (every
+change of estimate / accrual / actual / status) this is the evidence behind
+each balanced linked journal.
+
+### What was added
+
+- **Purchase landed costs**: cost sources owned by a posted stock purchase
+  (freight, transport, handling, duty …; categories usable on imports or
+  transfers). Estimate → explicit accrual (`accrue_purchase_cost`) → supplier
+  invoice under Cost Invoices. Allocation by net kg, value, units or named
+  lines; the delta follows the goods from the purchase receipt. A purchase
+  with posted landed costs or price notes cannot be voided.
+- **Supplier price notes** (`purchase_cost_adjustments`, TZS purchases):
+  debit note (price higher) or credit note (price lower) per purchase line.
+  The supplier balance changes exactly once; a credit beyond the open balance
+  (invoice already paid) becomes a **supplier credit** (1170). Foreign
+  purchases keep using supplier credits / returns.
+- **Cost-invoice credit notes beyond the open balance** now become supplier
+  credits instead of being refused; credits can never exceed the credited
+  invoice.
+- **Supplier refunds** (`refund_supplier_credit`): cash / bank in, 1170 out;
+  partial refunds; Purchases → Supplier Credits.
+- **Reversal of a posted cost invoice** (`void_cost_invoice`,
+  `cost_invoices.void`, reason): only while unpaid and without credit notes.
+  Reverses the payable and VAT today, re-instates the accrual it replaced,
+  takes out only the difference it had made (through the same propagation),
+  frees the supplier invoice number. The invoice and its journal stay.
+- **Returns after an adjustment**: posting a sales return (or voiding a sale)
+  brings the late cost recorded on that sale for those units back to stock
+  (Dr 1150 / Cr 5100, ratio = units returned / units sold). Voiding a return
+  takes the units out at the current average (which carries their late cost)
+  and now aligns the GL with that value (fixes Stage 1 D1 on this path).
+- **Closed periods**: deltas post on their own document date, which must be
+  in an open period — nothing is backdated or reopened. Shares that reach
+  sales of closed periods are **catch-ups** in the open period, shown with the
+  original document and date in **Reports → Late Cost Adjustments**.
+- **Reports → Cost Reconciliation** (`cost_reconciliation_checks`): stock
+  quantity = movements; stock value = last movement; transfers conserve
+  quantity; rebagging conserves kg; every allocation equals its source; every
+  journal balances; 1150 = stock subledger + rebagging WIP + pre-upgrade
+  transit; 1155 = value on open trips (listed); 1157 = import lines in
+  transit; GR/IR 2130 = open items per shipment (listed); 2140 = accrued
+  charges awaiting invoice (listed); 2110 = supplier ledger; 1170 = open
+  supplier credits. The payables ageing now includes service-invoice payables
+  and supplier price notes.
+- **Cost Invoices** can be posted against transfer charges and purchase landed
+  costs (the transfer link was missing from the Stage 6 form) and reversed
+  from the list.
+
+### Acceptance (actual results, `scripts/itest-import7.ts`)
+
+- 1,000 equal bags (40,000 each), 400 sold, 600 held: a further eligible
+  TZS 1,000,000 → **600,000 inventory + 400,000 cost of sales** (accrual
+  journal 1150 600,000 / 5100 400,000 / 2140 1,000,000); the evidence shows
+  600 units held and 400 units on the sale. The **matching invoice** posts
+  only Dr 2140 / Cr 2110 — zero extra inventory cost.
+- Destination and in-transit shares: 1,000 bags, 400 sold, 300 transferred
+  (200 received): a late 1,000,000 → HQ held 300k, sold 400k, Mwanza 200k,
+  in transit 100k (1155), which arrives with the last 100 bags.
+- Negative correction (credit note 200k) splits the same way; credits cannot
+  exceed the invoice; a supplier price credit of 100k after HQ sold out goes
+  to cost of sales for HQ's share and −30k at Mwanza, payable −100k.
+- Blended receipts: two receipts at 1,000 and 2,000, half sold → the first
+  receipt's 10,000 splits 5,000 sold / 5,000 held; a later credit splits the
+  same way.
+- Returns after adjustment: returning 100 of the 400 bags brings their
+  100,000 back; a further 700,000 then splits 490k held / 210k sold; voiding
+  the return takes them out at average and aligns the GL (170k).
+- Rebagging → transfer → sales: a late 1M on bulk ends as bulk 500k, HQ bags
+  200k, Mwanza bags 50k, cost of sales 250k.
+- Cost-invoice reversal: 12,000 vs 10,000 accrual (+2,000) reversed (accrual
+  back, −2,000), corrected invoice with the same number posts +1,000; retry
+  posts once; storekeepers refused; invoices with credit notes refused.
+- Vendor refund: credit note on a paid purchase → supplier credit 5,000;
+  refund 3,000 in cash (retry once), 2,000 left; over-refund refused.
+- Closed January: a cost dated in January is refused; dated in March it
+  posts, and the January sale's share is reported as a catch-up with the
+  sale's number; nothing is posted into January.
+- All 13 reconciliation checks pass on the fixture.
+
+### Checks actually run (22/10/2026)
+
+| Check | Result |
+| --- | --- |
+| `npx tsc --noEmit` | Clean |
+| `npm run lint` | Same 20 problems in files not touched by Stage 7; Stage 7 files clean |
+| `npm run test:db` | All pass: 19 + 26 + 11 + 51 + 114 + 79 + 58 + 50 + 59 + **47 (Stage 7)** + 22 upgrade-path |
+| `npm test` | 25 attachment policy checks pass |
+| Breakage: no late cost restored on returns | 3 checks failed; restored |
+| Breakage: replay ignores units given back by returns | 2 checks failed (466,666.67 instead of 490,000); restored |
+| Breakage: delta ledger disabled | 6 checks failed (evidence, returns, catch-up report); restored byte-for-byte, suite green |
+
+### Decisions and assumptions
+
+- Weighted average is kept everywhere: a late cost follows the receipt's
+  units through the pool by the proportional replay, not by batch identity.
+- Late costs reaching emptied pools go to cost of sales; voided-trip shares
+  go back to the source pool.
+- The accrual account 2140 is shared by import, rebagging, transfer and
+  purchase charges; reconciliation lists every open accrual.
+- Sale voids and returns restore late cost in proportion to units; damaged
+  returns (not restocked) leave it in cost of sales.
+
+### Limitations
+
+- Concurrency: posting functions lock the stock rows they touch in a fixed
+  order and use idempotency keys, but the test database has one connection,
+  so truly simultaneous sessions were **not** tested — only retries and
+  repeated calls.
+- Screens not run in a browser (production is the only configured database).
+- Supplier price notes are TZS only; foreign purchases use credits / returns.
+- A cost invoice with payments or credit notes cannot be reversed; use a
+  credit note.
+- Reconciliation checks are current-position; historical (as-of) versions
+  of the new checks are not built.
+- Pre-0031 deltas (Stages 4–6) have no `cost_delta_lines` evidence; only
+  deltas posted from now on are itemised.
+- Not applied to the live database; not pushed.
 
 ## Stage 6 — Transfer costs and complete dispatch file (implemented)
 

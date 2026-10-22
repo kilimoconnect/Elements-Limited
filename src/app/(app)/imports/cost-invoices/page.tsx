@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDate, formatMoney } from "@/lib/format";
+import { VoidCostInvoiceButton } from "./void-button";
 
 export const metadata: Metadata = { title: "Cost Invoices" };
 
@@ -41,7 +42,7 @@ export default async function CostInvoicesPage() {
             <TableHeader><TableRow>
               <TableHead>Number</TableHead><TableHead>Date</TableHead><TableHead>Supplier</TableHead><TableHead>Supplier doc.</TableHead>
               <TableHead>Shipments / rebagging</TableHead><TableHead className="text-right">Net</TableHead><TableHead className="text-right">Tax</TableHead>
-              <TableHead className="text-right">Total (TZS)</TableHead><TableHead>Status</TableHead>
+              <TableHead className="text-right">Total (TZS)</TableHead><TableHead>Status</TableHead><TableHead />
             </TableRow></TableHeader>
             <TableBody>
               {rows.map((r) => {
@@ -64,6 +65,7 @@ export default async function CostInvoicesPage() {
                     <TableCell className="text-right tabular-nums">{formatMoney(sign * Number(r.tax_total))}</TableCell>
                     <TableCell className="text-right tabular-nums font-medium">{formatMoney(sign * Number(r.grand_total))}</TableCell>
                     <TableCell><Badge variant={r.document_status === "posted" ? "success" : "secondary"}>{r.document_status}</Badge></TableCell>
+                    <TableCell>{r.document_status === "posted" && r.document_kind === "invoice" && can(ctx.user, "cost_invoices.void") && <VoidCostInvoiceButton id={r.id} label={r.document_number ?? ""} />}</TableCell>
                   </TableRow>
                 );
               })}

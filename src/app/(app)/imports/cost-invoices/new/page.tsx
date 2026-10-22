@@ -21,22 +21,29 @@ export default async function NewCostInvoicePage(props: { searchParams: SearchPa
   const [{ data: suppliers }, { data: categories }, { data: taxCodes }, { data: sources }, { data: invoices }] = await Promise.all([
     admin.from("suppliers").select("id, code, name").eq("company_id", ctx.companyId).eq("is_active", true).order("code"),
     admin.from("cost_categories").select("id, code, name, inventory_treatment, default_tax_code_id").eq("company_id", ctx.companyId)
-      .eq("is_active", true).or("applies_to_import.eq.true,applies_to_rebagging.eq.true").eq("is_goods_value", false).order("code"),
+      .eq("is_active", true).or("applies_to_import.eq.true,applies_to_rebagging.eq.true,applies_to_transfer.eq.true").eq("is_goods_value", false).order("code"),
     admin.from("tax_codes").select("id, name, rate, is_recoverable").eq("company_id", ctx.companyId).eq("is_active", true).order("code"),
-    admin.from("cost_sources").select("id, cost_category_id, description, status, estimated_amount, accrued_amount, actual_amount, supplier_id, import_shipment:import_shipments(id, document_number, logistics_status), rebag_order:rebag_orders(id, document_number, document_status)")
-      .eq("company_id", ctx.companyId).in("owner_type", ["import_shipment", "rebag_order"]).neq("status", "voided"),
+    admin.from("cost_sources").select("id, cost_category_id, description, status, estimated_amount, accrued_amount, actual_amount, supplier_id, import_shipment:import_shipments(id, document_number, logistics_status), rebag_order:rebag_orders(id, document_number, document_status), stock_transfer:stock_transfers(id, document_number, status), purchase:purchases(id, document_number, document_status)")
+      .eq("company_id", ctx.companyId).in("owner_type", ["import_shipment", "rebag_order", "stock_transfer", "purchase"]).neq("status", "voided"),
     admin.from("cost_invoices").select("id, document_number, supplier_id, grand_total").eq("company_id", ctx.companyId)
       .eq("document_status", "posted").eq("document_kind", "invoice").order("document_date", { ascending: false }).limit(500),
   ]);
   type Src = { id: string; cost_category_id: string; description: string | null; status: string; estimated_amount: number; accrued_amount: number; actual_amount: number;
     supplier_id: string | null; import_shipment: { id: string; document_number: string | null; logistics_status: string } | null;
-    rebag_order: { id: string; document_number: string | null; document_status: string } | null };
+    rebag_order: { id: string; document_number: string | null; document_status: string } | null;
+    stock_transfer: { id: string; document_number: string | null; status: string } | null;
+    purchase: { id: string; document_number: string | null; document_status: string } | null };
   const opts: SourceOpt[] = ((sources ?? []) as unknown as Src[])
     // Shipment costs, and rebagging charges once their order is completed (they are accrued at completion).
-    .filter((s) => (s.import_shipment && s.import_shipment.logistics_status !== "cancelled") || s.rebag_order?.document_status === "completed")
+    // Shipment costs; rebagging charges once completed; transfer charges once dispatched; landed costs of posted purchases.
+    .filter((s) => (s.import_shipment && s.import_shipment.logistics_status !== "cancelled") || s.rebag_order?.document_status === "completed"
+      || (s.stock_transfer && !["draft", "voided"].includes(s.stock_transfer.status)) || s.purchase?.document_status === "posted")
     .map((s) => ({
       id: s.id, categoryId: s.cost_category_id, status: s.status, shipmentId: s.import_shipment?.id ?? "", supplierId: s.supplier_id,
-      label: s.import_shipment ? `${s.import_shipment.document_number ?? "—"} · ${s.description ?? "cost"}` : `Rebagging ${s.rebag_order!.document_number ?? "—"} · ${s.description ?? "charge"}`,
+      label: s.import_shipment ? `${s.import_shipment.document_number ?? "—"} · ${s.description ?? "cost"}`
+        : s.rebag_order ? `Rebagging ${s.rebag_order.document_number ?? "—"} · ${s.description ?? "charge"}`
+        : s.stock_transfer ? `Transfer ${s.stock_transfer.document_number ?? "—"} · ${s.description ?? "charge"}`
+        : `Purchase ${s.purchase?.document_number ?? "—"} · ${s.description ?? "cost"}`,
       estimate: Number(s.estimated_amount), accrued: Number(s.accrued_amount), actual: Number(s.actual_amount),
     }));
   return (

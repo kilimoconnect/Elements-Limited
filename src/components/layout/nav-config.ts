@@ -71,6 +71,7 @@ export const NAV: NavEntry[] = [
     items: [
       { label: "Create Purchase", href: "/purchases/new", enabled: true, requires: "purchases.create" },
       { label: "Purchase History", href: "/purchases/history", enabled: true, requires: "purchases.view" },
+      { label: "Supplier Credits", href: "/purchases/supplier-credits", enabled: true, requires: "purchases.view" },
       { label: "Supplier Payments", href: "/purchases/supplier-payments", enabled: true, requires: "purchases.record_payment" },
     ],
   },
@@ -151,6 +152,8 @@ export const NAV: NavEntry[] = [
       { label: "Customer Statements", href: "/reports/customer-statements", enabled: true, requires: "reports.view_receivables" },
       { label: "Supplier Statements", href: "/reports/supplier-statements", enabled: true, requires: "reports.view_payables" },
       { label: "Inventory Valuation", href: "/reports/inventory-valuation", enabled: true, requires: "reports.view_inventory_valuation" },
+      { label: "Late Cost Adjustments", href: "/reports/late-costs", enabled: true, requires: "reports.view_inventory_valuation" },
+      { label: "Cost Reconciliation", href: "/reports/cost-reconciliation", enabled: true, requires: "reports.view_inventory_valuation" },
     ],
   },
   { label: "Admin", icon: Settings, href: "/admin", enabled: true, ownerOnly: true },
