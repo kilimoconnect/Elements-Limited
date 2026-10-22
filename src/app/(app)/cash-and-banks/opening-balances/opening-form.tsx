@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { todayISO } from "@/lib/format";
 
 export interface AccountOpt { id: string; name: string }
 interface Line { key: string; payment_account_id: string; side: "debit" | "credit"; amount: string }
@@ -18,7 +19,7 @@ const nl = (): Line => ({ key: Math.random().toString(36).slice(2), payment_acco
 export function NewOpeningButton({ accounts }: { accounts: AccountOpt[] }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
-  const [date, setDate] = React.useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = React.useState(todayISO());
   const [reference, setReference] = React.useState("");
   const [lines, setLines] = React.useState<Line[]>([nl()]);
   const [pending, setPending] = React.useState(false);

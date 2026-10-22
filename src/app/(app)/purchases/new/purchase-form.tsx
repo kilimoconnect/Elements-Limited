@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import { savePurchaseDraft, postPurchase, type PurchaseDraftInput } from "@/lib/purchases/actions";
 import { calcLine, calcTotals, round2 } from "@/lib/sales/calc";
-import { formatMoney, formatDate } from "@/lib/format";
+import { formatMoney, formatDate, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,7 +40,7 @@ export function PurchaseForm({
 }) {
   const router = useRouter();
   const [supplierId, setSupplierId] = React.useState("");
-  const [date, setDate] = React.useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = React.useState(todayISO());
   const [invDate, setInvDate] = React.useState("");
   const [invNo, setInvNo] = React.useState("");
   const [reference, setReference] = React.useState("");

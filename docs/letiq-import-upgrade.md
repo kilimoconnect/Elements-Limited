@@ -211,19 +211,42 @@ covered by the Phase 2–4 suites, all rerun here.
    during setup and must be rotated before release. Variable names are in the
    runbook; no values are recorded anywhere in the repository.
 
-5. **Open stock-value defects from Stage 1** (still present in pre-upgrade
-   paths; the upgrade's own paths are fixed):
-   - **D1**: voiding an inventory opening or a stock-increase adjustment
-     removes the stock at the *current* average but credits 1150 at the
-     *original* value. This leaves a permanent stock-vs-GL difference.
-     Purchases were fixed in Stage 3. Until this is fixed, do not void those
-     two document types when the average has moved since they were posted;
-     correct them with an opposite adjustment instead. The Cost
-     Reconciliation `inventory_gl` check reports any difference.
-   - **D8**: historical Inventory Valuation and Kardex cut-offs use UTC day
-     ends, not Africa/Dar_es_Salaam. A movement between 21:00 and 24:00 local
-     time can fall into the next day on an "as of" report. Current balances
-     are unaffected.
+5. ~~Open stock-value defects D1 / D8~~: **fixed** by migration
+   `0034_valuation_fixes.sql` (see "D1 and D8 fixes" below).
+
+### D1 and D8 fixes (migration 0034, added after review)
+
+- **D1:**
+  - `void_inventory_opening` and `void_stock_adjustment` (increase) credit
+    1150 with exactly the value the stock movements removed at the current
+    average. The difference from the originally posted value goes to the
+    `inventory.price_variance` mapping, as in `void_purchase` (0026).
+  - A decrease void puts back exactly the value removed
+    (`record_stock_movement_value`), not the line's unit cost (often 0).
+  - Both voids also check that the void date's period is open, and lock
+    products in id order.
+- **D8:**
+  - The database default time zone is Africa/Dar_es_Salaam (UTC+03:00, no
+    daylight saving). `current_date`, column defaults and timestamp-to-date
+    casts now follow the Tanzanian day.
+  - App side: `todayISO`, `localDayStart` and `localDayEnd` in
+    `src/lib/format.ts`. They are used for the "as of" inventory valuation
+    cut-off, the shipment costing date range, the report period defaults and
+    the default date on every form (29 files that used the UTC date).
+- **Tests:**
+  - `scripts/itest-valuation.ts` (18 checks): each void after the average
+    moved keeps GL 1150 equal to the stock subledger, with variance and
+    equity / gain amounts exact; the decrease void restores 400, not 0; the
+    void journal is dated on the local day; a second void is refused; Cost
+    Reconciliation `inventory_gl` is OK; the trial balance balances; the
+    helpers are not app-callable; and the D8 time zone, date-cast and
+    `current_date` checks pass.
+  - The upgrade-path check now follows the runbook: dry run (nothing kept),
+    migrate, `db:seed:upgrade` twice (names edited in Admin kept, new
+    permissions granted), with all balances unchanged (25 checks).
+- **Not rewritten:** drift already posted by old voids. The `inventory_gl`
+  check shows any residual difference, which is corrected with a dated
+  journal.
 
 ### Assumptions needing business review
 
@@ -252,12 +275,12 @@ covered by the Phase 2–4 suites, all rerun here.
 
 ### Remaining open items carried from earlier stages
 
-- Stage 1 D1 for openings and adjustments, D5, and caller-supplied
+- Stage 1 D5, and caller-supplied
   idempotency keys outside transfers (2b).
 
 ### Production-readiness assessment
 
-**Not ready for production** until blockers 1–4 are cleared and D1 / D8 (blocker 5) are fixed or accepted in writing:
+**Not ready for production** until blockers 1–4 are cleared:
 - credentials rotated;
 - staging project migrated, seeded and walked through signed in, with the
   scenario reproduced on screen;

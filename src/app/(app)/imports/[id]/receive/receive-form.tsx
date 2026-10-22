@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createAndPostImportReceipt } from "@/lib/imports/actions";
-import { formatQuantity } from "@/lib/format";
+import { formatQuantity, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,7 +19,7 @@ export function ReceiveForm({ shipmentId, lines, branches, defaultBranchId, need
   shipmentId: string; lines: RecvLine[]; branches: { id: string; label: string }[]; defaultBranchId: string; needsRate: boolean; currency: string;
 }) {
   const router = useRouter();
-  const [date, setDate] = React.useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = React.useState(todayISO());
   const [branchId, setBranchId] = React.useState(defaultBranchId);
   const [notes, setNotes] = React.useState("");
   const [rate, setRate] = React.useState("");

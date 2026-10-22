@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { applySupplierCredit } from "@/lib/purchases/actions";
-import { formatMoney, formatDate } from "@/lib/format";
+import { formatMoney, formatDate, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -18,7 +18,7 @@ export function ApplyCreditPanel({ payableId, currency, credits, maxOpen }: {
 }) {
   const router = useRouter();
   const [amounts, setAmounts] = React.useState<Record<string, string>>({});
-  const [date, setDate] = React.useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = React.useState(todayISO());
   const [requestIds, setRequestIds] = React.useState<Record<string, string>>({});
   const [pending, setPending] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);

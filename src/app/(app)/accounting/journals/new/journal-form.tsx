@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Plus, Trash2, AlertTriangle } from "lucide-react";
 import { saveManualJournalDraft, postManualJournal, type ManualJournalInput } from "@/lib/accounting/actions";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,7 +20,7 @@ const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 export function ManualJournalForm({ accounts, canPost, canControl }: { accounts: AccountOpt[]; canPost: boolean; canControl: boolean }) {
   const router = useRouter();
-  const [date, setDate] = React.useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = React.useState(todayISO());
   const [reference, setReference] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [lines, setLines] = React.useState<Line[]>([nl(), nl()]);

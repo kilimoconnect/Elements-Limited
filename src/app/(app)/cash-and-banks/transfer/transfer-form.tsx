@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { saveTransferDraft, postTransfer } from "@/lib/cash/actions";
 import { round2 } from "@/lib/sales/calc";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,7 +19,7 @@ export function TransferForm({ accounts, branchId }: { accounts: AccountOpt[]; b
   const router = useRouter();
   const [source, setSource] = React.useState("");
   const [dest, setDest] = React.useState("");
-  const [date, setDate] = React.useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = React.useState(todayISO());
   const [amount, setAmount] = React.useState("");
   const [fee, setFee] = React.useState("0");
   const [reference, setReference] = React.useState("");

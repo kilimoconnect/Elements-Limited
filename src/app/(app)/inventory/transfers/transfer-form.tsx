@@ -15,6 +15,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
 import { StockLineEditor, newLine, type ProductOption, type StockLine } from "@/components/inventory/stock-line-editor";
+import { todayISO } from "@/lib/format";
 
 export function NewTransferButton({
   products, branches, sourceBranchId, canDispatch,
@@ -26,14 +27,14 @@ export function NewTransferButton({
   const [open, setOpen] = React.useState(false);
   const [source, setSource] = React.useState(sourceBranchId);
   const [dest, setDest] = React.useState("");
-  const [date, setDate] = React.useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = React.useState(todayISO());
   const [reference, setReference] = React.useState("");
   const [lines, setLines] = React.useState<StockLine[]>([newLine()]);
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   function reset() {
-    setSource(sourceBranchId); setDest(""); setDate(new Date().toISOString().slice(0, 10));
+    setSource(sourceBranchId); setDest(""); setDate(todayISO());
     setReference(""); setLines([newLine()]); setError(null); setPending(false);
   }
 

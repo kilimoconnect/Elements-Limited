@@ -10,7 +10,7 @@ This repository implements:
   Transfers and Payment-Account Ledgers**;
 - **Phase 4 — Core Accounting, Financial Reports & Controls** (manual journals, trial balance,
   general ledger, P&L, balance sheet, cash flow, VAT, bank reconciliation, period close);
-- **Import, rebagging & transfer upgrade** (migrations `0024`–`0033`): foreign-currency
+- **Import, rebagging & transfer upgrade** (migrations `0024`–`0034`): foreign-currency
   purchases with TZS books and FX, import shipments with landed cost, bulk-to-bag rebagging,
   branch transfers with trips, charges, documents and delivery notes, late-cost adjustments
   across all of these, pricing, and costing / operations reports. Full record:
@@ -498,7 +498,7 @@ supabase/migrations/          # SQL migrations
 
 ---
 
-# Import, rebagging & transfer upgrade (migrations 0024–0033)
+# Import, rebagging & transfer upgrade (migrations 0024–0034)
 
 Feature flags (Admin → Feature Flags) switch each workflow on: `imports`, `rebagging`,
 `transfer_logistics`, `attachments`, `fx_settlement`. All are off after migration. Account
@@ -508,6 +508,12 @@ Configuration uses the existing variables only — `NEXT_PUBLIC_SUPABASE_URL`,
 `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, `OWNER_EMAIL`,
 `OWNER_INITIAL_PASSWORD`, `NEXT_PUBLIC_APP_NAME`, `NEXT_PUBLIC_COMPANY_NAME` — plus a private
 Supabase Storage bucket `documents` created by migration `0025`. No new secrets.
+
+On an existing (live) database use `npm run db:seed:upgrade`, not `npm run db:seed`: it only
+adds permissions, role grants and company defaults and never renames the company, branches or
+accounts. `LETIQ_MIGRATE_DRY_RUN=1 npm run db:migrate` tries every pending migration in one
+transaction and rolls back; `npm run db:snapshot -- before|after` records a read-only baseline
+(and, with `before`, a JSON export of every table) outside the repo.
 
 Deployment order, backups, staging validation, activation and recovery:
 [`docs/deployment-runbook-import-upgrade.md`](docs/deployment-runbook-import-upgrade.md).

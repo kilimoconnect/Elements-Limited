@@ -9,10 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { todayISO } from "@/lib/format";
 
 export function NewRecForm({ accounts }: { accounts: { id: string; name: string }[] }) {
   const router = useRouter();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const [acc, setAcc] = React.useState("");
   const [start, setStart] = React.useState(today);
   const [end, setEnd] = React.useState(today);

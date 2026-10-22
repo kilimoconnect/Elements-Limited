@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createAndPostPurchaseReturn } from "@/lib/purchases/actions";
 import { round2 } from "@/lib/sales/calc";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,7 +20,7 @@ type Method = "reduce_payable" | "supplier_credit" | "refund" | "mixed";
 export function PurchaseReturnForm({ purchaseId, lines, accounts, currency = "TZS" }: { purchaseId: string; lines: RLine[]; accounts: AccountOpt[]; currency?: string }) {
   const isFc = currency !== "TZS";
   const router = useRouter();
-  const [date, setDate] = React.useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = React.useState(todayISO());
   const [reason, setReason] = React.useState("");
   const [notes, setNotes] = React.useState("");
   const [method, setMethod] = React.useState<Method>("reduce_payable");

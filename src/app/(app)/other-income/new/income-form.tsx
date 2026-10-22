@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import { saveOtherIncomeDraft, postOtherIncome, type OtherIncomeDraftInput } from "@/lib/other-income/actions";
 import { round2 } from "@/lib/sales/calc";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,7 +24,7 @@ export function IncomeForm({ branchId, types, taxCodes, accounts }: { branchId: 
   const router = useRouter();
   const [typeId, setTypeId] = React.useState("");
   const [receivedFrom, setReceivedFrom] = React.useState("");
-  const [date, setDate] = React.useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = React.useState(todayISO());
   const [taxCodeId, setTaxCodeId] = React.useState(NONE);
   const [amount, setAmount] = React.useState("");
   const [reference, setReference] = React.useState("");

@@ -16,13 +16,14 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
 import { StockLineEditor, newLine, type ProductOption, type StockLine } from "@/components/inventory/stock-line-editor";
+import { todayISO } from "@/lib/format";
 
 const REASONS = ["Damaged goods", "Expired goods", "Theft or loss", "Physical-count difference", "Data correction", "Other"];
 
 export function NewAdjustmentButton({ products, branchId, canPost }: { products: ProductOption[]; branchId: string; canPost: boolean }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
-  const [date, setDate] = React.useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = React.useState(todayISO());
   const [direction, setDirection] = React.useState<"increase" | "decrease">("decrease");
   const [reason, setReason] = React.useState(REASONS[0]);
   const [description, setDescription] = React.useState("");
@@ -32,7 +33,7 @@ export function NewAdjustmentButton({ products, branchId, canPost }: { products:
   const [error, setError] = React.useState<string | null>(null);
 
   function reset() {
-    setDate(new Date().toISOString().slice(0, 10)); setDirection("decrease"); setReason(REASONS[0]);
+    setDate(todayISO()); setDirection("decrease"); setReason(REASONS[0]);
     setDescription(""); setReference(""); setLines([newLine()]); setError(null); setPending(false);
   }
 

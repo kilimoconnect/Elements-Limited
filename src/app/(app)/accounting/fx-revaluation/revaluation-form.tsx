@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { postFxRevaluation, voidFxRevaluation } from "@/lib/fx/actions";
 import { round2 } from "@/lib/sales/calc";
-import { formatMoney, formatDate } from "@/lib/format";
+import { formatMoney, formatDate, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,7 +22,7 @@ const newRequestId = () => (typeof crypto !== "undefined" && "randomUUID" in cry
 export function RevaluationForm({ balances, tableRates, history }: { balances: OpenBalance[]; tableRates: TableRate[]; history: RevaluationRow[] }) {
   const router = useRouter();
   const currencies = Array.from(new Set(balances.map((b) => b.currency))).sort();
-  const [date, setDate] = React.useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = React.useState(todayISO());
   const [rates, setRates] = React.useState<Record<string, { rate: string; source: "manual" | "rate_table"; reference: string }>>({});
   const [requestId, setRequestId] = React.useState(newRequestId);
   const [pending, setPending] = React.useState(false);

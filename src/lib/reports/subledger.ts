@@ -2,6 +2,7 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { accountBalanceByCode, round2 } from "@/lib/reports/queries";
+import { localDayEnd } from "@/lib/format";
 
 const N = (v: unknown) => Number(v ?? 0);
 function addDays(d: string, n: number) { const x = new Date(d + "T00:00:00Z"); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); }
@@ -216,7 +217,7 @@ export async function inventoryValuation(companyId: string, branchId: string | n
     // Reconstruct from immutable movements: last movement per (branch, product) on/before asOf.
     let q = admin.from("stock_movements")
       .select("branch_id, product_id, balance_qty, avg_cost_after, balance_value, created_at, product:products(sku, name), branch:branches(code)")
-      .eq("company_id", companyId).lte("created_at", asOf + "T23:59:59Z").order("created_at", { ascending: false });
+      .eq("company_id", companyId).lte("created_at", localDayEnd(asOf)).order("created_at", { ascending: false });
     if (branchId) q = q.eq("branch_id", branchId);
     const seen = new Set<string>();
     for (const r of ((await q).data ?? []) as Record<string, unknown>[]) {

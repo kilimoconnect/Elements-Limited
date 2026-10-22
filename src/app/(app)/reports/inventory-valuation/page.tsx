@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AsOfFilter, PrintButton, ExportCsvButton } from "@/components/reports/report-tools";
-import { formatMoney, formatQuantity, formatDate } from "@/lib/format";
+import { formatMoney, formatQuantity, formatDate, todayISO } from "@/lib/format";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export const metadata: Metadata = { title: "Inventory Valuation" };
@@ -17,7 +17,7 @@ export default async function InventoryValuationPage(props: { searchParams: Prom
   await requirePermissionPage("reports.view_inventory_valuation");
   const ctx = await getActiveContext();
   const asOf = resolveAsOf(await props.searchParams);
-  const isToday = asOf >= new Date().toISOString().slice(0, 10);
+  const isToday = asOf >= todayISO();
   const data = await inventoryValuation(ctx.companyId, null, asOf, isToday);
 
   return (

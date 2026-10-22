@@ -7,7 +7,7 @@ import { reconciliationControls } from "@/lib/reports/subledger";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { formatMoney, formatDate } from "@/lib/format";
+import { formatMoney, formatDate, todayISO } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Accounting Overview" };
 
@@ -15,7 +15,7 @@ export default async function AccountingOverview() {
   await requirePermissionPage("accounting.view");
   const ctx = await getActiveContext();
   const admin = createAdminClient();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
 
   const { data: period } = await admin.from("accounting_periods").select("name, status, start_date, end_date")
     .eq("company_id", ctx.companyId).lte("start_date", today).gte("end_date", today).maybeSingle();

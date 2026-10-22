@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createAndPostReturn } from "@/lib/sales/actions";
 import { round2 } from "@/lib/sales/calc";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,7 +23,7 @@ export interface AccountOpt { id: string; name: string }
 
 export function ReturnForm({ saleId, lines, accounts }: { saleId: string; lines: RLine[]; accounts: AccountOpt[] }) {
   const router = useRouter();
-  const [date, setDate] = React.useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = React.useState(todayISO());
   const [reason, setReason] = React.useState("");
   const [notes, setNotes] = React.useState("");
   const [qty, setQty] = React.useState<Record<string, string>>({});

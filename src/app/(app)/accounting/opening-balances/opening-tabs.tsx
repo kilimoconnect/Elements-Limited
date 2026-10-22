@@ -11,13 +11,14 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { todayISO } from "@/lib/format";
 
 export interface Opt { id: string; code?: string; name: string }
 interface GLine { key: string; account_id: string; debit: string; credit: string }
 
 export function OpeningTabs({ accounts, customers, suppliers, branchId }: { accounts: Opt[]; customers: Opt[]; suppliers: Opt[]; branchId: string }) {
   const router = useRouter();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const [busy, setBusy] = React.useState(false);
 
   // general

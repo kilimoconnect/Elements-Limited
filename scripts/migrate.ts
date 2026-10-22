@@ -28,6 +28,26 @@ async function main() {
       .filter((f) => !until || f.slice(0, until.length) <= until)
       .sort();
 
+    // LETIQ_MIGRATE_DRY_RUN=1: apply every pending migration inside ONE
+    // transaction against the real data, report, then roll everything back.
+    const dryRun = process.env.LETIQ_MIGRATE_DRY_RUN === "1";
+    if (dryRun) {
+      const pending = files.filter((f) => !applied.has(f));
+      console.log(`DRY RUN: ${pending.length} pending migration(s); nothing will be kept.`);
+      await client.query("begin");
+      try {
+        for (const file of pending) {
+          process.stdout.write(`  ~ try    ${file} ... `);
+          await client.query(readFileSync(join(MIGRATIONS_DIR, file), "utf8"));
+          console.log("ok");
+        }
+        console.log("\nDry run succeeded. Rolling back.");
+      } finally {
+        await client.query("rollback");
+      }
+      return;
+    }
+
     let ran = 0;
     for (const file of files) {
       if (applied.has(file)) {

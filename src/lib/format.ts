@@ -67,3 +67,28 @@ export function formatDateTime(
   const d = toDate(value);
   return d ? dateTimeFormatter.format(d) : "-";
 }
+
+const isoDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: COMPANY_TIMEZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/** Today's date (YYYY-MM-DD) in the company timezone, not UTC. */
+export function todayISO(): string {
+  return isoDateFormatter.format(new Date());
+}
+
+// Africa/Dar_es_Salaam is UTC+03:00 all year (no daylight saving).
+const COMPANY_UTC_OFFSET = "+03:00";
+
+/** First instant of a company-local day, for timestamp filters. */
+export function localDayStart(isoDate: string): string {
+  return `${isoDate}T00:00:00${COMPANY_UTC_OFFSET}`;
+}
+
+/** Last instant of a company-local day, for timestamp filters. */
+export function localDayEnd(isoDate: string): string {
+  return `${isoDate}T23:59:59.999${COMPANY_UTC_OFFSET}`;
+}

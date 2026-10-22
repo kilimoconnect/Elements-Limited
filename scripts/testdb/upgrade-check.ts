@@ -104,16 +104,35 @@ async function main() {
   await db.query(`insert into stock_transfer_lines(transfer_id, product_id, qty_requested) values ($1,$2,3)`, [tr, prod]);
   await db.query(`select dispatch_stock_transfer($1,$2,'upgrade-transfer-key-1')`, [tr, owner]);
 
+  // Names edited in Admin must survive the production upgrade seed.
+  await db.query(`update companies set name = 'Letiq (renamed in Admin)' where id = $1`, [co]);
+  await db.query(`update branches set name = 'HQ (renamed in Admin)' where company_id = $1 and code = 'HQ'`, [co]);
+  const migratedBefore = (await db.query<{ n: string }>(`select count(*) n from schema_migrations`)).rows[0].n;
   const before = await snapshot(db);
   const coaCountBefore = (await db.query<{ n: string }>(`select count(*) n from chart_of_accounts`)).rows[0].n;
   await db.end();
 
-  // 3) Apply the remaining migrations (0024+).
+  // 3) Runbook order: dry run, then apply the remaining migrations (0024+),
+  //    then the production-safe upgrade seed.
+  child("scripts/migrate.ts", { LETIQ_MIGRATE_DRY_RUN: "1" });
+  db = createDbClient();
+  await db.connect();
+  check("dry run applies nothing", (await db.query<{ n: string }>(`select count(*) n from schema_migrations`)).rows[0].n === migratedBefore
+    && JSON.stringify(await snapshot(db)) === JSON.stringify(before));
+  await db.end();
   child("scripts/migrate.ts", {});
+  child("scripts/seed-upgrade.ts", {});
+  child("scripts/seed-upgrade.ts", {}); // idempotent
 
   db = createDbClient();
   await db.connect();
   const after = await snapshot(db);
+  check("upgrade seed keeps names edited in Admin",
+    (await db.query<{ name: string }>(`select name from companies where id = $1`, [co])).rows[0].name === "Letiq (renamed in Admin)"
+    && (await db.query<{ name: string }>(`select name from branches where company_id = $1 and code = 'HQ'`, [co])).rows[0].name === "HQ (renamed in Admin)");
+  check("upgrade seed grants the new permissions to the Director role", Number((await db.query<{ n: string }>(`select count(*) n from role_permissions rp
+    join roles r on r.id = rp.role_id join permissions pm on pm.id = rp.permission_id
+    where r.code = 'DIRECTOR' and pm.code in ('imports.view', 'rebagging.approve', 'documents.view_licence')`)).rows[0].n) === 3);
 
   check("trial balance unchanged", before.tb === after.tb);
   check("stock balances unchanged", before.stock === after.stock);

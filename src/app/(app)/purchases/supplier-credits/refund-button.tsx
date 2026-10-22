@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { refundSupplierCredit } from "@/lib/costs/actions";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,7 +18,7 @@ export function RefundButton({ creditId, open, accounts }: { creditId: string; o
   const [show, setShow] = React.useState(false);
   const [account, setAccount] = React.useState(accounts[0]?.id ?? "");
   const [amount, setAmount] = React.useState(String(open));
-  const [date, setDate] = React.useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = React.useState(todayISO());
   const [reference, setReference] = React.useState("");
   const [requestId, setRequestId] = React.useState(rid);
   const [pending, setPending] = React.useState(false);

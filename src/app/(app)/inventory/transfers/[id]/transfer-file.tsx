@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { todayISO } from "@/lib/format";
 
 const rid = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}-req`);
 function useRun() {
@@ -185,7 +186,7 @@ export function ChargeForm({ transferId, trips, categories }: {
 export function ChargeRowActions({ sourceId, status, estimate, canAccrue }: { sourceId: string; status: string; estimate: number; canAccrue: boolean }) {
   const { pending, run } = useRun();
   const [amount, setAmount] = React.useState(String(estimate || ""));
-  const [date, setDate] = React.useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = React.useState(todayISO());
   if (status !== "estimated") return null;
   return (
     <div className="flex flex-wrap items-center gap-1">

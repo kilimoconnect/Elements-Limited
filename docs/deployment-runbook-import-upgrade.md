@@ -1,6 +1,6 @@
 # Deployment runbook — import, rebagging & transfer upgrade
 
-Release branch: `release/import-upgrade` (migrations `0024`–`0033`, Stages 0–9).
+Release branch: `release/import-upgrade` (migrations `0024`–`0034`, Stages 0–9).
 This runbook is for the person deploying; it contains **no credentials** and none
 should be added to it. Do not run any step against production until the
 prerequisites are complete and the release has been approved.
@@ -31,10 +31,6 @@ prerequisites are complete and the release has been approved.
 4. Approval of the business decisions in
    `docs/letiq-import-upgrade.md` → Stage 9 → "Assumptions needing business
    review".
-5. A decision on the open stock-value defects D1 (voiding openings / stock-increase
-   adjustments after the average moved) and D8 (UTC cut-offs on as-of reports): fix
-   them first, or accept them in writing and follow the workaround in
-   `docs/letiq-import-upgrade.md` → Stage 9 → Blockers.
 
 ### Configuration variable names (values are set in Vercel / `.env.local`, never here)
 
@@ -43,7 +39,7 @@ prerequisites are complete and the release has been approved.
 | `NEXT_PUBLIC_SUPABASE_URL` | app (browser and server) |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | app (browser and server) |
 | `SUPABASE_SERVICE_ROLE_KEY` | server actions only — never exposed to the browser |
-| `DATABASE_URL` | `npm run db:migrate`, `npm run db:seed` only |
+| `DATABASE_URL` | `npm run db:migrate`, `db:seed:upgrade`, `db:snapshot` only |
 | `OWNER_EMAIL`, `OWNER_INITIAL_PASSWORD` | Owner bootstrap script only |
 | `NEXT_PUBLIC_APP_NAME`, `NEXT_PUBLIC_COMPANY_NAME` | display |
 
@@ -58,8 +54,17 @@ short-lived signed links after server-side checks).
 1. Announce a short posting freeze (no sales / purchases / payments while
    migrating; ~15 minutes).
 2. **Back up.** Supabase → Database → Backups: confirm a recent backup / enable
-   point-in-time recovery, and additionally take a logical dump with your own
-   tooling (schema + data). Record the time.
+   point-in-time recovery. Additionally run
+
+   ```bash
+   npm run db:snapshot -- before
+   ```
+
+   It is read-only. It exports every `public` table to JSON and writes the
+   baseline (migrations, account-code pre-check, trial balance by account, stock
+   vs 1150, transfers, document counts) to `~/letiq-backups` (or
+   `LETIQ_BACKUP_DIR`), outside the repo. That folder holds business data, so
+   keep it private. Record the time.
 3. **Record the reconciliation baseline** (keep screenshots or exports):
    - Reports → Trial Balance (as of today);
    - Reports → Inventory Valuation (total vs GL 1150);
@@ -93,21 +98,42 @@ transaction, recording them in `schema_migrations`:
 `0024_import_foundation` → `0025_import_foundations` → `0026_foreign_purchases`
 → `0027_import_shipments` → `0028_import_corrections` → `0029_rebagging` →
 `0030_transfer_logistics` → `0031_cost_adjustments` → `0032_pricing_reports` →
-`0033_release_hardening`.
+`0033_release_hardening` → `0034_valuation_fixes`.
 
-Then register the new permissions and role grants and ensure company defaults:
+Run the dry run first: every pending migration in **one** transaction against
+the real data, then rolled back. Only continue if it ends with "Dry run
+succeeded".
 
 ```bash
-npm run db:seed
+LETIQ_MIGRATE_DRY_RUN=1 npm run db:migrate
 ```
 
-(The seed is idempotent; it adds permissions such as `imports.*`,
+Then apply them for real:
+
+```bash
+npm run db:migrate
+```
+
+Then register the new permissions and role grants and ensure company defaults.
+Use the **upgrade** seed on a live database. `npm run db:seed` would reset the
+company, HQ branch and system account names to their defaults.
+
+```bash
+npm run db:seed:upgrade
+```
+
+(The upgrade seed is idempotent and only adds; it adds permissions such as `imports.*`,
 `cost_invoices.*`, `rebagging.*`, `inventory.transfer_cost`,
 `documents.view_licence` to the roles defined in `src/lib/auth/permissions.ts`,
 and calls `ensure_company_defaults` for new accounts, cost categories,
 currencies, account mappings and feature flags.)
 
-**Checkpoint A — nothing moved.** Re-run the baseline reports from §1.3. The
+**Checkpoint A — nothing moved.** Run `npm run db:snapshot -- after` and compare it
+with the `before` file: the trial balance by account, stock value and 1150 must be
+identical, and `migrations` must now end at `0034_valuation_fixes`. In the SQL
+editor, a new session's `show timezone` must return `Africa/Dar_es_Salaam`. If it
+does not, the migration printed a warning: set the database time zone in the
+Supabase dashboard. Re-run the baseline reports from §1.3. The
 trial balance, inventory value, payables and receivables must be identical. All
 feature flags are OFF. Transfers that were in transit before the migration keep
 the original behaviour and can still be received.
@@ -173,7 +199,7 @@ Valuation reconciled; Payables Ageing equals GL 2110.
 ### 6a. Application code (reversible)
 
 - Vercel → Deployments → promote the previous deployment. This changes code
-  only; the database stays on `0033`.
+  only; the database stays on `0034`.
 - The previous app versions were **not tested** against the new schema. If you
   roll back code, keep all new feature flags OFF and avoid purchases / supplier
   payments until the forward fix is deployed. Prefer a forward fix.
@@ -208,7 +234,7 @@ Valuation reconciled; Payables Ageing equals GL 2110.
 | Credentials rotated | | | |
 | Backup taken / PITR confirmed | | | |
 | Baseline reports recorded | | | |
-| Migrations 0024–0033 applied; seed run | | | |
+| Dry run OK; migrations 0024–0034 applied; upgrade seed run | | | |
 | Checkpoint A (balances unchanged) | | | |
 | Staging signed-in walkthrough | | | |
 | App deployed; smoke test | | | |

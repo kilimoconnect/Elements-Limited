@@ -1,6 +1,6 @@
 # Release notes — import, rebagging & transfer upgrade
 
-Branch `release/import-upgrade` · migrations `0024`–`0033` · prepared 22/10/2026.
+Branch `release/import-upgrade` · migrations `0024`–`0034` · prepared 22/10/2026.
 Status: **release candidate, not deployed.** See
 `docs/deployment-runbook-import-upgrade.md` for the deployment steps and what
 must happen first (credential rotation, staging walkthrough).
@@ -102,7 +102,7 @@ Africa/Dar_es_Salaam. Each new workflow sits behind a feature flag
 - Payables ageing now includes cost-invoice payables and price notes.
 - New permissions: `imports.*`, `cost_invoices.*`, `rebagging.*`,
   `inventory.transfer_cost`, `documents.view_licence`, `fx.revalue`. They are
-  granted by `npm run db:seed` according to `src/lib/auth/permissions.ts`.
+  granted by `npm run db:seed:upgrade` (production) or `npm run db:seed` (new install) according to `src/lib/auth/permissions.ts`.
 - Branch users see transfers only for their own branches; this is enforced in
   the database.
 
@@ -118,6 +118,21 @@ Africa/Dar_es_Salaam. Each new workflow sits behind a feature flag
 - Delivery notes now print the dispatch date in DD/MM/YYYY.
 - A purchase draft now rejects a supplier from another company.
 
+## Valuation fixes (migration 0034)
+
+- **D1 fixed:** voiding an inventory opening or a stock increase after the
+  average cost has moved now credits 1150 with exactly the value removed, so
+  stock and the GL stay equal. The difference goes to purchase price
+  variance, as purchase voids already did. Voiding a stock decrease now puts
+  back exactly the value it took out.
+- **D8 fixed:** the database works in Africa/Dar_es_Salaam time (UTC+03:00),
+  so dates, default document dates and void dates no longer fall on the
+  previous day between 00:00 and 03:00. "As of" inventory valuation, shipment
+  costing date ranges and every form's default date use the Tanzanian day.
+- Drift from voids posted before 0034 is not rewritten. Cost Reconciliation
+  (`inventory_gl`) shows any residual difference, which is corrected with a
+  dated journal.
+
 ## Known limitations
 
 - **No signed-in browser walkthrough yet.** The new screens were exercised
@@ -131,7 +146,7 @@ Africa/Dar_es_Salaam. Each new workflow sits behind a feature flag
   this upgrade did not change (React-compiler rules, `prefer-const`,
   `no-explicit-any`). Typecheck, the unit tests, all database suites and the
   build pass.
-- Some items found in Stage 1 are still open: D1 and D5, and caller-supplied
+- Some items found in Stage 1 are still open: D5, and caller-supplied
   idempotency keys outside transfers (see `docs/letiq-import-upgrade.md`).
 - Out of scope: payroll, budgets, purchase orders, live bank feeds, TRA/EFD
   filing, consolidation.

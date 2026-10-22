@@ -13,11 +13,12 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
 import { StockLineEditor, newLine, type ProductOption, type StockLine } from "@/components/inventory/stock-line-editor";
+import { todayISO } from "@/lib/format";
 
 export function NewOpeningButton({ products, branchId }: { products: ProductOption[]; branchId: string }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
-  const [date, setDate] = React.useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = React.useState(todayISO());
   const [reference, setReference] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [lines, setLines] = React.useState<StockLine[]>([newLine()]);
@@ -25,7 +26,7 @@ export function NewOpeningButton({ products, branchId }: { products: ProductOpti
   const [error, setError] = React.useState<string | null>(null);
 
   function reset() {
-    setDate(new Date().toISOString().slice(0, 10)); setReference(""); setDescription("");
+    setDate(todayISO()); setReference(""); setDescription("");
     setLines([newLine()]); setError(null); setPending(false);
   }
 

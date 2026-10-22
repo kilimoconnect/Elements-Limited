@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createAndPostCostInvoice } from "@/lib/imports/actions";
 import { round2 } from "@/lib/sales/calc";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,7 +30,7 @@ export function CostInvoiceForm({ suppliers, branches, defaultBranchId, categori
   const [branchId, setBranchId] = React.useState(defaultBranchId);
   const [kind, setKind] = React.useState<"invoice" | "credit_note">("invoice");
   const [credited, setCredited] = React.useState("");
-  const [date, setDate] = React.useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = React.useState(todayISO());
   const [docNo, setDocNo] = React.useState("");
   const [due, setDue] = React.useState("");
   const [notes, setNotes] = React.useState("");

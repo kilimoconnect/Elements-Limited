@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import { createAndPostSupplierPayment } from "@/lib/purchases/actions";
 import { round2 } from "@/lib/sales/calc";
-import { formatMoney, formatDate } from "@/lib/format";
+import { formatMoney, formatDate, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,7 +29,7 @@ export function SupplierPaymentForm({ branchId, suppliers, accounts, initialSupp
   const router = useRouter();
   const [supplierId, setSupplierId] = React.useState(initialSupplierId ?? "");
   const [currency, setCurrency] = React.useState("TZS");
-  const [date, setDate] = React.useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = React.useState(todayISO());
   const [reference, setReference] = React.useState("");
   const [alloc, setAlloc] = React.useState<Record<string, string>>({});
   const [advance, setAdvance] = React.useState("");

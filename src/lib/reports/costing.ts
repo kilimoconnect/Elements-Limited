@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { localDayEnd, localDayStart } from "@/lib/format";
 
 /*
  * Read-only queries for the Stage 8 costing and operations reports. Every
@@ -23,7 +24,7 @@ export interface ShipmentCostRow {
 export async function shipmentCosting(companyId: string, from: string, to: string, status: string): Promise<ShipmentCostRow[]> {
   const admin = createAdminClient();
   let q = admin.from("import_shipments").select("id, document_number, incoterm, goods_includes_freight, goods_includes_insurance, currency_code, logistics_status, cost_status, eta, created_at, supplier:suppliers(name)")
-    .eq("company_id", companyId).gte("created_at", `${from}T00:00:00`).lte("created_at", `${to}T23:59:59`).order("created_at", { ascending: false });
+    .eq("company_id", companyId).gte("created_at", localDayStart(from)).lte("created_at", localDayEnd(to)).order("created_at", { ascending: false });
   if (status) q = q.eq("cost_status", status);
   const { data: ships } = await q;
   const out: ShipmentCostRow[] = [];

@@ -1,10 +1,12 @@
+import { todayISO } from "@/lib/format";
+
 export type SP = Record<string, string | string[] | undefined>;
 
 function today(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayISO();
 }
 function yearStart(): string {
-  return `${new Date().getFullYear()}-01-01`;
+  return `${today().slice(0, 4)}-01-01`;
 }
 
 export function resolvePeriod(sp: SP): { start: string; end: string } {

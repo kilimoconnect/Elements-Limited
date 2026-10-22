@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { saveRebagOrder, type RebagOrderInput } from "@/lib/rebagging/actions";
-import { formatMoney, formatQuantity } from "@/lib/format";
+import { formatMoney, formatQuantity, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,7 +43,7 @@ export function RebagForm({ options, initial, defaultBranchId }: { options: Reba
   const [branchId, setBranchId] = React.useState(initial?.branchId ?? defaultBranchId);
   const [bulkId, setBulkId] = React.useState(initial?.bulkProductId ?? "");
   const [shipmentId, setShipmentId] = React.useState(initial?.shipmentId ?? NONE);
-  const [date, setDate] = React.useState(initial?.orderDate ?? new Date().toISOString().slice(0, 10));
+  const [date, setDate] = React.useState(initial?.orderDate ?? todayISO());
   const [location, setLocation] = React.useState(initial?.location ?? "");
   const [operator, setOperator] = React.useState(initial?.operatorName ?? "");
   const [notes, setNotes] = React.useState(initial?.notes ?? "");

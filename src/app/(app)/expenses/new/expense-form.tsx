@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import { saveExpenseDraft, postExpense, type ExpenseDraftInput } from "@/lib/expenses/actions";
 import { round2 } from "@/lib/sales/calc";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,7 +26,7 @@ export function ExpenseForm({ branchId, categories, suppliers, taxCodes, account
   const router = useRouter();
   const [categoryId, setCategoryId] = React.useState("");
   const [supplierId, setSupplierId] = React.useState(NONE);
-  const [date, setDate] = React.useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = React.useState(todayISO());
   const [reference, setReference] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [taxCodeId, setTaxCodeId] = React.useState(NONE);

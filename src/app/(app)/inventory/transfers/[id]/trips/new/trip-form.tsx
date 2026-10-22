@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createTrip } from "@/lib/transfers/actions";
-import { formatQuantity } from "@/lib/format";
+import { formatQuantity, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,7 +20,7 @@ export function TripForm({ transferId, lines, canLicence, defaults }: {
   const router = useRouter();
   const [qty, setQty] = React.useState<Record<string, string>>(Object.fromEntries(lines.map((l) => [l.id, String(l.remaining)])));
   const [f, setF] = React.useState({
-    dispatchDate: new Date().toISOString().slice(0, 10), expected: defaults.expected ? `${defaults.expected}T12:00` : "",
+    dispatchDate: todayISO(), expected: defaults.expected ? `${defaults.expected}T12:00` : "",
     driverName: defaults.driverName, driverPhone: defaults.driverPhone, driverLicence: "", vehicle: defaults.vehicle, trailer: defaults.trailer,
     transporter: "", transporterContact: "", notes: "",
   });

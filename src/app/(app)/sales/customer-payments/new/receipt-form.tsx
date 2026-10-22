@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createAndPostReceipt } from "@/lib/sales/receipts-actions";
 import { round2 } from "@/lib/sales/calc";
-import { formatMoney, formatDate } from "@/lib/format";
+import { formatMoney, formatDate, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,7 +28,7 @@ export function ReceiptForm({
   const router = useRouter();
   const [customerId, setCustomerId] = React.useState(initialCustomerId ?? "");
   const [accountId, setAccountId] = React.useState(accounts[0]?.id ?? "");
-  const [date, setDate] = React.useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = React.useState(todayISO());
   const [reference, setReference] = React.useState("");
   const [alloc, setAlloc] = React.useState<Record<string, string>>({});
   const [pending, setPending] = React.useState(false);
