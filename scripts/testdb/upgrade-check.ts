@@ -184,7 +184,7 @@ async function main() {
   const stdRole = (await db.query<{ r: string }>(`select stock_role r from products where id=$1`, [prod])).rows[0].r;
   check("existing product defaults to stock_role 'standard'", stdRole === "standard");
   const cats = (await db.query<{ n: string }>(`select count(*) n from cost_categories where company_id=$1`, [co])).rows[0].n;
-  check("default cost categories created", Number(cats) === 15, cats);
+  check("default cost categories created (16 incl. TRF_OTHER)", Number(cats) === 16, cats);
 
   // Re-running the defaults changes nothing.
   const counts = async () => JSON.stringify((await db.query(

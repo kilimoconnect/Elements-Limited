@@ -133,12 +133,12 @@ export default async function ShipmentPage(props: { params: Params }) {
       {showCost && (
         <Card><CardContent className="p-0">
           <h3 className="px-5 pt-4 text-sm font-semibold">Landed cost sheet (TZS)</h3>
-          <p className="px-5 text-xs text-muted-foreground">Estimate = planning (never posted). Actual = accounting cost of goods plus capitalised costs. Commercial adds expensed costs flagged for pricing (e.g. storage) and does not change stock value.</p>
+          <p className="px-5 text-xs text-muted-foreground">Estimate = planning (never posted). Actual = cost of goods plus capitalised costs (the inventory cost).</p>
           <Table>
             <TableHeader><TableRow>
               <TableHead>Product</TableHead><TableHead className="text-right">Est. total</TableHead><TableHead className="text-right">Est. /kg</TableHead>
               <TableHead className="text-right">Goods</TableHead><TableHead className="text-right">Capitalised costs</TableHead><TableHead className="text-right">Actual total</TableHead>
-              <TableHead className="text-right">Actual /kg</TableHead><TableHead className="text-right">Commercial /kg</TableHead>
+              <TableHead className="text-right">Actual /kg</TableHead>
             </TableRow></TableHeader>
             <TableBody>
               {((sheet ?? []) as Record<string, unknown>[]).map((r) => (
@@ -150,7 +150,6 @@ export default async function ShipmentPage(props: { params: Params }) {
                   <TableCell className="text-right tabular-nums">{formatMoney(N(r.act_costs))}</TableCell>
                   <TableCell className="text-right tabular-nums font-medium">{formatMoney(N(r.act_total))}</TableCell>
                   <TableCell className="text-right tabular-nums font-medium">{r.act_per_kg == null ? "—" : formatMoney(N(r.act_per_kg))}</TableCell>
-                  <TableCell className="text-right tabular-nums">{r.commercial_per_kg == null ? "—" : formatMoney(N(r.commercial_per_kg))}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -178,7 +177,7 @@ export default async function ShipmentPage(props: { params: Params }) {
                   <TableRow key={c.id} className={c.status === "voided" ? "opacity-50" : ""}>
                     <TableCell>{c.category?.name}{c.description ? <span className="text-xs text-muted-foreground"> · {c.description as string}</span> : null}
                       {c.supplier && <p className="text-xs text-muted-foreground">{c.supplier.name}</p>}</TableCell>
-                    <TableCell className="text-xs">{c.inventory_treatment === "capitalize" ? "Capitalised" : `Expensed${c.include_in_commercial_cost ? " (in pricing)" : ""}`}</TableCell>
+                    <TableCell className="text-xs">{c.inventory_treatment === "capitalize" ? "Capitalised" : "Expensed"}</TableCell>
                     <TableCell className="text-xs">{c.allocation_basis}</TableCell>
                     <TableCell><Badge variant={c.status === "invoiced" ? "success" : c.status === "accrued" ? "warning" : "secondary"}>{c.status}</Badge></TableCell>
                     <TableCell className="text-right tabular-nums">{formatMoney(N(c.estimated_amount))}</TableCell>

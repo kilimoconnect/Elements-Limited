@@ -6,20 +6,21 @@ function check(name: string, cond: boolean, detail = "") {
   if (cond) { passed++; console.log(`  ok  ${name}`); }
   else { console.error(`  FAIL ${name} ${detail}`); process.exitCode = 1; }
 }
-const base = { accountingCost: 48500, commercialOverhead: 1500, taxRatePct: 0, taxInclusive: false };
+// The branch's inventory cost already includes transfer, rebagging and import costs.
+const base = { inventoryCost: 50000, taxRatePct: 0, taxInclusive: false };
 
 const m = suggestPrice({ ...base, mode: "margin", ratePct: 20 });
-check("ACCEPTANCE: pricing cost = 48,500 accounting + 1,500 commercial = 50,000", m.pricingCost === 50000);
-check("ACCEPTANCE: 20% gross margin suggests 62,500 before VAT", m.priceExVat === 62500, JSON.stringify(m));
+check("20% gross margin on an inventory cost of 50,000 suggests 62,500 before VAT", m.priceExVat === 62500, JSON.stringify(m));
 const k = suggestPrice({ ...base, mode: "markup", ratePct: 20 });
-check("ACCEPTANCE: 20% markup suggests 60,000 before VAT", k.priceExVat === 60000, JSON.stringify(k));
+check("20% markup on 50,000 suggests 60,000 before VAT", k.priceExVat === 60000, JSON.stringify(k));
 check("margin and markup modes stay distinct (implied margin of the markup price is 16.67%)", k.impliedMarginPct === 16.67 && m.impliedMarkupPct === 25);
-check("accounting cost is an input only (never changed by the suggestion)", base.accountingCost === 48500);
-const a = actualMargins(62500, 48500, 1500);
-check("actual gross margin uses accounting cost (14,000 = 22.4%); commercial contribution shown separately (12,500 = 20%)",
-  a.grossProfit === 14000 && a.grossMarginPct === 22.4 && a.commercialContribution === 12500 && a.contributionPct === 20, JSON.stringify(a));
+check("the inventory cost is an input only (never changed by the suggestion)", base.inventoryCost === 50000);
+const a = actualMargins(62500, 50000);
+check("gross margin at a price uses the branch inventory cost (12,500 = 20%)", a.grossProfit === 12500 && a.grossMarginPct === 20, JSON.stringify(a));
+const other = actualMargins(62500, 48500);
+check("the same price gives each branch its own margin (48,500 cost: 14,000 = 22.4%)", other.grossProfit === 14000 && other.grossMarginPct === 22.4, JSON.stringify(other));
 check("margin of 100% or more is refused", validatePricing({ ...base, mode: "margin", ratePct: 100 }) !== null && validatePricing({ ...base, mode: "margin", ratePct: 120 }) !== null);
-check("negative markup refused; negative cost refused", validatePricing({ ...base, mode: "markup", ratePct: -5 }) !== null && validatePricing({ ...base, accountingCost: -1, mode: "markup", ratePct: 5 }) !== null);
+check("negative markup refused; negative cost refused", validatePricing({ ...base, mode: "markup", ratePct: -5 }) !== null && validatePricing({ ...base, inventoryCost: -1, mode: "markup", ratePct: 5 }) !== null);
 let threw = false; try { suggestPrice({ ...base, mode: "margin", ratePct: 100 }); } catch { threw = true; }
 check("suggestPrice throws on an invalid margin", threw);
 const ex = suggestPrice({ ...base, mode: "margin", ratePct: 20, taxRatePct: 18 });

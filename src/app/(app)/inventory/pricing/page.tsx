@@ -28,28 +28,31 @@ export default async function PricingPage(props: { searchParams: Promise<SP> }) 
     .map((s) => ({ id: s.product_id, label: `${s.product?.sku} — ${s.product?.name}` })).sort((a, b) => a.label.localeCompare(b.label));
   let body = <EmptyState title="Choose a product with stock at this branch" />;
   if (productId && branchId && branches.some((b) => b.id === branchId)) {
-    const [{ data: p }, { data: bal }, { data: co }, { data: history }] = await Promise.all([
+    const [{ data: p }, { data: bal }, { data: all }, { data: history }] = await Promise.all([
       admin.from("products").select("id, company_id, sku, name, stock_role, net_weight_kg, selling_price, tax:tax_codes(name, rate, is_inclusive)").eq("id", productId).maybeSingle(),
       admin.from("stock_balances").select("quantity, avg_unit_cost").eq("branch_id", branchId).eq("product_id", productId).maybeSingle(),
-      admin.rpc("commercial_overhead", { p_company: ctx.companyId }),
+      admin.from("stock_balances").select("branch_id, quantity, avg_unit_cost").eq("company_id", ctx.companyId).eq("product_id", productId).gt("quantity", 0),
       admin.from("product_price_changes").select("old_price, new_price, basis, reason, changed_at").eq("product_id", productId).order("changed_at", { ascending: false }).limit(10),
     ]);
     if (p && p.company_id === ctx.companyId) {
       const kgu = p.stock_role === "bulk" ? 1 : p.net_weight_kg ? N(p.net_weight_kg) : null;
-      const perKg = N(((co ?? []) as { branch_id: string; product_id: string; per_kg: number }[]).find((r) => r.branch_id === branchId && r.product_id === productId)?.per_kg);
+      const branchCosts = ((all ?? []) as { branch_id: string; quantity: number; avg_unit_cost: number }[])
+        .filter((r) => branches.some((b) => b.id === r.branch_id))
+        .map((r) => { const b = branches.find((x) => x.id === r.branch_id)!; return { branchId: r.branch_id, label: `${b.code} — ${b.name}`, qty: N(r.quantity), cost: N(r.avg_unit_cost) }; })
+        .sort((a, b) => a.label.localeCompare(b.label));
       const tax = p.tax as unknown as { name: string; rate: number; is_inclusive: boolean } | null;
       body = (
         <div className="space-y-4">
           <PricingCalculator productId={p.id} branchId={branchId} canApprove={ctx.user.isOwner}
             product={{ sku: p.sku, name: p.name, kgPerUnit: kgu, currentPrice: N(p.selling_price), qty: N(bal?.quantity) }}
-            accountingCost={N(bal?.avg_unit_cost)} suggestedOverhead={kgu ? Math.round(perKg * kgu * 100) / 100 : 0} overheadPerKg={perKg}
+            inventoryCost={N(bal?.avg_unit_cost)} branchCosts={branchCosts}
             tax={{ name: tax?.name ?? "No tax code", rate: N(tax?.rate), inclusive: !!tax?.is_inclusive }} />
           <Card><CardContent className="p-5 text-sm">
             <h3 className="mb-2 font-semibold">Approved price history</h3>
             {(history ?? []).length === 0 ? <p className="text-muted-foreground">No changes recorded through pricing yet.</p> :
               ((history ?? []) as { old_price: number; new_price: number; basis: Record<string, unknown>; reason: string | null; changed_at: string }[]).map((h, i) => (
                 <p key={i} className="border-b border-border py-1 last:border-0">{formatDateTime(h.changed_at)} · TZS {formatMoney(N(h.old_price))} → <span className="font-semibold">{formatMoney(N(h.new_price))}</span>
-                  <span className="text-xs text-muted-foreground"> · {String(h.basis.mode ?? "")} {String(h.basis.ratePct ?? "")}% on pricing cost {formatMoney(N(h.basis.pricingCost))}{h.reason && ` · ${h.reason}`}</span></p>
+                  <span className="text-xs text-muted-foreground"> · {String(h.basis.mode ?? "")} {String(h.basis.ratePct ?? "")}% on inventory cost {formatMoney(N(h.basis.inventoryCost ?? h.basis.pricingCost))}{h.reason && ` · ${h.reason}`}</span></p>
               ))}
           </CardContent></Card>
         </div>
@@ -58,7 +61,7 @@ export default async function PricingPage(props: { searchParams: Promise<SP> }) 
   }
   return (
     <div>
-      <PageHeader title="Pricing" description="Suggest a selling price from the branch's accounting cost plus a commercial overhead. The overhead is for pricing only — it is never posted to stock or expense, and expensed charges already in the overhead are not added to inventory cost." />
+      <PageHeader title="Pricing" description="Suggest a selling price from the branch's inventory cost. Each branch has its own cost: what the goods cost plus the import, rebagging and transfer costs of bringing them there." />
       <div className="mb-4 flex flex-wrap gap-2">
         <ParamSelect param="branch" value={branchId} placeholder="Branch" options={branches.map((b) => ({ id: b.id, label: `${b.code} — ${b.name}` }))} />
         <ParamSelect param="product" value={productId} placeholder="Product" options={options} />

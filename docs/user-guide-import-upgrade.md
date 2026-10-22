@@ -111,34 +111,54 @@ Bag cost = (bulk cost + materials + charges − abnormal loss), shared by net kg
 ## 5. Branch transfers (sending branch, receiving branch)
 
 **Inventory → Stock Transfers / In Transit** lists open transfers for your
-branches, overdue arrivals and document counts. **New Transfer** creates the
-request (from branch, to branch, products and quantities).
+branches, overdue arrivals and document counts.
 
-**On the transfer:**
-1. **New dispatch trip**: the quantities on this truck, transporter, driver,
-   vehicle, agents (**Add agent**) and charges (**Add charge**: loading,
-   transport, offloading, other). Use **Accrue** for a charge not yet invoiced.
-   **Save draft**, then **Dispatch trip**: the stock moves to in transit
-   (1155) at average cost plus capitalised charges.
-2. **Delivery note (PDF)** issues a numbered, versioned delivery note. If the
-   driver or vehicle changes (**Change driver / vehicle**), issue a new
-   version. Earlier versions stay on file.
-3. Add documents (signed delivery note, photos, invoices) to the trip.
-   **Post update** records progress notes that both branches see.
-4. **Record arrival / receive** (receiving branch): for each line, enter the
-   accepted, quarantined and short quantities, the receipt date and the
-   person who signed.
-5. **Resolve** each discrepancy:
-   - **Release into stock**: quarantined goods that turn out fine.
-   - **Arrived late (into stock)**: short goods that turn up later.
-   - **Normal loss (within tolerance)**: the cost is absorbed by the goods
-     received.
-   - **Write off (expense)**: posts to 6300.
-   - **Claim (carrier / insurer)**: posts to 1145 claims receivable.
-6. **Void trip** is allowed only before anything is received.
+**Sending: Inventory → Stock Transfers → New Transfer** is one page:
+- **Route:** from branch, to branch, dispatch date and expected arrival.
+- **Goods:** the products and quantities.
+- **Truck and driver:**
+  - truck and trailer registration;
+  - driver name, phone and driving licence number (the licence is visible
+    only to users with `documents.view_licence`);
+  - transporter company and contact.
+- **Transfer costs:** loading, transport and any other fees (*Other transfer
+  charges*), each with an amount in TZS. Every charge offered here goes into
+  the inventory cost of the goods at the receiving branch, shared by weight.
 
-Transfers that were open before the upgrade keep their simple
-dispatch/receive behaviour.
+Then choose:
+- **Save draft** to keep it for later.
+- **Save & Dispatch** to send it now. The stock moves to in transit (1155) at
+  the sending branch's average cost, and the costs are booked onto the goods.
+  A user without transfer-cost rights can dispatch, but the costs then wait
+  for an approver.
+
+**On the transfer page:**
+- **Delivery note (PDF)** issues the numbered, versioned delivery note. If the
+  driver or vehicle changes (**Change driver / vehicle**), issue a new version.
+- Add documents (licence photo, loading photos, weighbridge ticket, signed
+  delivery note).
+- **Post update** records progress both branches see.
+- More trucks for the same transfer: **New dispatch trip**.
+
+**Receiving: Record arrival / receive** (receiving branch):
+- Enter the accepted, damaged / quarantined and short quantities, the arrival
+  time and who signed.
+- **Offloading and other arrival charges:** enter what this branch paid on
+  arrival. Those charges are added to the cost of the goods received at this
+  branch.
+
+**Resolve** each discrepancy:
+- **Release into stock**
+- **Arrived late (into stock)**
+- **Normal loss (within tolerance)**: the cost is absorbed by the goods
+  received.
+- **Write off (expense)**: posts to 6300.
+- **Claim (carrier / insurer)**: posts to 1145.
+
+**Each branch's inventory cost** is its own weighted average: what the goods
+cost at the sending branch, plus that transfer's loading, transport,
+offloading and other charges. **Void trip** is allowed only before anything is
+received.
 
 ## 6. Costs on ordinary purchases (accountant)
 
@@ -170,13 +190,15 @@ linked, dated reversal:
 
 ## 8. Pricing (Inventory → Pricing)
 
-- Choose a product and branch. The page shows the **accounting cost** (posted
-  average) and the **commercial overhead** (expensed storage and similar, per
-  kg). Their total is the pricing cost.
-- Choose **markup** or **margin** and enter the %. The price before VAT and
+- Choose a branch and a product. The page shows that branch's **inventory
+  cost**: its weighted-average cost, which already includes the import,
+  rebagging and transfer costs of bringing the goods there. A table shows the
+  cost and margin at every branch.
+- Choose **margin** or **markup** and enter the %. The price before VAT and
   the price including VAT (from the product's tax code) are both shown.
-- Only the Owner can **Save as approved selling price**. The old and new
-  price and the reason are kept. Stock values do not change.
+- Only the Owner can **Save as approved selling price**. The old and new price
+  and the reason are kept. Stock values do not change. The approved price
+  applies to all branches; the table shows the margin it gives at each one.
 
 ## 9. Reports for control
 
@@ -187,7 +209,7 @@ linked, dated reversal:
 | Shipment Costing | Estimated vs actual cost per kg / MT per shipment |
 | Rebagging Costing | Yield, normal and abnormal loss, cost per bag |
 | Transfer Costing | Charges per trip and per unit; losses and claims |
-| Branch Landed Cost | What each branch's stock cost, layer by layer |
+| Branch Landed Cost | Each branch's inventory cost per unit, per kg and per bag size |
 | Profitability | Margin by product, branch and customer, and which shipment the sold goods came from |
 | Late Cost Adjustments | Where each late cost went (stock, transit, cost of sales; catch-ups) |
 

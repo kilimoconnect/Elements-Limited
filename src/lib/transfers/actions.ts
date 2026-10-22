@@ -8,6 +8,8 @@ import { getActiveContext } from "@/lib/context";
 import { isFeatureEnabled } from "@/lib/features";
 import { callPostingRpc, type RpcResult } from "@/lib/rpc";
 import { round2 } from "@/lib/sales/calc";
+import { todayISO } from "@/lib/format";
+import { createTransferDraft } from "@/lib/inventory/actions";
 
 /*
  * Transfer trips, receipts, discrepancies, charges and the shared dispatch file.
@@ -104,15 +106,145 @@ export async function deleteDraftTrip(tripId: string): Promise<RpcResult> {
   } catch (e) { return fail(e); }
 }
 
-export async function dispatchTrip(tripId: string): Promise<RpcResult> {
+/**
+ * Book (accrue) the charge estimates entered on a trip, so they reach the cost
+ * of the goods. Needs `inventory.transfer_cost` and the transfer_logistics
+ * flag; otherwise they stay as estimates for an approver. Returns how many
+ * were left unbooked.
+ */
+async function accrueTripEstimates(admin: Admin, user: U, companyId: string, tripId: string, date: string): Promise<number> {
+  const { data } = await admin.from("cost_sources").select("id, estimated_amount")
+    .eq("company_id", companyId).eq("transfer_dispatch_id", tripId).eq("status", "estimated").gt("estimated_amount", 0);
+  const open = data ?? [];
+  if (open.length === 0) return 0;
+  if (!(user.isOwner || user.permissions.has("inventory.transfer_cost")) || !(await isFeatureEnabled(companyId, "transfer_logistics"))) return open.length;
+  let left = 0;
+  for (const s of open) {
+    const res = await callPostingRpc("accrue_transfer_cost", {
+      p_source: s.id, p_amount: round2(Number(s.estimated_amount)), p_date: date, p_user: user.id, p_idem: `accrue_transfer_cost:${s.id}`,
+    });
+    if (res.ok) await writeAuditLog({ userId: user.id, companyId, action: "transfer.charge_accrue", resourceType: "cost_source", resourceId: s.id, newValues: { amount: s.estimated_amount, date } });
+    else left++;
+  }
+  return left;
+}
+const unbookedNote = (n: number) => n > 0 ? ` ${n} charge(s) left as estimates for an approver with transfer-cost rights.` : "";
+
+/** Dispatch a trip: stock moves to in-transit and the trip's charges are booked. */
+export async function dispatchTrip(tripId: string): Promise<RpcResult & { message?: string }> {
   try {
     const { user, ctx, admin } = await ctxFor("inventory.transfer_dispatch");
     const { t } = await loadTrip(admin, tripId, ctx.companyId, user);
     const res = await callPostingRpc("dispatch_transfer_trip", { p_dispatch: tripId, p_user: user.id, p_idem: `dispatch_transfer_trip:${tripId}` });
     if (!res.ok) return res;
     await writeAuditLog({ userId: user.id, companyId: ctx.companyId, branchId: t.source_branch_id, action: "transfer.trip_dispatch", resourceType: "stock_transfer_dispatch", resourceId: tripId });
+    const { data: trip } = await admin.from("stock_transfer_dispatches").select("dispatch_date").eq("id", tripId).single();
+    const left = await accrueTripEstimates(admin, user, ctx.companyId, tripId, trip?.dispatch_date ?? todayISO());
     refresh(t.id);
-    return { ok: true, id: tripId };
+    return { ok: true, id: tripId, message: `Trip dispatched.${unbookedNote(left)}` };
+  } catch (e) { return fail(e); }
+}
+
+export interface ChargeInput { categoryId: string; description?: string; amount: number }
+
+async function checkCharges(admin: Admin, companyId: string, charges: ChargeInput[]): Promise<string | null> {
+  if (charges.length === 0) return null;
+  if (!(await isFeatureEnabled(companyId, "transfer_logistics"))) return "Transfer costs need Transfer logistics switched on (Admin → Feature Flags).";
+  if (charges.some((c) => !c.categoryId || !(c.amount > 0))) return "Each charge needs a type and an amount above zero.";
+  const { data } = await admin.from("cost_categories").select("id").eq("company_id", companyId).eq("applies_to_transfer", true).eq("is_active", true)
+    .in("id", [...new Set(charges.map((c) => c.categoryId))]);
+  if ((data ?? []).length !== new Set(charges.map((c) => c.categoryId)).size) return "A charge type is not available for transfers.";
+  return null;
+}
+
+export interface NewTransferInput {
+  sourceBranchId: string; destinationBranchId: string; transferDate: string; expectedArrivalAt?: string | null;
+  reference?: string; notes?: string; requestId: string; dispatch: boolean;
+  lines: { product_id: string; qty: number }[];
+  transport: {
+    driverName?: string; driverPhone?: string; driverLicence?: string; vehicleRegistration?: string; trailerRegistration?: string;
+    transporterName?: string; transporterContact?: string;
+  };
+  charges: ChargeInput[];
+}
+
+/**
+ * The New Transfer screen: the transfer, its truck (driver, licence, phone,
+ * vehicle, transporter) and loading / transport / other charges in one step,
+ * optionally dispatched at once. A retried request returns the first transfer.
+ */
+export async function createTransferWithTrip(input: NewTransferInput): Promise<RpcResult & { message?: string }> {
+  try {
+    const { user, ctx, admin } = await ctxFor("inventory.transfer_create");
+    if (!reqOk(input.requestId)) return { ok: false, error: "Missing request id; reload the page." };
+    const { data: prior } = await admin.from("stock_transfer_dispatches").select("transfer_id").eq("company_id", ctx.companyId).eq("client_request_id", input.requestId).maybeSingle();
+    if (prior) return { ok: true, id: prior.transfer_id };
+    if (input.dispatch && !(user.isOwner || user.permissions.has("inventory.transfer_dispatch"))) return { ok: false, error: "You are not allowed to dispatch transfers." };
+    const lines = input.lines.filter((l) => l.product_id && l.qty > 0);
+    if (lines.length === 0) return { ok: false, error: "Add at least one product line." };
+    if (!input.transport.vehicleRegistration?.trim() || !input.transport.driverName?.trim()) return { ok: false, error: "Enter the truck registration and the driver's name." };
+    const chargeErr = await checkCharges(admin, ctx.companyId, input.charges);
+    if (chargeErr) return { ok: false, error: chargeErr };
+
+    const created = await createTransferDraft({
+      sourceBranchId: input.sourceBranchId, destinationBranchId: input.destinationBranchId, transferDate: input.transferDate,
+      expectedDate: input.expectedArrivalAt ? input.expectedArrivalAt.slice(0, 10) : undefined, reference: input.reference, notes: input.notes,
+      lines: lines.map((l) => ({ product_id: l.product_id, qty_requested: l.qty })),
+    });
+    if (!created.ok || !created.id) return created;
+    const transferId = created.id;
+    const tp = input.transport;
+    await admin.from("stock_transfers").update({
+      driver_name: tp.driverName || null, driver_phone: tp.driverPhone || null, vehicle_registration: tp.vehicleRegistration || null,
+      trailer_registration: tp.trailerRegistration || null, updated_by: user.id,
+    }).eq("id", transferId);
+
+    const { data: tl } = await admin.from("stock_transfer_lines").select("id, qty_requested").eq("transfer_id", transferId).order("line_no");
+    const trip = await createTrip({
+      transferId, dispatchDate: input.transferDate, expectedArrivalAt: input.expectedArrivalAt || null,
+      driverName: tp.driverName, driverPhone: tp.driverPhone,
+      driverLicence: user.isOwner || user.permissions.has("documents.view_licence") ? tp.driverLicence : undefined,
+      vehicleRegistration: tp.vehicleRegistration, trailerRegistration: tp.trailerRegistration,
+      transporterName: tp.transporterName, transporterContact: tp.transporterContact, notes: input.notes, requestId: input.requestId,
+      lines: (tl ?? []).map((l) => ({ transfer_line_id: l.id, qty: Number(l.qty_requested) })),
+    });
+    if (!trip.ok || !trip.id) return { ok: false, id: transferId, error: `Transfer saved as a draft, but its trip could not be prepared: ${trip.error ?? "failed"}` };
+
+    for (const c of input.charges) {
+      const r = await addTransferCharge({ transferId, tripId: trip.id, categoryId: c.categoryId, description: c.description, amount: c.amount });
+      if (!r.ok) return { ok: false, id: transferId, error: `Transfer saved as a draft, but a charge could not be added: ${r.error ?? "failed"}` };
+    }
+
+    if (!input.dispatch) { refresh(transferId); return { ok: true, id: transferId, message: "Transfer saved as a draft with its truck and charges." }; }
+    const d = await dispatchTrip(trip.id);
+    if (!d.ok) return { ok: false, id: transferId, error: `Transfer saved, but dispatch failed: ${d.error ?? "failed"}` };
+    return { ok: true, id: transferId, message: d.message };
+  } catch (e) { return fail(e); }
+}
+
+/**
+ * Offloading and other arrival charges, entered by the receiving branch on
+ * the trip and booked on the arrival date (they follow the goods received).
+ */
+export async function addArrivalCharges(input: { transferId: string; tripId: string; date: string; charges: ChargeInput[] }): Promise<RpcResult & { message?: string }> {
+  try {
+    const { user, ctx, admin } = await ctxFor("inventory.transfer_receive");
+    const { trip, t } = await loadTrip(admin, input.tripId, ctx.companyId, user);
+    if (trip.transfer_id !== input.transferId) return { ok: false, error: "Trip not found." };
+    if (!user.isOwner && !user.branchIds.includes(t.destination_branch_id)) return { ok: false, error: "Only the receiving branch records arrival charges." };
+    const charges = input.charges.filter((c) => c.amount > 0 || c.categoryId);
+    if (charges.length === 0) return { ok: true };
+    const chargeErr = await checkCharges(admin, ctx.companyId, charges);
+    if (chargeErr) return { ok: false, error: chargeErr };
+    const ids: string[] = [];
+    for (const c of charges) {
+      const r = await addTransferCharge({ transferId: t.id, tripId: trip.id, categoryId: c.categoryId, description: c.description, amount: c.amount });
+      if (!r.ok || !r.id) return { ok: false, error: r.error ?? "A charge could not be added." };
+      ids.push(r.id);
+    }
+    const left = await accrueTripEstimates(admin, user, ctx.companyId, trip.id, input.date);
+    refresh(t.id);
+    return { ok: true, message: `${ids.length} arrival charge(s) recorded.${unbookedNote(left)}` };
   } catch (e) { return fail(e); }
 }
 

@@ -83,7 +83,7 @@ async function main() {
     check("BAG has no kg_factor", (await one(db, "select kg_factor from units where company_id=$1 and code='BAG'", [co])) === null);
 
     // --- Cost categories ------------------------------------------------------
-    check("15 default cost categories", Number(await one(db, "select count(*) from cost_categories where company_id=$1", [co])) === 15);
+    check("16 default cost categories (incl. TRF_OTHER, 0035)", Number(await one(db, "select count(*) from cost_categories where company_id=$1", [co])) === 16);
     check("storage rent is expensed to 6150",
       (await one(db, `select c.code from cost_categories k join chart_of_accounts c on c.id=k.expense_account_id
                       where k.company_id=$1 and k.code='STORAGE' and k.inventory_treatment='expense'`, [co])) === "6150");
@@ -171,7 +171,7 @@ async function main() {
     };
     check("outsider sees no cost categories", (await asUser(outsider, "select id from cost_categories")).length === 0);
     check("outsider sees no exchange rates", (await asUser(outsider, "select id from exchange_rates")).length === 0);
-    check("owner sees company cost categories", (await asUser(owner, `select id from cost_categories where company_id='${co}'`)).length === 15);
+    check("owner sees company cost categories", (await asUser(owner, `select id from cost_categories where company_id='${co}'`)).length === 16);
     await db.query("savepoint w");
     await db.query(`select set_config('request.jwt.claim.sub', $1, true)`, [outsider]);
     await db.query("set local role authenticated");

@@ -30,10 +30,10 @@ export default async function BranchLandedCostPage(props: { searchParams: Promis
   const branches = ctx.branches.filter((b) => !scope || scope.includes(b.id));
   return (
     <div>
-      <PageHeader title="Branch Landed Cost" description={`Current position per branch (TZS). Accounting average cost is the posted weighted average (stock value / quantity). Commercial overhead is an allocation of expensed charges flagged for pricing (e.g. storage) — shown for pricing only, never posted. "Per ${pack} kg" converts the per-kg cost to the selected pack size.`}
+      <PageHeader title="Branch Landed Cost" description={`Current position per branch (TZS). Inventory cost is each branch's posted weighted average (stock value / quantity), including import, rebagging and transfer costs. "Per ${pack} kg" converts the per-kg cost to the selected pack size.`}
         actions={<div className="flex gap-2"><PrintButton /><ExportCsvButton filename="branch-landed-cost.csv"
-          header={["Branch", "SKU", "Product", "Qty", "Stock value", "Accounting avg per unit", "Per kg", `Per ${pack} kg`, "Last incoming transfer per unit", "Commercial per kg", "Commercial per unit", "Pricing cost per unit", "Approved selling price"]}
-          rows={all.map((r) => [r.branch, r.sku, r.name, r.qty, r.value, r.avgCost, r.perKg ?? "", r.perKg == null ? "" : r.perKg * packKg, r.lastIncomingUnit ?? "", r.commercialPerKg, r.commercialPerUnit, r.pricingCostPerUnit, r.sellingPrice])} /></div>} />
+          header={["Branch", "SKU", "Product", "Qty", "Stock value", "Inventory cost per unit", "Per kg", `Per ${pack} kg`, "Last incoming transfer per unit", "Approved selling price"]}
+          rows={all.map((r) => [r.branch, r.sku, r.name, r.qty, r.value, r.avgCost, r.perKg ?? "", r.perKg == null ? "" : r.perKg * packKg, r.lastIncomingUnit ?? "", r.sellingPrice])} /></div>} />
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <ParamSelect param="branch" value={branch} placeholder="All my branches" options={branches.map((b) => ({ id: b.id, label: `${b.code} — ${b.name}` }))} />
         <ParamSelect param="pack" value={pack} placeholder="Pack size" options={PACKS.map((p) => ({ id: p, label: `Per ${p} kg bag` }))} />
@@ -44,9 +44,9 @@ export default async function BranchLandedCostPage(props: { searchParams: Promis
         <Card className="overflow-x-auto">
           <Table>
             <TableHeader><TableRow>
-              <TableHead>Branch / product</TableHead><TableHead className="text-right">Qty</TableHead><TableHead className="text-right">Accounting avg / unit</TableHead>
+              <TableHead>Branch / product</TableHead><TableHead className="text-right">Qty</TableHead><TableHead className="text-right">Inventory cost / unit</TableHead>
               <TableHead className="text-right">Per kg</TableHead><TableHead className="text-right">Per {pack} kg</TableHead><TableHead className="text-right">Last incoming transfer / unit</TableHead>
-              <TableHead className="text-right">Commercial / unit</TableHead><TableHead className="text-right">Pricing cost / unit</TableHead><TableHead className="text-right">Approved price</TableHead><TableHead />
+              <TableHead className="text-right">Approved price</TableHead><TableHead />
             </TableRow></TableHeader>
             <TableBody>
               {rows.map((r) => (
@@ -57,8 +57,6 @@ export default async function BranchLandedCostPage(props: { searchParams: Promis
                   <TableCell className="text-right tabular-nums">{r.perKg == null ? "—" : formatMoney(r.perKg)}</TableCell>
                   <TableCell className="text-right tabular-nums">{r.perKg == null ? "—" : formatMoney(r.perKg * packKg)}</TableCell>
                   <TableCell className="text-right tabular-nums">{r.lastIncomingUnit == null ? "—" : <>{formatMoney(r.lastIncomingUnit)}<p className="text-xs text-muted-foreground">{r.lastIncomingDate && formatDate(r.lastIncomingDate)}</p></>}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatMoney(r.commercialPerUnit)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatMoney(r.pricingCostPerUnit)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatMoney(r.sellingPrice)}</TableCell>
                   <TableCell><Link className="text-xs underline print-hide" href={`/inventory/pricing?branch=${r.branchId}&product=${r.productId}`}>Price</Link></TableCell>
                 </TableRow>

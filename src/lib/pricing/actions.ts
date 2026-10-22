@@ -16,7 +16,7 @@ import { suggestPrice, type PricingMode } from "@/lib/pricing/calc";
  */
 export async function approveSellingPrice(input: {
   productId: string; price: number; reason: string; requestId: string;
-  basis: { branchId: string; accountingCost: number; commercialOverhead: number; mode: PricingMode; ratePct: number; taxRatePct: number; taxInclusive: boolean };
+  basis: { branchId: string; inventoryCost: number; mode: PricingMode; ratePct: number; taxRatePct: number; taxInclusive: boolean };
 }): Promise<RpcResult> {
   try {
     const user = await assertActiveUser();
@@ -28,7 +28,7 @@ export async function approveSellingPrice(input: {
     if (!input.requestId || input.requestId.length < 16) return { ok: false, error: "Missing request id; reload the page." };
     if (!(input.price >= 0)) return { ok: false, error: "Enter a valid price." };
     const suggestion = suggestPrice(input.basis);
-    const basis = { ...input.basis, pricingCost: suggestion.pricingCost, suggestedExVat: suggestion.priceExVat, suggestedSellingPrice: suggestion.sellingPrice };
+    const basis = { ...input.basis, suggestedExVat: suggestion.priceExVat, suggestedSellingPrice: suggestion.sellingPrice };
     const res = await callPostingRpc("set_product_selling_price", {
       p_product: p.id, p_user: user.id, p_price: Math.round(input.price * 100) / 100, p_basis: basis, p_reason: input.reason || null,
       p_idem: `set_product_selling_price:${input.requestId}`,

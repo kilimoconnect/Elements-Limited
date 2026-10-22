@@ -17,9 +17,9 @@ type Admin = ReturnType<typeof createAdminClient>;
 export interface ShipmentCostRow {
   id: string; number: string; supplier: string; incoterm: string; basis: string; currency: string; logistics: string; costing: string; eta: string | null;
   expectedKg: number; receivedKg: number;
-  goodsEst: number; goodsAct: number; capEst: number; capAct: number; expensed: number; commercialExtra: number;
+  goodsEst: number; goodsAct: number; capEst: number; capAct: number; expensed: number;
   unallocated: number; accrualVariance: number; awaitingInvoice: number;
-  estPerKg: number | null; actPerKg: number | null; commercialPerKg: number | null;
+  estPerKg: number | null; actPerKg: number | null;
 }
 export async function shipmentCosting(companyId: string, from: string, to: string, status: string): Promise<ShipmentCostRow[]> {
   const admin = createAdminClient();
@@ -39,7 +39,7 @@ export async function shipmentCosting(companyId: string, from: string, to: strin
     const sum = (k: string) => lines.reduce((a, l) => a + N(l[k]), 0);
     const expKg = sum("expected_kg"), recKg = sum("received_kg");
     const posted = (c: Record<string, unknown>) => c.status === "invoiced" ? N(c.actual_amount) : c.status === "accrued" ? N(c.accrued_amount) : 0;
-    const actTotal = sum("act_total"), estTotal = sum("est_total"), comTotal = sum("commercial_total");
+    const actTotal = sum("act_total"), estTotal = sum("est_total");
     const kgBase = recKg > 0 ? recKg : expKg;
     out.push({
       id: s.id as string, number: (s.document_number as string) ?? "—", supplier: (s.supplier as { name: string } | null)?.name ?? "—",
@@ -48,11 +48,10 @@ export async function shipmentCosting(companyId: string, from: string, to: strin
       expectedKg: expKg, receivedKg: recKg,
       goodsEst: r2(sum("est_goods")), goodsAct: r2(sum("act_goods")), capEst: r2(sum("est_costs")), capAct: r2(sum("act_costs")),
       expensed: r2(cs.filter((c) => c.inventory_treatment === "expense").reduce((a, c) => a + posted(c), 0)),
-      commercialExtra: r2(sum("commercial_extra")),
       unallocated: r2(cs.filter((c) => c.inventory_treatment === "capitalize").reduce((a, c) => a + (posted(c) - N(c.capitalised_applied)), 0)),
       accrualVariance: r2(cs.filter((c) => c.status === "invoiced" && c.accrual_date).reduce((a, c) => a + N(c.actual_amount) - N(c.accrued_amount), 0)),
       awaitingInvoice: cs.filter((c) => c.status === "accrued").length,
-      estPerKg: expKg > 0 ? r2(estTotal / expKg) : null, actPerKg: kgBase > 0 ? r2(actTotal / kgBase) : null, commercialPerKg: kgBase > 0 ? r2(comTotal / kgBase) : null,
+      estPerKg: expKg > 0 ? r2(estTotal / expKg) : null, actPerKg: kgBase > 0 ? r2(actTotal / kgBase) : null,
     });
   }
   return out;
@@ -94,19 +93,18 @@ export async function rebagCosting(companyId: string, branchIds: string[] | null
 export interface BranchCostRow {
   branchId: string; branch: string; productId: string; sku: string; name: string; role: string; kgPerUnit: number | null;
   qty: number; value: number; avgCost: number; perKg: number | null; lastIncomingUnit: number | null; lastIncomingDate: string | null;
-  commercialPerKg: number; commercialPerUnit: number; pricingCostPerUnit: number; sellingPrice: number;
+  sellingPrice: number;
 }
 export async function branchLandedCost(companyId: string, branchIds: string[] | null): Promise<BranchCostRow[]> {
   const admin = createAdminClient();
   let q = admin.from("stock_balances").select("branch_id, product_id, quantity, stock_value, avg_unit_cost, branch:branches(code), product:products(sku, name, stock_role, net_weight_kg, selling_price, base_unit_id)")
     .eq("company_id", companyId).gt("quantity", 0);
   if (branchIds) q = q.in("branch_id", branchIds.length ? branchIds : ["00000000-0000-0000-0000-000000000000"]);
-  const [{ data: bal }, { data: co }, { data: units }, { data: incoming }] = await Promise.all([
-    q, admin.rpc("commercial_overhead", { p_company: companyId }),
+  const [{ data: bal }, { data: units }, { data: incoming }] = await Promise.all([
+    q,
     admin.from("units").select("id, kg_factor").eq("company_id", companyId),
     admin.from("stock_movements").select("branch_id, product_id, unit_cost, created_at").eq("company_id", companyId).eq("movement_type", "transfer_in").order("created_at", { ascending: false }).limit(2000),
   ]);
-  const coMap = new Map(((co ?? []) as { branch_id: string; product_id: string; per_kg: number }[]).map((r) => [`${r.branch_id}:${r.product_id}`, N(r.per_kg)]));
   const kgf = new Map(((units ?? []) as { id: string; kg_factor: number | null }[]).map((u) => [u.id, u.kg_factor == null ? null : N(u.kg_factor)]));
   const lastIn = new Map<string, { unit: number; date: string }>();
   for (const m of (incoming ?? []) as { branch_id: string; product_id: string; unit_cost: number; created_at: string }[]) {
@@ -117,15 +115,13 @@ export async function branchLandedCost(companyId: string, branchIds: string[] | 
     const p = b.product as { sku: string; name: string; stock_role: string; net_weight_kg: number | null; selling_price: number; base_unit_id: string | null };
     const kgu = p.stock_role === "bulk" ? 1 : p.net_weight_kg ? N(p.net_weight_kg) : (p.base_unit_id ? kgf.get(p.base_unit_id) ?? null : null);
     const k = `${b.branch_id}:${b.product_id}`;
-    const cpk = coMap.get(k) ?? 0;
     const avg = N(b.avg_unit_cost);
-    const cpu = kgu ? r2(cpk * kgu) : 0;
     const li = lastIn.get(k);
     return {
       branchId: b.branch_id as string, branch: (b.branch as { code: string } | null)?.code ?? "—", productId: b.product_id as string, sku: p.sku, name: p.name, role: p.stock_role,
       kgPerUnit: kgu, qty: N(b.quantity), value: N(b.stock_value), avgCost: avg, perKg: kgu ? r2(avg / kgu) : null,
       lastIncomingUnit: li ? li.unit : null, lastIncomingDate: li ? li.date : null,
-      commercialPerKg: cpk, commercialPerUnit: cpu, pricingCostPerUnit: r2(avg + cpu), sellingPrice: N(p.selling_price),
+      sellingPrice: N(p.selling_price),
     };
   });
 }

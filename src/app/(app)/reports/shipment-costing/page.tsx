@@ -29,11 +29,11 @@ export default async function ShipmentCostingPage(props: { searchParams: Promise
   const money = (v: number | null) => (v == null ? "—" : formatMoney(v));
   return (
     <div>
-      <PageHeader title="Shipment Costing" description="Per shipment, in TZS: goods (purchase basis) and eligible acquisition costs, estimated vs actual; expensed linked charges (commercial view only); unallocated charges; accrual variances; received kg and cost per kg / MT."
+      <PageHeader title="Shipment Costing" description="Per shipment, in TZS: goods (purchase basis) and eligible acquisition costs, estimated vs actual; expensed linked charges; unallocated charges; accrual variances; received kg and cost per kg / MT."
         actions={<div className="flex gap-2"><PrintButton /><ExportCsvButton filename="shipment-costing.csv"
-          header={["Shipment", "Supplier", "Basis", "Logistics", "Costing", "Expected kg", "Received kg", "Goods est", "Goods actual", "Capitalised est", "Capitalised actual", "Expensed linked", "Unallocated", "Accrual variance", "Est per kg", "Actual per kg", "Actual per MT", "Commercial per kg"]}
+          header={["Shipment", "Supplier", "Basis", "Logistics", "Costing", "Expected kg", "Received kg", "Goods est", "Goods actual", "Capitalised est", "Capitalised actual", "Expensed linked", "Unallocated", "Accrual variance", "Est per kg", "Actual per kg", "Actual per MT"]}
           rows={all.map((r) => [r.number, r.supplier, r.basis, r.logistics, r.costing, r.expectedKg, r.receivedKg, r.goodsEst, r.goodsAct, r.capEst, r.capAct, r.expensed, r.unallocated, r.accrualVariance,
-            r.estPerKg ?? "", r.actPerKg ?? "", r.actPerKg == null ? "" : r.actPerKg * 1000, r.commercialPerKg ?? ""])} /></div>} />
+            r.estPerKg ?? "", r.actPerKg ?? "", r.actPerKg == null ? "" : r.actPerKg * 1000])} /></div>} />
       <div className="mb-4 flex flex-wrap items-end gap-3"><PeriodFilter start={start} end={end} />
         <ParamSelect param="costing" value={status} placeholder="All costing states" options={Object.entries(COST_LABEL).map(([id, label]) => ({ id, label }))} /></div>
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -49,7 +49,7 @@ export default async function ShipmentCostingPage(props: { searchParams: Promise
               <TableHead>Shipment</TableHead><TableHead>Basis</TableHead><TableHead className="text-right">Received / expected kg</TableHead>
               <TableHead className="text-right">Goods est / actual</TableHead><TableHead className="text-right">Capitalised est / actual</TableHead>
               <TableHead className="text-right">Expensed linked</TableHead><TableHead className="text-right">Unallocated</TableHead><TableHead className="text-right">Accrual variance</TableHead>
-              <TableHead className="text-right">Per kg est / actual</TableHead><TableHead className="text-right">Per MT actual</TableHead><TableHead className="text-right">Commercial per kg</TableHead>
+              <TableHead className="text-right">Per kg est / actual</TableHead><TableHead className="text-right">Per MT actual</TableHead>
             </TableRow></TableHeader>
             <TableBody>
               {rows.map((r) => (
@@ -65,7 +65,6 @@ export default async function ShipmentCostingPage(props: { searchParams: Promise
                   <TableCell className="text-right tabular-nums">{formatMoney(r.accrualVariance)}{r.awaitingInvoice > 0 && <p className="text-xs text-warning">{r.awaitingInvoice} awaiting invoice</p>}</TableCell>
                   <TableCell className="text-right tabular-nums">{money(r.estPerKg)}<p>{money(r.actPerKg)}</p></TableCell>
                   <TableCell className="text-right tabular-nums">{r.actPerKg == null ? "—" : formatMoney(r.actPerKg * 1000)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{money(r.commercialPerKg)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -73,7 +72,7 @@ export default async function ShipmentCostingPage(props: { searchParams: Promise
         </Card>
       )}
       <Pager basePath="/reports/shipment-costing" params={{ start, end, costing: status }} page={page} pageSize={PAGE_SIZE} total={all.length} />
-      <p className="mt-2 text-xs text-muted-foreground">Estimated figures use planning rates and estimates (never posted); actual figures are posted values. Costing &quot;Provisional&quot; means accruals still await their invoices. Commercial per kg adds expensed charges flagged for pricing (e.g. storage) and does not change stock value.</p>
+      <p className="mt-2 text-xs text-muted-foreground">Estimated figures use planning rates and estimates (never posted); actual figures are posted values. Costing &quot;Provisional&quot; means accruals still await their invoices.</p>
     </div>
   );
 }

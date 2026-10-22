@@ -21,11 +21,11 @@ const rid = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? cry
 function useRun() {
   const router = useRouter();
   const [pending, setPending] = React.useState(false);
-  const run = async (fn: () => Promise<{ ok: boolean; error?: string }>, msg: string) => {
+  const run = async (fn: () => Promise<{ ok: boolean; error?: string; message?: string }>, msg: string) => {
     setPending(true);
     const res = await fn();
     setPending(false);
-    if (res.ok) { toast.success(msg); router.refresh(); return null; }
+    if (res.ok) { toast.success(res.message ?? msg); router.refresh(); return null; }
     toast.error(res.error ?? "Failed."); return res.error ?? "Failed.";
   };
   return { pending, run };
@@ -57,7 +57,7 @@ export function TripActions({ transferId, tripId, status, isSender, isReceiver, 
       {status === "dispatched" && canVoid && <Button size="sm" variant="ghost" onClick={() => setOpen("void")}>Void trip</Button>}
 
       <ConfirmDialog open={open === "dispatch"} onOpenChange={(o) => setOpen(o ? "dispatch" : null)} title="Dispatch this trip?"
-        description="The cargo leaves the sending branch's stock at its weighted-average cost and is held in stock in transit until the receiving branch records it. Quantities are locked once dispatched."
+        description="The cargo leaves the sending branch's stock at its weighted-average cost and is held in stock in transit until the receiving branch records it. The trip's loading, transport and other charges are added to the cost of the goods. Quantities are locked once dispatched."
         confirmLabel="Dispatch" onConfirm={() => run(() => dispatchTrip(tripId), "Trip dispatched.").then((e) => e ?? undefined)} />
       <ConfirmDialog open={open === "delete"} onOpenChange={(o) => setOpen(o ? "delete" : null)} title="Delete this draft trip?" destructive confirmLabel="Delete"
         onConfirm={() => run(() => deleteDraftTrip(tripId), "Draft trip deleted.").then((e) => e ?? undefined)} />

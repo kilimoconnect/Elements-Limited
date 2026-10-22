@@ -11,7 +11,7 @@ import { formatDate, formatDateTime, formatQuantity } from "@/lib/format";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { NewTransferButton } from "./transfer-form";
+import { Button } from "@/components/ui/button";
 import { DocStatusBadge } from "@/components/common/doc-status-badge";
 import { ExportCsvButton, ParamSelect } from "@/components/reports/report-tools";
 import { Pager, PAGE_SIZE, pageOf, str } from "@/components/reports/pager";
@@ -27,12 +27,8 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
   const view = str(sp, "view"), branchF = str(sp, "branch"), page = pageOf(sp);
   const inTransit = view !== "all";
   const admin = createAdminClient();
-  const canDispatch = can(ctx.user, "inventory.transfer_dispatch");
   const myBranches = ctx.user.isOwner ? ctx.branches.map((b) => b.id) : ctx.user.branchIds;
   const none = ["00000000-0000-0000-0000-000000000000"];
-
-  const { data: products } = await admin.from("products")
-    .select("id, sku, name").eq("company_id", ctx.companyId).eq("is_active", true).order("sku");
 
   // Sender and receiver see the same transfer; other branches see nothing (Stage 1 D3).
   let q = admin.from("stock_transfers")
@@ -66,7 +62,7 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
       <PageHeader
         title="Stock Transfers"
         description="One shared transfer for the sending and the receiving branch: trips, cargo, documents and receipt progress."
-        actions={ctx.branchId && can(ctx.user, "inventory.transfer_create") && <NewTransferButton products={(products ?? []) as never} branches={ctx.branches} sourceBranchId={ctx.branchId} canDispatch={canDispatch} />}
+        actions={ctx.branchId && can(ctx.user, "inventory.transfer_create") && <Button asChild><Link href="/inventory/transfers/new">New Transfer</Link></Button>}
       />
       <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
         <Link href="/inventory/transfers" className={`rounded-md px-3 py-1.5 ${inTransit ? "bg-primary text-primary-foreground" : "border border-border"}`}>In transit / open</Link>
