@@ -34,12 +34,132 @@ actually run, and what remains. Updated at the end of every stage.
 | 5 | Rebagging orders (multi-size outputs, packaging materials, normal/abnormal loss, unused bulk) + propagation through conversion | **Done 22/10/2026** (record below; screens not yet run in a browser) |
 | 6 | Transfer upgrade: logistics details, charges, Storage attachments, versioned delivery notes, partial receipts with signed POD, discrepancy approval, shared in-transit view + propagation through transfers | **Done 22/10/2026** (record below; screens not yet run in a browser) |
 | 7 | Late costs, corrections and accounting close (cost-delta algorithm across imports, purchases, rebagging, transfers; reconciliation) | **Done 22/10/2026** (record below; screens not yet run in a browser) |
+| 8 | Pricing (accounting vs commercial cost, markup / margin, VAT) and costing / operations reports | **Done 22/10/2026** (record below; screens not yet run in a browser) |
 
 Each stage extends the existing posting services (`record_stock_movement`,
 `create_journal`, `claim_idempotency`, `assert_period_open`, supplier
 payables, transfers) rather than adding a parallel ERP.
 
 ---
+
+## Stage 8 — Pricing and operational reports (implemented)
+
+Migration `0032_pricing_reports.sql` (additive: one history table and
+read-only reporting functions, plus one controlled price write) and new
+screens. Every figure comes from posted documents and the cost versions of
+Stages 4–7; amounts are TZS, dates DD/MM/YYYY.
+
+### Pricing (Inventory → Pricing)
+
+- **Accounting cost** = the branch's posted weighted-average cost per unit.
+- **Commercial overhead** = an allocation of expensed charges flagged for the
+  commercial view (storage etc.), per kg, following the goods from import
+  receipts through rebagging and transfers (`commercial_overhead`). It is
+  for pricing only: nothing is posted, and charges already in inventory cost
+  are never added (only expensed charges qualify). The user can override it.
+- **Pricing cost** = accounting cost + commercial overhead.
+- Two separate modes (`src/lib/pricing/calc.ts`): **markup** — price before
+  tax = pricing cost × (1 + markup); **gross margin** — price before tax =
+  pricing cost / (1 − margin), margin validated to be below 100 %.
+- VAT from the SKU's own tax code: exclusive codes add VAT on top; inclusive
+  codes store the VAT-inclusive price. Both figures are shown.
+- **Actual gross margin** uses the accounting cost; the **commercial
+  contribution** (after overhead) is shown separately.
+- A suggestion never replaces the approved price. Saving needs the Owner (the
+  product master is Owner-only), a confirmation, and is recorded in
+  `product_price_changes` (old / new price, costing basis, reason; insert-only)
+  and the audit log. Inventory cost and posted documents do not change.
+
+### Reports (Reports menu)
+
+1. **Shipment Costing** — per shipment: purchase basis (incoterm, whether the
+   price includes freight / insurance), goods estimated vs actual,
+   capitalised acquisition costs estimated vs actual, expensed linked charges,
+   unallocated charges, accrual variances (actual − accrued), costs awaiting
+   invoice, received vs expected kg, cost per kg and per MT (estimated /
+   actual) and commercial cost per kg; filter by period and costing state.
+2. **Rebagging Costing** — per completed order: kg issued / packed / returned
+   / normal and abnormal loss, materials consumed (incl. damaged), bulk /
+   packaging / conversion value, cost per output SKU per bag and per kg
+   (including later cost adjustments).
+3. **Branch Landed Cost** — per branch and product: accounting average, per kg,
+   per selected bag size (50 / 25 / 5 kg), last incoming transfer unit cost,
+   commercial overhead per unit, pricing cost and the approved price; links to
+   the pricing screen.
+4. **In-transit dashboard** (Inventory → Stock Transfers / In Transit): now
+   with an overdue flag (ETA passed, not received), agents, document counts,
+   branch filter, pagination and a CSV export that never includes licence
+   numbers, licence images or costs. Documents open only from the transfer
+   page with the Stage 6 access checks.
+5. **Transfer Costing** — per transfer line: source value, loading /
+   transport / offloading / other capitalised charges (by value share),
+   charges applied, value received, in transit, lost, incoming cost per unit
+   and the destination's average after receipt.
+6. **Profitability** — by item, pack size, branch, branch × item or
+   **shipment (allocated)**. Revenue net of VAT, cost of sales at sale, returns,
+   and **late cost adjustments in the period they were posted** (from the
+   Stage 7 delta ledger). Shipment provenance uses `trace_receipt_units` /
+   `shipment_sales_trace`: each sale is attributed to shipments by the same
+   weighted-average replay as the costing engine (through rebagging and
+   transfers); the report states that this is an **allocation of blended
+   average cost, not exact lot profit**.
+7. **Costing Exceptions** — unfinalised costs, unallocated charges,
+   unresolved transfer losses (quarantine / short), missing documents (B/L,
+   delivery notes, signed delivery note / proof of delivery), overdue arrivals
+   (shipments and trips), accruals unmatched after 30 days, and stock / GL
+   differences from the Stage 7 reconciliation.
+
+All reports are company-scoped and limited to the user's branches (Owner:
+all), paginated (50 rows), printable (browser print / save as PDF through
+the existing Print button) and exportable to CSV with the existing tools —
+no new dependencies.
+
+### Acceptance (actual results)
+
+`scripts/test-pricing.ts` (part of `npm test`): accounting 48,500 + commercial
+1,500 = **pricing cost 50,000**; **20 % margin → 62,500** before VAT;
+**20 % markup → 60,000**; accounting cost stays 48,500; at 62,500 the actual
+gross margin on accounting cost is 14,000 (22.4 %) and the commercial
+contribution 12,500 (20 %); margins of 100 % or more refused; VAT-exclusive
+(62,500 + 18 % = 73,750, stored 62,500) and inclusive (stored 73,750) codes.
+
+`scripts/itest-import8.ts`: storage 2M on 100,000 kg → 20/kg on the bulk;
+bags after rebagging 30/kg (1,500 per 50 kg bag) and the same at Mwanza after
+transfer; computing it posts nothing and the bag's accounting cost stays
+45,000. The trace from the shipment receipt finds 20,000 kg sold as bulk,
+70,000 kg held, 50 bags sold at HQ and 40 at Mwanza, 50 and 60 held;
+provenance revenue / cost of sales reconcile to the sales. A late clearing
+cost posted on 5 May appears in May's profitability (bulk 200k, HQ bags 25k,
+Mwanza bags 20k), not April's. Price changes: Owner only, retry-safe,
+recorded with basis, history immutable, no stock or journal change.
+
+### Checks actually run (22/10/2026)
+
+| Check | Result |
+| --- | --- |
+| `npx tsc --noEmit` | Clean |
+| `npm run lint` | Same 20 pre-existing problems in other files; Stage 8 files lint clean |
+| `npm run test:db` | All pass: … + 47 (Stage 7) + **17 (Stage 8)** + 22 upgrade-path |
+| `npm test` | 7 + 25 + **13 pricing** checks pass |
+| Breakage: trace ignores transfers | 2 checks failed; restored |
+| Breakage: rebagged bags lose the bulk's overhead | 2 checks failed; restored |
+| Breakage: price change without the Owner check | 2 checks failed; restored byte-for-byte, suite green |
+
+### Limitations
+
+- The screens and report layouts (responsiveness, filters, pagination,
+  exports) were type-checked and linted but **not run in a browser**.
+- PDF output for reports is the browser's print-to-PDF of the page.
+- Commercial overhead follows goods through receipts, rebagging and
+  transfers; overhead on goods bought through ordinary purchases is not
+  allocated (purchase landed costs are capitalised, so they are already in
+  accounting cost).
+- Shipment provenance profitability is an allocation by the weighted-average
+  replay and recomputes on each view (fine at current volumes; may need
+  caching later).
+- Transfer charge kinds are taken from the category (loading / transport);
+  "offloading" is recognised from the charge description.
+- Not applied to the live database; not pushed.
 
 ## Stage 7 — Late costs, corrections and accounting close (implemented)
 
