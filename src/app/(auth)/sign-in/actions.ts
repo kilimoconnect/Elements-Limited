@@ -39,7 +39,13 @@ export async function signIn(
   });
 
   if (error || !data.user) {
-    return { error: "Invalid email or password." };
+    // Wrong credentials keep the generic message; anything else (bad key,
+    // rate limit, network) is shown so a misconfiguration is not mistaken for a typo.
+    if (!error || error.code === "invalid_credentials") {
+      return { error: "Invalid email or password." };
+    }
+    console.error("sign-in failed", { status: error.status, code: error.code, message: error.message });
+    return { error: `Sign-in failed: ${error.message}${error.code ? ` (${error.code})` : ""}` };
   }
 
   // Enforce that the user has an active application profile.
