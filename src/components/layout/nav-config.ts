@@ -59,6 +59,7 @@ export const NAV: NavEntry[] = [
       { label: "Kardex", href: "/inventory/kardex", enabled: true, requires: "inventory.view_kardex" },
       { label: "Stock Transfers", href: "/inventory/transfers", enabled: true, requires: "inventory.transfer_create" },
       { label: "Stock Adjustments", href: "/inventory/adjustments", enabled: true, requires: "inventory.adjustment_create" },
+      { label: "Rebagging", href: "/inventory/rebagging", enabled: true, requires: "rebagging.view", feature: "rebagging" },
       { label: "Opening Balances", href: "/inventory/opening-balances", enabled: true, requires: "inventory.opening_balance" },
     ],
   },

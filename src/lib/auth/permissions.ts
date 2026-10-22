@@ -171,7 +171,7 @@ export const PERMISSION_DEFS: PermissionDef[] = [
   // Import / rebagging / transfer upgrade (workflows stay behind feature flags).
   ...p("imports", ["view", "create", "edit_draft", "post", "receive", "approve", "void", "view_cost", "finalize_cost"]),
   ...p("cost_invoices", ["view", "create", "post", "void"]),
-  ...p("rebagging", ["view", "create", "post", "void"]),
+  ...p("rebagging", ["view", "create", "post", "approve", "void"]),
   ...p("documents", ["view_financial", "upload"]),
   ...p("fx", ["settle", "revalue", "enter_rate"]),
   ...p("inventory", ["transfer_view", "transfer_resolve"]),
@@ -225,7 +225,7 @@ export const ROLE_DEFS: RoleDef[] = [
       "imports.view", "imports.create", "imports.edit_draft", "imports.post", "imports.receive", "imports.approve",
       "imports.view_cost", "imports.finalize_cost",
       "cost_invoices.view", "cost_invoices.create", "cost_invoices.post",
-      "rebagging.view", "rebagging.create", "rebagging.post",
+      "rebagging.view", "rebagging.create", "rebagging.post", "rebagging.approve",
       "inventory.transfer_view", "inventory.transfer_resolve",
       "documents.view_financial", "documents.upload", "fx.settle", "fx.enter_rate",
     ],

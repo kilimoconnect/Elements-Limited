@@ -213,8 +213,9 @@ async function main() {
       "insert into rebag_outputs(company_id, order_id, product_id, bags, net_kg) values ($1,$2,$3,10.5,525)", [co, ro, p50]));
     check("output kg must equal bags x pack weight", await fails(db,
       "insert into rebag_outputs(company_id, order_id, product_id, bags, net_kg) values ($1,$2,$3,10,499)", [co, ro, p50], "bags x"));
-    check("packaging input must target an output", await fails(db,
-      "insert into rebag_inputs(company_id, order_id, input_kind, product_id, quantity) values ($1,$2,'packaging',$3,6000)", [co, ro, bag50]));
+    // Stage 5: packaging may be common to all outputs (thread, labels); a bulk line can never target an output.
+    check("bulk input cannot target an output", await fails(db,
+      "insert into rebag_inputs(company_id, order_id, input_kind, product_id, quantity, target_output_id) values ($1,$2,'bulk',(select bulk_product_id from rebag_orders where id=$2),10,$3)", [co, ro, out50]));
     check("packaging input aimed at its output accepted", await fails(db,
       "insert into rebag_inputs(company_id, order_id, input_kind, product_id, quantity, target_output_id) values ($1,$2,'packaging',$3,6000,$4)", [co, ro, bag50, out50]) === false);
     check("bulk input must be the order's bulk product", await fails(db,

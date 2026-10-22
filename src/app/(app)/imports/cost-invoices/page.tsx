@@ -22,13 +22,13 @@ export default async function CostInvoicesPage() {
   }
   const admin = createAdminClient();
   const { data } = await admin.from("cost_invoices")
-    .select("id, document_number, document_date, document_kind, document_status, supplier_invoice_number, net_total, tax_total, grand_total, supplier:suppliers(name), credited:credited_invoice_id(document_number), lines:cost_invoice_lines(cost_source:cost_sources(import_shipment:import_shipments(id, document_number)))")
+    .select("id, document_number, document_date, document_kind, document_status, supplier_invoice_number, net_total, tax_total, grand_total, supplier:suppliers(name), credited:credited_invoice_id(document_number), lines:cost_invoice_lines(cost_source:cost_sources(import_shipment:import_shipments(id, document_number), rebag_order:rebag_orders(id, document_number)))")
     .eq("company_id", ctx.companyId).neq("document_status", "draft").order("document_date", { ascending: false }).limit(300);
   type Row = {
     id: string; document_number: string | null; document_date: string; document_kind: string; document_status: string;
     supplier_invoice_number: string | null; net_total: number; tax_total: number; grand_total: number;
     supplier: { name: string } | null; credited: { document_number: string | null } | null;
-    lines: { cost_source: { import_shipment: { id: string; document_number: string | null } | null } | null }[];
+    lines: { cost_source: { import_shipment: { id: string; document_number: string | null } | null; rebag_order: { id: string; document_number: string | null } | null } | null }[];
   };
   const rows = (data ?? []) as unknown as Row[];
   return (
@@ -40,13 +40,16 @@ export default async function CostInvoicesPage() {
           <Table>
             <TableHeader><TableRow>
               <TableHead>Number</TableHead><TableHead>Date</TableHead><TableHead>Supplier</TableHead><TableHead>Supplier doc.</TableHead>
-              <TableHead>Shipments</TableHead><TableHead className="text-right">Net</TableHead><TableHead className="text-right">Tax</TableHead>
+              <TableHead>Shipments / rebagging</TableHead><TableHead className="text-right">Net</TableHead><TableHead className="text-right">Tax</TableHead>
               <TableHead className="text-right">Total (TZS)</TableHead><TableHead>Status</TableHead>
             </TableRow></TableHeader>
             <TableBody>
               {rows.map((r) => {
                 const ships = new Map<string, string>();
-                r.lines.forEach((l) => { const s = l.cost_source?.import_shipment; if (s) ships.set(s.id, s.document_number ?? "—"); });
+                r.lines.forEach((l) => {
+                  const s = l.cost_source?.import_shipment; if (s) ships.set(`/imports/${s.id}`, s.document_number ?? "—");
+                  const o = l.cost_source?.rebag_order; if (o) ships.set(`/inventory/rebagging/${o.id}`, o.document_number ?? "—");
+                });
                 const sign = r.document_kind === "credit_note" ? -1 : 1;
                 return (
                   <TableRow key={r.id}>
@@ -56,7 +59,7 @@ export default async function CostInvoicesPage() {
                     <TableCell className="text-sm">{r.supplier?.name ?? "—"}</TableCell>
                     <TableCell className="font-mono text-xs">{r.supplier_invoice_number ?? "—"}</TableCell>
                     <TableCell className="text-xs">{ships.size === 0 ? <span className="text-muted-foreground">Expense only</span> :
-                      Array.from(ships).map(([id, no]) => <Link key={id} className="mr-2 font-mono underline" href={`/imports/${id}`}>{no}</Link>)}</TableCell>
+                      Array.from(ships).map(([id, no]) => <Link key={id} className="mr-2 font-mono underline" href={id}>{no}</Link>)}</TableCell>
                     <TableCell className="text-right tabular-nums">{formatMoney(sign * Number(r.net_total))}</TableCell>
                     <TableCell className="text-right tabular-nums">{formatMoney(sign * Number(r.tax_total))}</TableCell>
                     <TableCell className="text-right tabular-nums font-medium">{formatMoney(sign * Number(r.grand_total))}</TableCell>

@@ -96,7 +96,7 @@ export function CostInvoiceForm({ suppliers, branches, defaultBranchId, categori
       <Card><CardContent className="p-0">
         <table className="w-full text-sm">
           <thead className="bg-muted/50 text-xs uppercase text-muted-foreground"><tr>
-            <th className="px-3 py-2 text-left">Category</th><th className="px-3 py-2 text-left">Shipment cost line</th><th className="px-3 py-2 text-left">Description</th>
+            <th className="px-3 py-2 text-left">Category</th><th className="px-3 py-2 text-left">Shipment cost / rebagging charge</th><th className="px-3 py-2 text-left">Description</th>
             <th className="px-3 py-2 text-right">Net (TZS)</th><th className="px-3 py-2 text-left">Tax</th><th className="px-3 py-2 text-right">Tax amount</th><th />
           </tr></thead>
           <tbody>

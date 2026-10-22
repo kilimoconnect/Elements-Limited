@@ -381,6 +381,8 @@ export const RESOURCES: Record<string, ResourceConfig> = {
       { name: "net_weight_kg", label: "Net kg per unit", type: "quantity", nullable: true, min: 0, colSpan: 1,
         help: "Packaged bags only, e.g. 50, 25 or 5." },
       { name: "bulk_product_id", label: "Filled from bulk product", type: "select", optionsKey: "bulkProducts", nullable: true, colSpan: 1 },
+      { name: "rebag_loss_tolerance_pct", label: "Rebagging loss tolerance %", type: "quantity", min: 0, max: 100, colSpan: 1, defaultValue: 0,
+        help: "Bulk products only. Loss up to this % of the kg issued is normal (absorbed into the bags); anything above is abnormal, needs approval and is expensed." },
       { name: "tax_code_id", label: "Tax Code", type: "select", optionsKey: "taxCodes", nullable: true, colSpan: 1 },
       { name: "purchase_price", label: "Default Purchase Price", type: "money", min: 0, colSpan: 1, defaultValue: 0 },
       { name: "selling_price", label: "Default Selling Price", type: "money", min: 0, colSpan: 1, defaultValue: 0 },

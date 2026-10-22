@@ -43,6 +43,9 @@ export default async function ShipmentPage(props: { params: Params }) {
     admin.from("cost_categories").select("id, code, name, inventory_treatment, allocation_basis, component").eq("company_id", ctx.companyId).eq("is_active", true).eq("applies_to_import", true).eq("is_goods_value", false).order("name"),
     admin.from("suppliers").select("id, code, name").eq("company_id", ctx.companyId).eq("is_active", true).order("code"),
   ]);
+  const { data: rebagRuns } = await admin.from("rebag_orders")
+    .select("id, document_number, order_date, document_status, issued_kg, outputs:rebag_outputs(bags, product:products(net_weight_kg))")
+    .eq("import_shipment_id", id).order("order_date");
   const receiptIds = (receipts ?? []).map((r) => r.id);
   const sourceIds = (sources ?? []).map((s) => s.id);
   const invoiceIds = (invoices ?? []).map((i) => i.id);
@@ -259,6 +262,19 @@ export default async function ShipmentPage(props: { params: Params }) {
           <FinalizeButton id={id} ready={checkRows.every((c) => c.ok)} />}
         {["finalized", "adjusted"].includes(s.cost_status) && <p className="text-xs text-muted-foreground">Finalised. Later corrections post as linked cost invoices / credit notes and mark the shipment &quot;Adjusted&quot;.</p>}
       </CardContent></Card>
+
+      {(rebagRuns ?? []).length > 0 && (
+        <Card><CardContent className="p-5 text-sm">
+          <h3 className="mb-2 font-semibold">Rebagging runs from this shipment</h3>
+          {((rebagRuns ?? []) as unknown as { id: string; document_number: string | null; order_date: string; document_status: string; issued_kg: number;
+            outputs: { bags: number; product: { net_weight_kg: number } | null }[] }[]).map((r) => (
+            <div key={r.id} className="flex justify-between border-b border-border py-1 last:border-0">
+              <span><Link className="font-mono text-xs underline" href={`/inventory/rebagging/${r.id}`}>{r.document_number ?? "draft"}</Link> · {formatDate(r.order_date)} · {r.document_status}</span>
+              <span className="tabular-nums text-xs">{formatQuantity(N(r.issued_kg))} kg → {r.outputs.map((o) => `${formatQuantity(N(o.bags))} × ${N(o.product?.net_weight_kg)} kg`).join(", ")}</span>
+            </div>
+          ))}
+        </CardContent></Card>
+      )}
 
       {attachmentsOn && (
         <Card><CardContent className="p-5">

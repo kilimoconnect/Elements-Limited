@@ -31,7 +31,7 @@ actually run, and what remains. Updated at the end of every stage.
 | 2b | Remaining hardening from Stage 1: fix void/transfer subledger drift (D1, D2, D5), goods-in-transit 1155 on transfers, branch enforcement in the existing transfer actions (D3), caller-supplied idempotency keys in existing server actions (D4), lot maintenance with an "untracked" lot for existing stock | Not started — recommended before Stage 3 posts anything |
 | 3 | Foreign purchases with TZS books: foreign purchase invoices, foreign supplier balances (original currency + TZS carrying), settlements through TZS accounts with realised FX, advances, bank charges, period-end revaluation, foreign returns and credits, currency confinement | **Done 21/10/2026** (record below) |
 | 4 | Import shipments: shipment + lines, title (ownership) event, goods invoice via `purchases` invoice-only mode, GR/IR clearing, cost sources (estimate → accrual → actual) and `cost_invoices`, allocations, goods receipt (GRN) with discrepancy resolution, late-cost propagation for import lots | **Done 21/10/2026** (record below; screens not yet walked through in a browser) |
-| 5 | Rebagging orders (multi-size outputs, packaging materials, normal/abnormal loss, unused bulk) + propagation through conversion | Not started |
+| 5 | Rebagging orders (multi-size outputs, packaging materials, normal/abnormal loss, unused bulk) + propagation through conversion | **Done 22/10/2026** (record below; screens not yet run in a browser) |
 | 6 | Transfer upgrade: logistics details, charges, Storage attachments, versioned delivery notes, partial receipts with signed POD, discrepancy approval, shared in-transit view + propagation through transfers | Not started |
 | 7 | Commercial (pricing) cost view and import / landed-cost reports | Not started |
 
@@ -40,6 +40,168 @@ Each stage extends the existing posting services (`record_stock_movement`,
 payables, transfers) rather than adding a parallel ERP.
 
 ---
+
+## Stage 5 — Bulk-to-bag rebagging (implemented)
+
+Migration `0029_rebagging.sql` (additive: new columns, wider status and
+movement-type checks, new functions; `_propagate_from_movement` and
+`post_cost_invoice` replaced with the import behaviour unchanged) plus
+Inventory → Rebagging screens, behind the `rebagging` feature flag and the
+`rebagging.*` permissions (new: `rebagging.approve`, given to Director; Owner
+has everything).
+
+### Behaviour
+
+- **Products.** Bulk products (kg) and packaged SKUs keep separate stock
+  balances; a packaged SKU names its bulk product and its net kg per bag
+  (50 / 25 / 5 or any positive weight; no size is hard-coded). Packaging
+  materials are ordinary stocked products (`packaging_material`). Bulk
+  products carry a **rebagging loss tolerance %** (Admin → Products, default
+  0). Other products and units are untouched.
+- **Order.** Branch, location/bay, operator, date, bulk product, optional
+  import shipment, bulk batches (lots) with kg, packaged outputs (SKU and
+  whole good bags; net kg = bags × pack kg), unused bulk returned, normal and
+  abnormal loss kg, packaging materials actually used (per output or common;
+  used, damaged, quantity per bag), conversion charges (labour / contractor,
+  with allocation basis), attachments.
+- **States.** `draft → issued → completed → voided`, and `draft / issued →
+  cancelled`. Status changes only through the posting functions (trigger).
+  - **Issue** (`issue_rebag_order`): bulk kg leave bulk stock at the weighted
+    average; the value is held on the order (work in progress, still inside
+    1150 — no clearing account). Batch balances are reduced and must cover the
+    kg; batches must come from the order's shipment when one is set (or set
+    it). The bulk issue, branch, product and shipment are frozen from here.
+  - **Complete** (`complete_rebag_order`) from draft issues and completes in
+    one transaction; from issued it uses the issued kg and value — the issue
+    is never consumed twice.
+  - **Cancel** (`cancel_rebag_order`): a draft closes with no postings; an
+    issued order returns all bulk at its issue value and restores the batches.
+  - **Void** (`void_rebag_order`, `rebagging.void`, reason): only while none
+    of its bags have been sold, transferred or adjusted without reversal
+    (`rebag_order_dependents` lists them), no charge has its supplier invoice
+    and no later cost has reached the bags. It returns bulk and packaging at
+    their recorded values, removes the bags at their value, and mirrors the
+    completion journal.
+- **Kg conservation** (enforced): issued kg = good packaged net kg + bulk
+  returned + normal loss + abnormal loss, exactly (4 dp). Empty packaging
+  weight is never product kg.
+- **Loss.** Normal loss may not exceed issued kg × tolerance %; the rest must
+  be recorded as abnormal (the error says how much), so tolerance never makes
+  all loss capitalisable. Abnormal loss needs `rebagging.approve` and is
+  expensed to 6300 at the issue cost; normal loss stays in the bags.
+- **Packaging.** Each material line is consumed from stock at weighted
+  average (insufficient stock rejects the whole completion). Bag-specific
+  materials go only to their own size; common materials (thread, labels) by
+  bag count. With "per bag" set, used − damaged must equal good bags ×
+  quantity per bag, so shortages, unused and damaged bags reconcile; damaged
+  bags are part of that size's packaging cost.
+- **Conversion charges** are rebagging cost sources. Completion accrues each
+  (Cr 2140): capitalised ones are allocated to the outputs by their basis
+  (labour default: **bags**, or kg / bulk value / direct), expensed ones go to
+  their expense account. The contractor's invoice is posted under
+  Importation → Cost Invoices against the charge: it replaces the accrual and
+  only the difference changes cost; a charge takes one actual invoice, and a
+  capitalised line without its charge is refused, so labour is never expensed
+  twice.
+- **Value.** Bulk to outputs = issued value − returned share − abnormal share,
+  split by output net kg; plus packaging; plus capitalised conversion. Each
+  output enters packaged stock through the weighted-average receipt and gets a
+  lot traced to the bulk batches (`stock_lot_flows`). One journal: Dr 1150
+  packaged output; Cr 1150 bulk consumed and packaging; Dr 6300 abnormal loss;
+  Cr 2140 accrued charges (Dr expense for expensed ones). No income, no
+  clearing balance; an internal check stops completion if output value ≠
+  inputs.
+- **Late costs through conversion.** The Stage 4 replay now follows bulk into
+  rebagging: units issued to a completed order go to its bags by kg (abnormal
+  share to 6300) and on to wherever the bags went; units on an issued order
+  raise its held value; returned / cancelled / voided units rejoin the bulk
+  pool. Packaging materials are followed the same way. Conversion-charge
+  differences go to the bags by the charge's basis.
+- **Several runs per shipment**: each order links its shipment (from the
+  batches); the shipment page lists its rebagging runs.
+- **Locking / retries:** every order locks its stock rows in (branch,
+  product) order before posting; stable keys per action
+  (`issue_rebag_order:<id>` etc.) make retries replay the first result.
+
+### Screens
+
+Inventory → Rebagging: list (in production, bulk in production, drafts), new
+order, edit / record results (draft and issued), detail (kg balance, value
+build-up per size and per bag, batches, packaging, charges, blocking
+documents, attachments) with Issue, Complete, Cancel, Void and Delete draft.
+Cost Invoices can now link rebagging charges. The shipment page shows its
+rebagging runs. Admin → Products has the loss tolerance.
+
+### Acceptance (actual results, `scripts/itest-import5.ts`)
+
+- **A:** 100,000 kg → 1,000 × 50 kg, 1,600 × 25 kg, 2,000 × 5 kg, no loss:
+  three SKUs with 1,000 / 1,600 / 2,000 bags (4,600 bags, 100,000 kg), bulk
+  fully consumed, 900/kg in every size (45,000 / 22,500 / 4,500 per bag),
+  completion journal entirely within 1150.
+- **B:** 1,000 × 50 kg from bulk at 900/kg, bags at 1,000 and labour 500/bag:
+  **TZS 46,500 per bag**; journal Dr 1150 46.5M / Cr 1150 46M / Cr 2140 0.5M.
+  The contractor invoice of 520k replaces the accrual and moves the bags to
+  46,520.
+- Issue then complete with 200 kg returned and 50 kg loss at 0.2% tolerance:
+  all-normal rejected ("record 30 kg as abnormal"); storekeeper cannot approve
+  abnormal loss; packaging that does not reconcile is rejected; a packaging
+  stock shortage rejects the completion with nothing posted; the completed
+  order expenses 30k abnormal loss, returns 200 kg at 10.2M, and the output
+  value equals bulk + packaging exactly, with different packaging cost per kg
+  per size.
+- Two runs from one shipment batch; batch balance 2,000 kg left; output lots
+  trace to the batch; over-issuing the batch rejected; a late 1M clearing cost
+  splits 0.2M to bulk held and 0.8M into the 160 bags.
+- Draft and issued cancellation; void refused while bags are sold (document
+  listed), allowed after the sale is reversed; storekeeper cannot void.
+- Retries of issue and completion post once; second issue / completion
+  rejected; direct status changes rejected; app users cannot call the
+  functions.
+- Reconciliations: every journal balances; 1150 = stock subledger + work in
+  progress; 2140 = charges accrued not invoiced; kg conserved on every order.
+
+### Checks actually run (22/10/2026)
+
+| Check | Result |
+| --- | --- |
+| `npx tsc --noEmit` | Clean |
+| `npm run lint` | Same 20 problems (11 errors, 9 warnings) in files not touched by Stage 5; Stage 5 files lint clean |
+| `npm run test:db` | All suites pass: 19 + 26 + 11 + 51 + **114 (Stage 2, one check updated)** + 79 + 58 + **50 (Stage 5)** + 20 upgrade-path |
+| `npm test` | 25 attachment policy checks pass |
+| Breakage: abnormal loss not expensed | 2 checks failed (6300 journal, output = inputs); restored |
+| Breakage: rebag outflow sent to cost of sales | Late-cost-through-conversion check failed (0.8M went to 5100); restored |
+| Breakage: batch balance not checked | Over-issue check failed; restored byte-for-byte, suite green |
+
+The Stage 2 check "packaging input must target an output" was replaced by
+"bulk input cannot target an output": Stage 5 deliberately allows common
+packaging materials.
+
+### Decisions and assumptions
+
+- Work in progress stays in 1150 (value held on the order) rather than a WIP
+  account; the reconciliation includes it.
+- Labour and contractor charges are capitalised by bag count by default
+  (piece-rate handling); the basis can be changed per charge. Own-staff wages
+  already expensed elsewhere are not reclassified here.
+- Damaged packaging is a normal cost of the size it was used for.
+- Default loss tolerance is 0% until set per bulk product (Stage 1 suggested
+  0.2%; to be confirmed).
+- Rebagging accruals use the shared 2140 accrued-costs account.
+
+### Limitations
+
+- Screens type-check and lint clean but have **not** been run in a browser
+  (the only configured Supabase project is production; no local Supabase).
+- Concurrency was tested only as sequential retries and repeated calls (the
+  PGlite harness has one connection); real parallel sessions rely on the row
+  locks and keys.
+- Void is refused once a later cost adjustment has reached the bags or a
+  charge has its invoice; such orders are corrected with a new order.
+- Draft line edits replace the lines in several statements (not one
+  transaction); a failure can leave a draft partly edited, never a posting.
+- Cost invoices for rebagging charges need the Importation screens (the
+  `imports` flag) to be reachable in the menu.
+- Not applied to the live database; not pushed.
 
 ## Stage 4 — Import shipments and landed cost (implemented)
 
