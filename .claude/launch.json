@@ -2,16 +2,29 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "letiq-erp",
+      "name": "elements-erp",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 3000
     },
     {
-      "name": "letiq-offline",
+      "name": "elements-offline",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["scripts/start-offline.mjs"],
+      "runtimeArgs": [
+        "scripts/start-offline.mjs"
+      ],
       "port": 3100
+    },
+    {
+      "name": "elements-package",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "deploy/elements-erp/server.js"
+      ],
+      "port": 3000
     }
   ]
 }

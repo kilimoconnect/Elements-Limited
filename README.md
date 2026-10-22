@@ -1,6 +1,6 @@
-# Letiq ERP
+# Elements ERP
 
-ERP and accounting system for **Letiq Limited**.
+ERP and accounting system for **Elements Limited**.
 
 This repository implements:
 
@@ -25,7 +25,7 @@ only for purchase-origin documents (import invoices, their payments, credits and
 revaluation); sales, expenses, stock and the books stay in TZS.
 
 - Base currency: **TZS** · Timezone: **Africa/Dar_es_Salaam** · Dates: **DD/MM/YYYY**
-- Multi-company ready (starts with one company: `LETIQ`).
+- Multi-company ready (starts with one company: `ELEMENTS`).
 
 ## Tech stack
 
@@ -96,7 +96,7 @@ Idempotent — safe to run repeatedly.
 npm run db:seed
 ```
 
-Seeds: all permissions & the 6 default roles; company `LETIQ`; branch `HQ` (head office);
+Seeds: all permissions & the 6 default roles; company `ELEMENTS`; branch `HQ` (head office);
 units (Piece, Litre, Kilogram, Bag, Carton); a hierarchical chart of accounts; tax codes
 (VAT 18%, Zero, Exempt); payment accounts (Cash, NMB, CRDB, MIX, M-Pesa); the protected
 `WALK-IN` customer; document-number sequences; and the current-year accounting period.

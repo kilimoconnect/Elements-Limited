@@ -83,7 +83,7 @@ export class SimplePdf {
     }
     objs[catalog - 1] = `<< /Type /Catalog /Pages ${pagesObj} 0 R >>`;
     objs[pagesObj - 1] = `<< /Type /Pages /Kids [${kids.map((k) => `${k} 0 R`).join(" ")}] /Count ${kids.length} >>`;
-    const info = add(`<< /Producer (Letiq ERP) ${meta.title ? `/Title (${clean(meta.title)})` : ""} >>`);
+    const info = add(`<< /Producer (Elements ERP) ${meta.title ? `/Title (${clean(meta.title)})` : ""} >>`);
 
     let out = "%PDF-1.4\n%\xE2\xE3\xCF\xD3\n";
     const offsets: number[] = [];

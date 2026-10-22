@@ -41,7 +41,7 @@ async function main() {
   try {
     const Y = new Date().getFullYear();
     const d = (md: string) => `${Y}-${md}`;
-    const co = await one(db, "select id from companies where code='LETIQ'");
+    const co = await one(db, "select id from companies where code='ELEMENTS'");
     const owner = await one(db, "select id from user_profiles where is_primary_owner");
     const hq = await one(db, "select id from branches where company_id=$1 and code='HQ'", [co]);
     const bag = await one(db, "select id from units where company_id=$1 and code='BAG'", [co]);

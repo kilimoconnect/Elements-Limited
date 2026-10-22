@@ -1,60 +1,60 @@
 @import "tailwindcss";
 
 /* =========================================================================
-   Letiq ERP design system
-   Taken from the Letiq Limited logo: deep brown (#5C3D2B), sage leaf
-   (#8FA27E) and warm cream (#F1ECE1). Warm light work surfaces, deep brown
-   sidebar, brown primary with sage accents.
+   Elements ERP design system
+   Taken from the Elements Limited logo: deep forest green (#003616) and
+   leaf green (#93C434). Clean light work surfaces, forest-green sidebar,
+   green primary with leaf accents.
    ========================================================================= */
 
 :root {
   --radius: 0.5rem;
 
   /* Work surfaces */
-  --background: 40 33% 97%;       /* app canvas (warm off-white) */
-  --foreground: 22 30% 16%;       /* primary text (dark brown) */
+  --background: 100 20% 97%;      /* app canvas (soft green-white) */
+  --foreground: 150 40% 10%;      /* primary text (near-black green) */
 
   --card: 0 0% 100%;
-  --card-foreground: 22 30% 16%;
+  --card-foreground: 150 40% 10%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 22 30% 16%;
+  --popover-foreground: 150 40% 10%;
 
-  /* Brand brown */
-  --primary: 22 32% 33%;
-  --primary-foreground: 41 38% 95%;
+  /* Brand forest green */
+  --primary: 144 85% 17%;
+  --primary-foreground: 0 0% 100%;
 
-  --secondary: 41 30% 92%;        /* cream */
-  --secondary-foreground: 22 30% 20%;
+  --secondary: 90 30% 93%;
+  --secondary-foreground: 144 60% 14%;
 
-  --muted: 40 25% 94%;
-  --muted-foreground: 25 12% 40%;
+  --muted: 100 18% 95%;
+  --muted-foreground: 150 10% 38%;
 
-  /* Sage leaf */
-  --accent: 92 22% 92%;
-  --accent-foreground: 92 24% 26%;
+  /* Leaf green */
+  --accent: 81 57% 92%;
+  --accent-foreground: 81 65% 22%;
 
   --destructive: 4 66% 45%;
   --destructive-foreground: 0 0% 100%;
 
-  --success: 100 28% 34%;
+  --success: 130 50% 32%;
   --success-foreground: 0 0% 100%;
 
   --warning: 36 88% 44%;
   --warning-foreground: 36 90% 12%;
 
-  --border: 36 20% 86%;
-  --input: 36 18% 82%;
-  --ring: 22 32% 40%;
+  --border: 100 15% 87%;
+  --input: 100 12% 82%;
+  --ring: 144 60% 28%;
 
-  /* Warm brown sidebar (fixed regardless of surface theme) */
-  --sidebar: 22 30% 30%;
-  --sidebar-foreground: 40 35% 92%;
-  --sidebar-muted: 35 22% 76%;
-  --sidebar-border: 22 24% 38%;
-  --sidebar-accent: 92 24% 66%;   /* sage, lifted for the lighter sidebar */
-  --sidebar-accent-foreground: 22 36% 12%;
-  --sidebar-active: 22 26% 38%;
+  /* Forest green sidebar (fixed regardless of surface theme) */
+  --sidebar: 144 100% 11%;
+  --sidebar-foreground: 90 30% 94%;
+  --sidebar-muted: 120 15% 72%;
+  --sidebar-border: 144 55% 18%;
+  --sidebar-accent: 81 57% 49%;   /* leaf green */
+  --sidebar-accent-foreground: 144 100% 9%;
+  --sidebar-active: 144 70% 17%;
 }
 
 @theme inline {

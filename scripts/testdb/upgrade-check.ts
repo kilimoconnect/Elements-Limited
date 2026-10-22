@@ -64,7 +64,7 @@ async function main() {
 
   // 2) Committed activity: opening stock, a sale with COGS, journals.
   const user = (await db.query<{ id: string }>(`insert into auth.users(email) values ('upgrade@test.local') returning id`)).rows[0].id;
-  const co = (await db.query<{ id: string }>(`select id from companies where code='LETIQ'`)).rows[0].id;
+  const co = (await db.query<{ id: string }>(`select id from companies where code='ELEMENTS'`)).rows[0].id;
   const br = (await db.query<{ id: string }>(`select id from branches where company_id=$1 and code='HQ'`, [co])).rows[0].id;
   const unit = (await db.query<{ id: string }>(`select id from units where company_id=$1 and code='BAG'`, [co])).rows[0].id;
   const prod = (await db.query<{ id: string }>(
@@ -105,7 +105,7 @@ async function main() {
   await db.query(`select dispatch_stock_transfer($1,$2,'upgrade-transfer-key-1')`, [tr, owner]);
 
   // Names edited in Admin must survive the production upgrade seed.
-  await db.query(`update companies set name = 'Letiq (renamed in Admin)' where id = $1`, [co]);
+  await db.query(`update companies set name = 'Elements (renamed in Admin)' where id = $1`, [co]);
   await db.query(`update branches set name = 'HQ (renamed in Admin)' where company_id = $1 and code = 'HQ'`, [co]);
   const migratedBefore = (await db.query<{ n: string }>(`select count(*) n from schema_migrations`)).rows[0].n;
   const before = await snapshot(db);
@@ -128,7 +128,7 @@ async function main() {
   await db.connect();
   const after = await snapshot(db);
   check("upgrade seed keeps names edited in Admin",
-    (await db.query<{ name: string }>(`select name from companies where id = $1`, [co])).rows[0].name === "Letiq (renamed in Admin)"
+    (await db.query<{ name: string }>(`select name from companies where id = $1`, [co])).rows[0].name === "Elements (renamed in Admin)"
     && (await db.query<{ name: string }>(`select name from branches where company_id = $1 and code = 'HQ'`, [co])).rows[0].name === "HQ (renamed in Admin)");
   check("upgrade seed grants the new permissions to the Director role", Number((await db.query<{ n: string }>(`select count(*) n from role_permissions rp
     join roles r on r.id = rp.role_id join permissions pm on pm.id = rp.permission_id

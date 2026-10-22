@@ -15,7 +15,7 @@ async function main() {
     const u = await db.query<{ id: string }>(
       `insert into auth.users(email, email_confirmed_at) values ($1, now()) returning id`, [email]);
     const ownerId = u.rows[0].id;
-    const co = await db.query<{ id: string }>("select id from companies where code = 'LETIQ'", []);
+    const co = await db.query<{ id: string }>("select id from companies where code = 'ELEMENTS'", []);
     const companyId = co.rows[0].id;
     const br = await db.query<{ id: string }>("select id from branches where company_id = $1 and code = 'HQ'", [companyId]);
     const branchId = br.rows[0].id;

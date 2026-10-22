@@ -43,3 +43,6 @@ next-env.d.ts
 build3.log
 
 build4.log
+
+# Hosting upload package (contains keys)
+/deploy

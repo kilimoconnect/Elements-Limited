@@ -96,7 +96,7 @@ export default function AdminPage() {
     <div>
       <PageHeader
         title="Administration"
-        description="Configure master data, security and system settings for Letiq ERP."
+        description="Configure master data, security and system settings for Elements ERP."
       />
       <div className="space-y-8">
         {GROUPS.map((group) => (

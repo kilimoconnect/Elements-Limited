@@ -11,7 +11,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const companyId = user.defaultCompanyId ?? user.companyIds[0] ?? null;
   let companyName =
-    process.env.NEXT_PUBLIC_COMPANY_NAME ?? "Letiq Limited";
+    process.env.NEXT_PUBLIC_COMPANY_NAME ?? "Elements Limited";
   let branches: BranchOption[] = [];
   // Enabled feature flags travel with the permission list as "feature:<key>"
   // markers so staged navigation stays hidden while a flag is off.
