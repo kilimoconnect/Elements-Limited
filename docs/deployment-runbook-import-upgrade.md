@@ -31,6 +31,10 @@ prerequisites are complete and the release has been approved.
 4. Approval of the business decisions in
    `docs/letiq-import-upgrade.md` → Stage 9 → "Assumptions needing business
    review".
+5. A decision on the open stock-value defects D1 (voiding openings / stock-increase
+   adjustments after the average moved) and D8 (UTC cut-offs on as-of reports): fix
+   them first, or accept them in writing and follow the workaround in
+   `docs/letiq-import-upgrade.md` → Stage 9 → Blockers.
 
 ### Configuration variable names (values are set in Vercel / `.env.local`, never here)
 
