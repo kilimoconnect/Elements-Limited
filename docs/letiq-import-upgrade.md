@@ -248,6 +248,38 @@ covered by the Phase 2–4 suites, all rerun here.
   check shows any residual difference, which is corrected with a dated
   journal.
 
+### Production database upgrade (22/10/2026, 08:44 UTC)
+
+Applied to the live Supabase database at the user's request, following the
+runbook:
+
+1. `db:snapshot -- before`:
+   - JSON export of 73 tables (558 rows), kept outside the repo in the
+     operator's `~/letiq-backups`.
+   - The live database was at `0023`, with no journals, stock or documents
+     (master data only). Existing codes 1121/1122/1131/1132/1170/6300 had the
+     expected types.
+2. Dry run: all 11 pending migrations (0024–0034) applied in one transaction
+   and were rolled back. OK.
+3. `db:migrate`: 11 applied.
+4. `db:seed:upgrade`: 27 new permissions, 76 new role grants, defaults
+   ensured for 1 company.
+5. Checks after the upgrade:
+   - Trial balance, stock and 1150 unchanged (all still empty).
+   - 11 new system accounts, 19 account mappings, 15 cost categories.
+   - All 5 feature flags OFF.
+   - All 13 Cost Reconciliation checks OK.
+   - Private `documents` bucket present.
+   - 0 security-definer functions callable by anon.
+   - Database time zone `Africa/Dar_es_Salaam` (source: database) on new
+     sessions.
+
+Still open:
+- The deployed app (`main`, Stage 0–4 code) must be replaced by this branch.
+- Restart the project so pooled API connections pick up the time zone.
+- Rotate the credentials.
+- Do the signed-in walkthrough.
+
 ### Assumptions needing business review
 
 1. Loss tolerances (rebagging and transfer) default to 0 %: every loss needs
