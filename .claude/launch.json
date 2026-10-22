@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 3000
+    },
+    {
+      "name": "letiq-offline",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["scripts/start-offline.mjs"],
+      "port": 3100
     }
   ]
 }

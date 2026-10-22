@@ -168,6 +168,17 @@ const ENUM = {
     { value: "KES", label: "KES — Kenyan Shilling" },
     { value: "ZAR", label: "ZAR — South African Rand" },
   ],
+  accountMapping: [
+    { value: "inventory.standard", label: "Inventory — standard items" }, { value: "inventory.bulk", label: "Inventory — bulk" },
+    { value: "inventory.packaged", label: "Inventory — packaged bags" }, { value: "inventory.packaging", label: "Inventory — packaging materials" },
+    { value: "transfer.goods_in_transit", label: "Stock in transit between branches" }, { value: "import.goods_in_transit", label: "Import goods in transit" },
+    { value: "import.gr_ir", label: "Goods received / owned not invoiced (GR/IR)" }, { value: "import.accrued_costs", label: "Accrued import / rebagging / transfer costs" },
+    { value: "import.supplier_advances", label: "Supplier advances" }, { value: "import.claims_receivable", label: "Claims receivable" },
+    { value: "fx.realised_gain", label: "FX realised gain" }, { value: "fx.realised_loss", label: "FX realised loss" },
+    { value: "fx.unrealised_gain", label: "FX unrealised gain" }, { value: "fx.unrealised_loss", label: "FX unrealised loss" },
+    { value: "inventory.loss", label: "Inventory loss / shrinkage" }, { value: "inventory.cost_of_sales", label: "Cost of sales" },
+    { value: "inventory.price_variance", label: "Purchase price variance" }, { value: "tax.input_vat", label: "Input VAT" }, { value: "payables.trade", label: "Trade payables" },
+  ],
   featureFlag: [
     { value: "imports", label: "Imports & landed cost" },
     { value: "rebagging", label: "Rebagging" },
@@ -383,6 +394,8 @@ export const RESOURCES: Record<string, ResourceConfig> = {
       { name: "bulk_product_id", label: "Filled from bulk product", type: "select", optionsKey: "bulkProducts", nullable: true, colSpan: 1 },
       { name: "rebag_loss_tolerance_pct", label: "Rebagging loss tolerance %", type: "quantity", min: 0, max: 100, colSpan: 1, defaultValue: 0,
         help: "Bulk products only. Loss up to this % of the kg issued is normal (absorbed into the bags); anything above is abnormal, needs approval and is expensed." },
+      { name: "transfer_loss_tolerance_pct", label: "Transfer loss tolerance %", type: "quantity", min: 0, max: 100, colSpan: 1, defaultValue: 0,
+        help: "Shortage on a transfer trip up to this % of the quantity dispatched may be resolved as normal loss; anything above must be written off or claimed." },
       { name: "tax_code_id", label: "Tax Code", type: "select", optionsKey: "taxCodes", nullable: true, colSpan: 1 },
       { name: "purchase_price", label: "Default Purchase Price", type: "money", min: 0, colSpan: 1, defaultValue: 0 },
       { name: "selling_price", label: "Default Selling Price", type: "money", min: 0, colSpan: 1, defaultValue: 0 },
@@ -465,7 +478,26 @@ export const RESOURCES: Record<string, ResourceConfig> = {
     fields: [
       { name: "flag_key", label: "Feature", type: "select", required: true, options: ENUM.featureFlag, colSpan: 1 },
       { name: "is_enabled", label: "Enabled", type: "switch", colSpan: 1,
-        help: "Imports, rebagging, transfer logistics and FX settlement are being built in stages; keep them off until their stage is complete." },
+        help: "Switch a workflow on only after its release checks (see the deployment runbook). Switching off hides it again; posted documents are not affected." },
+    ],
+  },
+
+  "account-mappings": {
+    key: "account-mappings",
+    table: "account_mappings",
+    title: "Account Mappings",
+    singular: "Account Mapping",
+    description: "Which general-ledger account each automatic posting uses (inventory, stock in transit, GR/IR, accrued costs, claims, FX gains / losses, cost of sales, losses, price variance, input VAT, payables). Change only with your accountant; the account type is validated.",
+    auditType: "account_mapping",
+    codeField: "mapping_key",
+    searchColumns: ["mapping_key"],
+    columns: [
+      { key: "mapping_key", label: "Posting", type: "code" },
+      { key: "account_id", label: "Account", type: "ref", refKey: "postingAccounts" },
+    ],
+    fields: [
+      { name: "mapping_key", label: "Posting", type: "select", required: true, options: ENUM.accountMapping, colSpan: 1 },
+      { name: "account_id", label: "GL account", type: "select", optionsKey: "postingAccounts", required: true, colSpan: 1 },
     ],
   },
 
@@ -660,7 +692,7 @@ export function getResource(key: string): ResourceConfig | undefined {
 }
 
 /** Resources that do NOT have an is_active column (status handled differently). */
-export const NO_ACTIVE_TOGGLE = new Set<string>(["accounting-periods", "exchange-rates", "feature-flags"]);
+export const NO_ACTIVE_TOGGLE = new Set<string>(["accounting-periods", "exchange-rates", "feature-flags", "account-mappings"]);
 
 /**
  * Master-data resources whose code/SKU is auto-generated on create (prefix +

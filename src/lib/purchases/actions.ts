@@ -143,6 +143,10 @@ export async function savePurchaseDraft(input: PurchaseDraftInput): Promise<RpcR
     if (paid + (isFc ? 0 : advFc) > totals.grand + 0.001) return { ok: false, error: "Payments exceed the purchase total." };
     const outstanding = round2(toTzs(totals.grand) - paid - toTzs(advFc));
 
+    // The supplier must belong to this company (also enforced in the database since 0033).
+    const { data: supRow } = await admin.from("suppliers").select("company_id").eq("id", input.supplierId).maybeSingle();
+    if (!supRow || supRow.company_id !== ctx.companyId) return { ok: false, error: "Select a supplier of this company." };
+
     const header = {
       company_id: ctx.companyId, branch_id: input.branchId, supplier_id: input.supplierId,
       document_date: input.documentDate, supplier_invoice_date: input.supplierInvoiceDate || null,

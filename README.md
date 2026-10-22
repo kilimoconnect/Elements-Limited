@@ -2,11 +2,27 @@
 
 ERP and accounting system for **Letiq Limited**.
 
-This repository implements **Phase 1 — System Foundation** (auth, RBAC, master data),
-**Phase 2 — Sales, Customer Payments, Inventory & Kardex**, and **Phase 3 — Purchases,
-Supplier Payments, Purchase Returns, Expenses, Other Income, Cash Transfers and
-Payment-Account Ledgers**. Full financial statements, bank reconciliation, manual journals,
-budgets, payroll and multi-currency are intentionally **deferred to Phase 4**.
+This repository implements:
+
+- **Phase 1 — System Foundation** (auth, RBAC, master data);
+- **Phase 2 — Sales, Customer Payments, Inventory & Kardex**;
+- **Phase 3 — Purchases, Supplier Payments, Purchase Returns, Expenses, Other Income, Cash
+  Transfers and Payment-Account Ledgers**;
+- **Phase 4 — Core Accounting, Financial Reports & Controls** (manual journals, trial balance,
+  general ledger, P&L, balance sheet, cash flow, VAT, bank reconciliation, period close);
+- **Import, rebagging & transfer upgrade** (migrations `0024`–`0033`): foreign-currency
+  purchases with TZS books and FX, import shipments with landed cost, bulk-to-bag rebagging,
+  branch transfers with trips, charges, documents and delivery notes, late-cost adjustments
+  across all of these, pricing, and costing / operations reports. Full record:
+  [`docs/letiq-import-upgrade.md`](docs/letiq-import-upgrade.md); release:
+  [`docs/release-notes-import-upgrade.md`](docs/release-notes-import-upgrade.md),
+  [`docs/deployment-runbook-import-upgrade.md`](docs/deployment-runbook-import-upgrade.md);
+  how to use it: [`docs/user-guide-import-upgrade.md`](docs/user-guide-import-upgrade.md).
+
+Not built (out of scope): payroll, budgets, fixed-asset depreciation, purchase orders, live bank
+feeds, TRA/EFD filing, intercompany consolidation, loan schedules. Foreign currency is used
+only for purchase-origin documents (import invoices, their payments, credits and
+revaluation); sales, expenses, stock and the books stay in TZS.
 
 - Base currency: **TZS** · Timezone: **Africa/Dar_es_Salaam** · Dates: **DD/MM/YYYY**
 - Multi-company ready (starts with one company: `LETIQ`).
@@ -154,11 +170,18 @@ role/company/branch ids are never trusted.
 
 ```bash
 npm run typecheck        # tsc --noEmit
-npm run test             # pure calculation unit tests (tax, weighted-average)
-npm run test:integration # end-to-end posting test against the DB (BEGIN..ROLLBACK, no data kept)
-npm run build            # production build (webpack on this machine)
 npm run lint
+npm run test             # unit tests: tax / weighted average, attachment policy, pricing
+npm run test:db          # builds a throwaway PGlite database (all migrations + seed) and runs every
+                         # integration suite (phases 2-4, upgrade stages 0-8, the end-to-end scenario,
+                         # negative / regression cases) plus an upgrade-from-existing-data check;
+                         # needs no Supabase project and never touches DATABASE_URL
+npm run build            # production build (webpack on this machine)
 ```
+
+`npm run test:integration` / `test:phase3` / `test:phase4` run single suites against
+`DATABASE_URL` inside a rolled-back transaction — point them only at a disposable or staging
+database, never production.
 
 ---
 
@@ -421,20 +444,22 @@ are all written to `audit_logs`.
 and a customer opening through the real RPCs, and asserts trial-balance equality — inside a
 transaction that rolls back.
 
-## Out of scope (deferred)
-Payroll, budgeting/forecasting, fixed-asset depreciation, multi-currency & FX, landed cost,
-purchase orders, separate GRNs, live bank feeds, TRA/EFD filing, intercompany elimination /
-statutory consolidation, manufacturing, loan schedules.
+## Out of scope
+Payroll, budgeting/forecasting, fixed-asset depreciation, purchase orders, live bank feeds,
+TRA/EFD filing, intercompany elimination / statutory consolidation, loan schedules.
+(Foreign currency for purchase-origin documents, landed cost, goods-received notes and
+rebagging are delivered by the import upgrade — see the top of this file.)
 
 ## Phase 3 testing
 `npm run test:phase3` posts purchases (weighted-avg + recoverable-VAT split), supplier payments,
 purchase returns (price variance), expenses, other income and cash transfers through the real
 RPCs, asserting balances, funds checks and balanced journals — inside a transaction that rolls back.
 
-## Deferred to Phase 4
+## Delivered after Phase 3
 Profit & Loss, Balance Sheet, Trial Balance, General Ledger report, VAT return, bank
-reconciliation, manual journals, budgets, payroll, multi-currency, landed-cost allocation,
-purchase orders and separate goods-received notes.
+reconciliation and manual journals (Phase 4); foreign-currency purchasing, landed-cost
+allocation and import goods-received notes (import upgrade). Budgets, payroll and purchase
+orders are not built.
 
 ## Phase 1 scope
 
@@ -443,9 +468,10 @@ products, categories, brands, units, tax codes, payment accounts, other-income t
 expense categories, customers, suppliers, chart of accounts, roles & permissions, users,
 document numbering, accounting periods, audit log), unauthorized page, account/profile.
 
-**Deferred to later phases:** Purchases, Expenses, Other Income, Cash Transfers, and full
-financial reports. These appear as locked items in the sidebar and have no transaction pages.
-(Sales, Customer Payments, Inventory and Kardex are delivered in Phase 2 — see below.)
+**Delivered in later phases:** Sales, Customer Payments, Inventory and Kardex (Phase 2);
+Purchases, Expenses, Other Income and Cash Transfers (Phase 3); financial reports and controls
+(Phase 4); imports, rebagging, transfers, late costs, pricing and costing reports (import
+upgrade).
 
 ## Project structure
 
@@ -469,3 +495,19 @@ src/
 scripts/                      # migrate / seed / bootstrap-owner
 supabase/migrations/          # SQL migrations
 ```
+
+---
+
+# Import, rebagging & transfer upgrade (migrations 0024–0033)
+
+Feature flags (Admin → Feature Flags) switch each workflow on: `imports`, `rebagging`,
+`transfer_logistics`, `attachments`, `fx_settlement`. All are off after migration. Account
+mappings for automatic postings are under Admin → Account Mappings.
+
+Configuration uses the existing variables only — `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, `OWNER_EMAIL`,
+`OWNER_INITIAL_PASSWORD`, `NEXT_PUBLIC_APP_NAME`, `NEXT_PUBLIC_COMPANY_NAME` — plus a private
+Supabase Storage bucket `documents` created by migration `0025`. No new secrets.
+
+Deployment order, backups, staging validation, activation and recovery:
+[`docs/deployment-runbook-import-upgrade.md`](docs/deployment-runbook-import-upgrade.md).

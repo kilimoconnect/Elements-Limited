@@ -49,7 +49,8 @@ const GROUPS: Group[] = [
       { label: "Branches", href: "/admin/branches", description: "Locations and head office", icon: Building },
       { label: "Accounting Periods", href: "/admin/accounting-periods", description: "Financial years & status", icon: CalendarRange },
       { label: "Document Numbering", href: "/admin/document-numbering", description: "Transaction number sequences", icon: Hash },
-      { label: "Feature Flags", href: "/admin/feature-flags", description: "Switch staged workflows on or off", icon: ToggleRight },
+      { label: "Feature Flags", href: "/admin/feature-flags", description: "Switch workflows on or off", icon: ToggleRight },
+      { label: "Account Mappings", href: "/admin/account-mappings", description: "GL accounts used by automatic postings", icon: Hash },
     ],
   },
   {

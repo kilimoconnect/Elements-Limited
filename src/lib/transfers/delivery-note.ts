@@ -54,7 +54,7 @@ export function renderDeliveryNote(s: DeliveryNoteSnapshot, v: { version: number
   kv(L, "Delivery note ref.", s.reference);
   kv(L + 130, "Transfer no.", s.transfer_number ?? "-");
   kv(L + 240, "Trip", String(s.trip_no), 60);
-  kv(L + 300, "Dispatch date", fmtDate(s.dispatched_at ?? s.dispatch_date), 110);
+  kv(L + 300, "Dispatch date", fmtDate(s.dispatch_date), 110);
   kv(L + 415, "Expected arrival", fmtDate(s.expected_arrival_at), 100);
   y -= 30;
 
