@@ -200,7 +200,9 @@ export async function createTransferDraft(input: {
   expectedDate?: string;
   reference?: string;
   notes?: string;
-  lines: { product_id: string; qty_requested: number }[];
+  sourceLocation?: string;
+  destinationLocation?: string;
+  lines: { product_id: string; qty_requested: number; batch_reference?: string }[];
 }): Promise<RpcResult> {
   try {
     const user = await assertActiveUser();
@@ -221,13 +223,14 @@ export async function createTransferDraft(input: {
       company_id: ctx.companyId, source_branch_id: input.sourceBranchId,
       destination_branch_id: input.destinationBranchId, transfer_date: input.transferDate,
       expected_date: input.expectedDate || null, reference: input.reference || null,
-      notes: input.notes || null, created_by: user.id, updated_by: user.id,
+      notes: input.notes || null, source_location: input.sourceLocation || null, destination_location: input.destinationLocation || null,
+      created_by: user.id, updated_by: user.id,
     }).select("id").single();
     if (error) return { ok: false, error: error.message };
     const tId = data.id;
     await admin.from("stock_transfer_lines").insert(
       input.lines.map((l, i) => ({
-        transfer_id: tId, product_id: l.product_id, qty_requested: l.qty_requested, line_no: i + 1,
+        transfer_id: tId, product_id: l.product_id, qty_requested: l.qty_requested, batch_reference: l.batch_reference || null, line_no: i + 1,
       })),
     );
     await writeAuditLog({ userId: user.id, companyId: ctx.companyId, action: "inventory.transfer_draft", resourceType: "stock_transfer", resourceId: tId });
@@ -242,7 +245,8 @@ export async function dispatchTransfer(id: string): Promise<RpcResult> {
   try {
     const user = await assertActiveUser();
     assertPermission(user, "inventory.transfer_dispatch");
-    const res = await callPostingRpc("dispatch_stock_transfer", { p_id: id, p_user: user.id, p_idem: randomUUID() });
+    // Stable key: a double click or retry replays the first dispatch (branch checked in the database).
+    const res = await callPostingRpc("dispatch_stock_transfer", { p_id: id, p_user: user.id, p_idem: `dispatch_stock_transfer:${id}` });
     if (res.ok) {
       await writeAuditLog({ userId: user.id, action: "inventory.transfer_dispatch", resourceType: "stock_transfer", resourceId: id });
       revalidatePath("/inventory/transfers"); revalidatePath(`/inventory/transfers/${id}`); revalidatePath("/inventory");
@@ -253,12 +257,13 @@ export async function dispatchTransfer(id: string): Promise<RpcResult> {
   }
 }
 
-export async function receiveTransfer(id: string, lines: { line_id: string; qty: number }[]): Promise<RpcResult> {
+export async function receiveTransfer(id: string, lines: { line_id: string; qty: number }[], requestId: string): Promise<RpcResult> {
   try {
     const user = await assertActiveUser();
     assertPermission(user, "inventory.transfer_receive");
     const res = await callPostingRpc("receive_stock_transfer", {
-      p_id: id, p_user: user.id, p_lines: lines, p_idem: randomUUID(),
+      // One key per receipt form: a resubmitted form posts once.
+      p_id: id, p_user: user.id, p_lines: lines, p_idem: requestId && requestId.length >= 16 ? requestId : randomUUID(),
     });
     if (res.ok) {
       await writeAuditLog({ userId: user.id, action: "inventory.transfer_receive", resourceType: "stock_transfer", resourceId: id });

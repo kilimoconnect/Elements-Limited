@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { assertActiveUser } from "@/lib/auth/guards";
 import { writeAuditLog } from "@/lib/audit";
 import {
-  ATTACHMENT_BUCKET, CATEGORIES, FINANCIAL_CATEGORIES, OWNER_TYPES, SIGNED_URL_TTL_SECONDS,
+  ATTACHMENT_BUCKET, CATEGORIES, OWNER_TYPES, SIGNED_URL_TTL_SECONDS, categoryPermission,
   safeDownloadName, storagePath, validateAttachment,
   type AttachmentCategory, type OwnerType,
 } from "./policy";
@@ -96,8 +96,8 @@ export async function listAttachments(ownerType: OwnerType, ownerId: string): Pr
   const { data } = await admin.from("document_attachments")
     .select("id, category, download_name, content_type, size_bytes, version, supersedes_id, uploaded_by, uploaded_at")
     .eq("owner_type", ownerType).eq("owner_id", ownerId).order("uploaded_at");
-  const financialOk = user.isOwner || user.permissions.has("documents.view_financial");
-  const rows = ((data ?? []) as AttachmentRow[]).filter((r) => financialOk || !FINANCIAL_CATEGORIES.includes(r.category));
+  // Financial and licence documents only with their permission.
+  const rows = ((data ?? []) as AttachmentRow[]).filter((r) => { const need = categoryPermission(r.category); return !need || user.isOwner || user.permissions.has(need); });
   return { ok: true, data: rows };
 }
 
@@ -113,8 +113,8 @@ export async function attachmentDownloadUrl(attachmentId: string): Promise<Resul
     .eq("id", attachmentId).maybeSingle();
   if (!row) return { ok: false, error: "Not found." };
   if (!(await canAccessOwner(user.id, row.owner_type as OwnerType, row.owner_id))) return { ok: false, error: "Not authorised." };
-  if (FINANCIAL_CATEGORIES.includes(row.category as AttachmentCategory)
-      && !(user.isOwner || user.permissions.has("documents.view_financial"))) {
+  const need = categoryPermission(row.category);
+  if (need && !(user.isOwner || user.permissions.has(need))) {
     return { ok: false, error: "Not authorised." };
   }
   const { data, error } = await admin.storage.from(ATTACHMENT_BUCKET)

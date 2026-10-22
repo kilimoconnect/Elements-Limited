@@ -28,11 +28,11 @@ actually run, and what remains. Updated at the end of every stage.
 | 0 | Foundation: clean-install defaults fix, new system accounts, cost-category rules, currencies + exchange rates, kg base weight and product stock roles, PGlite test harness | **Done 21/10/2026** (record below) |
 | 1 | Investigation of the actual code + integrated design (this section) | **Done 21/10/2026** — documentation only, no behaviour change |
 | 2 | Shared foundations and secure posting primitives (schema, allocation engine, actor checks, idempotency, registry, account mappings, feature flags, attachments) | **Done 21/10/2026** (record below) |
-| 2b | Remaining hardening from Stage 1: fix void/transfer subledger drift (D1, D2, D5), goods-in-transit 1155 on transfers, branch enforcement in the existing transfer actions (D3), caller-supplied idempotency keys in existing server actions (D4), lot maintenance with an "untracked" lot for existing stock | Not started — recommended before Stage 3 posts anything |
+| 2b | Remaining hardening from Stage 1: fix void/transfer subledger drift (D1, D2, D5), goods-in-transit 1155 on transfers, branch enforcement in the existing transfer actions (D3), caller-supplied idempotency keys in existing server actions (D4), lot maintenance with an "untracked" lot for existing stock | Partly: D2, D3 and D4 for transfers fixed in Stage 6; D1 (openings / adjustments), D5 and D4 elsewhere still open |
 | 3 | Foreign purchases with TZS books: foreign purchase invoices, foreign supplier balances (original currency + TZS carrying), settlements through TZS accounts with realised FX, advances, bank charges, period-end revaluation, foreign returns and credits, currency confinement | **Done 21/10/2026** (record below) |
 | 4 | Import shipments: shipment + lines, title (ownership) event, goods invoice via `purchases` invoice-only mode, GR/IR clearing, cost sources (estimate → accrual → actual) and `cost_invoices`, allocations, goods receipt (GRN) with discrepancy resolution, late-cost propagation for import lots | **Done 21/10/2026** (record below; screens not yet walked through in a browser) |
 | 5 | Rebagging orders (multi-size outputs, packaging materials, normal/abnormal loss, unused bulk) + propagation through conversion | **Done 22/10/2026** (record below; screens not yet run in a browser) |
-| 6 | Transfer upgrade: logistics details, charges, Storage attachments, versioned delivery notes, partial receipts with signed POD, discrepancy approval, shared in-transit view + propagation through transfers | Not started |
+| 6 | Transfer upgrade: logistics details, charges, Storage attachments, versioned delivery notes, partial receipts with signed POD, discrepancy approval, shared in-transit view + propagation through transfers | **Done 22/10/2026** (record below; screens not yet run in a browser) |
 | 7 | Commercial (pricing) cost view and import / landed-cost reports | Not started |
 
 Each stage extends the existing posting services (`record_stock_movement`,
@@ -40,6 +40,158 @@ Each stage extends the existing posting services (`record_stock_movement`,
 payables, transfers) rather than adding a parallel ERP.
 
 ---
+
+## Stage 6 — Transfer costs and complete dispatch file (implemented)
+
+Migration `0030_transfer_logistics.sql` (additive: new tables / columns,
+wider checks, replaced functions; no data re-posted) plus the reworked
+Inventory → Stock Transfers / In Transit screens. It builds on the existing
+stock transfer: one shared transfer, seen by the sending and the receiving
+branch.
+
+### Behaviour
+
+- **Accounting (fixes Stage 1 D2 for every transfer dispatched from now on).**
+  Dispatch: Dr 1155 stock in transit / Cr 1150 at the source weighted average.
+  Receipt: Dr 1150 / Cr 1155 for the accepted quantity at its trip's value,
+  including charges applied so far; the destination average updates through
+  the normal weighted-average receipt. No revenue or margin is posted.
+  Transfers already in transit before 0030 keep the original behaviour
+  (`posts_in_transit = false`, value stays in 1150) and are still receivable.
+- **Trips.** A transfer can travel on several trips
+  (`stock_transfer_dispatches`). Each trip has its own driver (name, phone,
+  licence number), truck and trailer, transporter and contact, dispatch date,
+  expected and actual arrival, cargo lines (quantity, net kg, value) and
+  receipts. Each trip keeps its own value pool, so it can be reversed exactly.
+  Dispatched quantities are locked; over-dispatch beyond the request is
+  refused. Several agents (name, company, phone, role) per transfer.
+- **Receipts** (`receive_transfer_trip`, receiving branch only) split arrived
+  cargo into **accepted** (into stock), **quarantined / damaged** and
+  **short**. Quarantined and short cargo stay in 1155, not saleable, until an
+  approver (`inventory.transfer_resolve`) resolves them:
+  release / found (into stock), **normal loss** (only within the product's
+  transfer loss tolerance %; absorbed into destination stock), **write-off**
+  (6300) or **claim** (1145). Abnormal shortages are never spread over
+  accepted goods. Partial receipts per trip; a repeated request returns the
+  first receipt.
+- **Charges** (loading, transport, offloading, other) are cost sources on the
+  transfer or on one trip. Estimates post nothing; accruals are explicit
+  (`accrue_transfer_cost`, `inventory.transfer_cost`); supplier invoices —
+  including the receiver's offloading invoice — post through Cost Invoices.
+  The actual replaces the accrual and only the difference moves cost; a charge
+  takes one actual invoice. Allocation by **net kg** by default (not equally
+  per bag across mixed sizes), or by value, units, or directly to lines. A
+  charge follows the cargo: in transit → 1155; accepted → the destination
+  stock and wherever it went since; normal loss → destination stock; written
+  off / claimed → 6300. Cost status (estimated / provisional / finalized /
+  adjusted) is independent of the logistics status.
+- **Corrections.** A trip with nothing received and no charge applied can be
+  voided (`transactions.void`): its exact value returns to the source. Driver
+  / vehicle changes after dispatch keep the previous details and the reason
+  (`stock_transfer_dispatch_changes`). Received cargo is corrected through
+  resolutions or a return transfer.
+- **Delivery notes.** `issue_delivery_note` stores a snapshot per trip in
+  `document_versions` (with a SHA-256): a new version only when the content
+  changed; old versions stay. The PDF (company identity, references,
+  sender / receiver, dates, items, quantities, units, net kg, driver, vehicle,
+  agents, signature spaces) is rendered from the snapshot by a built-in PDF
+  writer (`src/lib/pdf/simple-pdf.ts`; no new dependency) at
+  `/api/transfers/delivery-notes/<version>`. It shows no costs and no licence
+  number; issuing or downloading posts nothing.
+- **Documents.** Trips own attachments: driver licence, cargo papers / B/L,
+  loading photos, weighbridge tickets, transport invoice, signed delivery
+  note, offloading photos, other — in the Stage 2 private bucket with
+  versions. Licence images need the new `documents.view_licence`; transport
+  invoices need `documents.view_financial`. Links are short-lived and re-checked
+  on every request.
+- **Visibility.** Row-level security now limits transfers and everything
+  under them to users of the sending or receiving branch (Owner: all); the
+  server actions and database functions check the acting branch too (fixes
+  Stage 1 D3). Licence numbers are not readable by app users directly (column
+  grants); screens show them only with `documents.view_licence`. Costs show
+  only with `inventory.view_cost`.
+- **In transit view.** List of open transfers for both branches with trips,
+  driver / vehicle contacts, departure / ETA, dispatched / received /
+  outstanding, held (quarantined / short) quantities, discrepancy status and
+  latest update; detail with cargo per trip, receipts and resolutions,
+  timeline (dispatch, charges, receipts, delivery notes, manual updates),
+  agents, charges (finance only) and documents. Positions are as recorded by
+  the branches — there is no live GPS tracking.
+- **Retry safety (Stage 1 D4 for transfers).** Stable keys for dispatch, trip
+  dispatch, receipts (per form), resolutions, voids and accruals.
+- **Reports.** Inventory valuation reconciles 1150 with branch stock plus
+  rebagging work in progress and pre-upgrade transfers in transit; the period
+  checks add "stock in transit vs 1155".
+
+### Acceptance (actual results, `scripts/itest-import6.ts`)
+
+- 1,000 bags at TZS 46,500 dispatched (Dr 1155 / Cr 1150 46.5M); loading
+  200,000 (trip, accrued) + transport 1,500,000 (accrued) + offloading
+  300,000 (receiver's supplier invoice) → **receipt value TZS 48,500,000,
+  48,500 per bag**; with 500 bags worth 25,000,000 already at Mwanza the new
+  average is **73,500,000 / 1,500 = TZS 49,000**. A later transport invoice of
+  1.6M moves only +100k into the bags held.
+- Two trips with their own drivers; partial receipt 180 accepted / 10
+  quarantined / 10 short at exactly 20,000 each (shortage not spread);
+  release 6, write-off 4, normal loss 4 (2% tolerance enforced), claim 6;
+  every bag reconciles (300 = 286 accepted + 14 lost); 6300, 1145 and stock
+  values as expected; duplicate receipt requests post once.
+- Void of an unreceived trip returns the exact value; a received trip cannot
+  be voided; driver change keeps old values and reason.
+- Delivery note: v1 reused while unchanged, v2 after a change; no licence or
+  costs in the content; the PDF is valid, deterministic and contains the
+  reference, quantities and signature spaces; issuing posts nothing; an
+  unrelated branch cannot issue it.
+- Attachments: sender loading photos, receiver signed delivery note,
+  versioning; storekeepers refused for licence images and transport
+  invoices; unrelated branch denied.
+- RLS: sender and receiver see the same transfer, trips, cargo, timeline,
+  agents and receipts; an unrelated-branch user sees none; licence column not
+  readable; cross-company transfer rejected.
+- Reconciliation: journals balance; 1150 = stock subledger; 1155 = value on
+  trips in transit; 2140 = accrued charges; line totals = their trips.
+
+### Checks actually run (22/10/2026)
+
+| Check | Result |
+| --- | --- |
+| `npx tsc --noEmit` | Clean |
+| `npm run lint` | Same 20 problems (11 errors, 9 warnings) in files not touched by Stage 6; Stage 6 files lint clean |
+| `npm run test:db` | All pass: 19 + 26 + 11 + 51 + 114 + 79 + 58 + 50 + **59 (Stage 6)** + **22 upgrade-path** (2 new: a pre-0030 transfer keeps the old engine and is still receivable without journals) |
+| `npm test` | 25 attachment policy checks pass |
+| Breakage: charges not added to cargo in transit | 6 checks failed (incl. both acceptance values); restored |
+| Breakage: normal-loss tolerance not checked | Tolerance check failed; restored |
+| Breakage: transfer RLS back to company-wide | Unrelated-branch check failed; restored byte-for-byte, suite green |
+
+### Decisions and assumptions
+
+- Pre-0030 transfers in transit are not reclassified to 1155 (no migration
+  journals); they finish on the original engine and are shown separately in
+  the valuation reconciliation.
+- Each trip line keeps its own value pool; charges on the whole transfer are
+  spread over the trips dispatched so far (later trips take only their own
+  trip charges).
+- A charge needs at least one dispatched trip before it can be accrued or
+  invoiced.
+- Claims are booked at carrying value to 1145; any settlement difference is a
+  later finance entry. Late costs on claimed / written-off units go to 6300.
+- New permissions: `inventory.transfer_cost` (Director, Accountant),
+  `documents.view_licence` (Director; Owner has all). The menu item needs
+  `inventory.transfer_view`.
+
+### Limitations
+
+- Screens type-check and lint clean but have **not** been run in a browser
+  (production is the only configured database).
+- Concurrency tested as repeated / retried calls only (single-connection
+  test database).
+- The delivery note uses standard PDF fonts (Latin characters) and no logo
+  image.
+- Historical (past-date) inventory valuation cannot separate rebagging work
+  in progress or legacy transit; the reconciliation adjustment applies to the
+  current position.
+- A trip that received a charge cannot be voided; credit the charge first.
+- Not applied to the live database; not pushed.
 
 ## Stage 5 — Bulk-to-bag rebagging (implemented)
 

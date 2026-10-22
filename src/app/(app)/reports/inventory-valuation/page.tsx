@@ -29,7 +29,8 @@ export default async function InventoryValuationPage(props: { searchParams: Prom
       <Card className="report-card mb-4"><CardContent className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
         <div>Total inventory value: <span className="font-semibold tabular-nums">{formatMoney(data.total)}</span></div>
         <div className="flex items-center gap-2">Inventory GL (1150): <span className="tabular-nums">{formatMoney(data.control)}</span>
-          {data.reconciled ? <Badge variant="success">Reconciled</Badge> : <Badge variant="destructive">Difference {formatMoney(data.total - data.control)}</Badge>}</div>
+          {data.reconciled ? <Badge variant="success">Reconciled</Badge> : <Badge variant="destructive">Difference {formatMoney(data.total + data.held - data.control)}</Badge>}</div>
+        {data.held > 0 && <p className="w-full text-xs text-muted-foreground">Includes {formatMoney(data.held)} held outside branch stock (rebagging in production; transfers dispatched before the upgrade). Stock in transit between branches is in 1155.</p>}
       </CardContent></Card>
       {data.rows.length === 0 ? <EmptyState title="No stock on hand" /> : (
         <div className="report-card rounded-lg border border-border bg-card">

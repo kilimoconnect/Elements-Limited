@@ -146,6 +146,15 @@ async function main() {
     (await db.query(`select 1 from stock_transfer_lines where transfer_id=$1 and company_id=$2`, [tr, co])).rows.length === 1);
   check("existing transfer keeps its status",
     (await db.query<{ s: string }>(`select status s from stock_transfers where id=$1`, [tr])).rows[0].s === "dispatched");
+  // Stage 6: a transfer already in transit keeps the original in-1150 behaviour and can still be received.
+  check("transfer dispatched before 0030 stays on the original engine (no 1155, no trips)",
+    (await db.query<{ p: boolean }>(`select posts_in_transit p from stock_transfers where id=$1`, [tr])).rows[0].p === false
+    && (await db.query(`select 1 from stock_transfer_dispatches where transfer_id=$1`, [tr])).rows.length === 0);
+  const trLine = (await db.query<{ id: string }>(`select id from stock_transfer_lines where transfer_id=$1`, [tr])).rows[0].id;
+  await db.query(`select receive_stock_transfer($1,$2,$3::jsonb,'upgrade-transfer-recv-1')`, [tr, owner, JSON.stringify([{ line_id: trLine, qty: 3 }])]);
+  check("that transfer is still receivable after the upgrade, without journals (as before)",
+    (await db.query<{ s: string }>(`select status s from stock_transfers where id=$1`, [tr])).rows[0].s === "received"
+    && (await db.query(`select 1 from journal_entries where source_id=$1`, [tr])).rows.length === 0);
   check("existing purchases stay stock_on_post / TZS",
     Number((await db.query<{ n: string }>(
       `select count(*) n from purchases where posting_mode <> 'stock_on_post' or currency_code <> 'TZS' or exchange_rate <> 1`)).rows[0].n) === 0);

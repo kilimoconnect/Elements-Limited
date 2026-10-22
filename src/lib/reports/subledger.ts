@@ -218,7 +218,31 @@ export async function inventoryValuation(companyId: string, branchId: string | n
   }
   const total = round2(rows.reduce((s, r) => s + r.value, 0));
   const control = await accountBalanceByCode(companyId, "1150", asOf);
-  return { rows, total, control, reconciled: Math.abs(total - control) < 0.05 };
+  // Value held in 1150 outside the stock balances (current position only):
+  // bulk issued to rebagging orders still in production, and transfers
+  // dispatched before the transfer upgrade (their in-transit value stayed in 1150).
+  let held = 0;
+  if (isToday && !branchId) {
+    const [{ data: wip }, { data: legacy }] = await Promise.all([
+      admin.from("rebag_orders").select("issued_value").eq("company_id", companyId).eq("document_status", "issued"),
+      admin.from("stock_transfers").select("lines:stock_transfer_lines(qty_dispatched, qty_received, unit_cost)").eq("company_id", companyId)
+        .eq("posts_in_transit", false).in("status", ["dispatched", "partially_received"]),
+    ]);
+    held = round2((wip ?? []).reduce((a, r) => a + N(r.issued_value), 0)
+      + ((legacy ?? []) as unknown as { lines: { qty_dispatched: number; qty_received: number; unit_cost: number }[] }[])
+        .reduce((a, t) => a + t.lines.reduce((b, l) => b + round2((N(l.qty_dispatched) - N(l.qty_received)) * N(l.unit_cost)), 0), 0));
+  }
+  return { rows, total, held, control, reconciled: Math.abs(total + held - control) < 0.05 };
+}
+
+/** Goods in transit between branches (1155) vs the value on trips not yet received. Current position. */
+export async function goodsInTransit(companyId: string, asOf: string) {
+  const admin = createAdminClient();
+  const { data } = await admin.from("stock_transfer_dispatch_lines")
+    .select("transit_value, trip:stock_transfer_dispatches!inner(company_id, status)").eq("trip.company_id", companyId).not("trip.status", "in", "(draft,voided)");
+  const total = round2(((data ?? []) as { transit_value: number }[]).reduce((a, r) => a + N(r.transit_value), 0));
+  const control = await accountBalanceByCode(companyId, "1155", asOf);
+  return { total, control, reconciled: Math.abs(total - control) < 0.05 };
 }
 
 /* --------------------------- Statements --------------------------------- */
@@ -326,7 +350,9 @@ export async function reconciliationControls(companyId: string, asOf: string) {
   const ap = await payablesAgeing(companyId, asOf);
   add("ap", "Supplier payables vs A/P", ap.total, ap.control);
   const inv = await inventoryValuation(companyId, null, asOf, true);
-  add("inv", "Inventory valuation vs Inventory GL", inv.total, inv.control);
+  add("inv", "Inventory valuation (+ work in progress, legacy transit) vs Inventory GL", round2(inv.total + inv.held), inv.control);
+  const git = await goodsInTransit(companyId, asOf);
+  add("git", "Stock in transit between branches vs 1155", git.total, git.control);
 
   // Journal debits vs credits (global)
   const { data: je } = await admin.rpc("report_trial_balance", { p_company: companyId, p_start: "1900-01-01", p_end: asOf });

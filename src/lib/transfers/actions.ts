@@ -1,0 +1,289 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { assertActiveUser, assertPermission } from "@/lib/auth/guards";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { writeAuditLog } from "@/lib/audit";
+import { getActiveContext } from "@/lib/context";
+import { isFeatureEnabled } from "@/lib/features";
+import { callPostingRpc, type RpcResult } from "@/lib/rpc";
+import { round2 } from "@/lib/sales/calc";
+
+/*
+ * Transfer trips, receipts, discrepancies, charges and the shared dispatch file.
+ * Every posting runs in a database function that re-checks the user, the
+ * permission and the sending / receiving branch; these actions add company
+ * scoping, input checks and stable retry keys.
+ */
+
+type Admin = ReturnType<typeof createAdminClient>;
+const fail = (e: unknown): RpcResult => ({ ok: false, error: e instanceof Error ? e.message : "Failed." });
+
+async function ctxFor(permission: string) {
+  const user = await assertActiveUser();
+  assertPermission(user, permission);
+  const ctx = await getActiveContext();
+  return { user, ctx, admin: createAdminClient() };
+}
+type U = Awaited<ReturnType<typeof assertActiveUser>>;
+async function loadTransfer(admin: Admin, id: string, companyId: string, user: U) {
+  const { data } = await admin.from("stock_transfers").select("id, company_id, source_branch_id, destination_branch_id, status, posts_in_transit, document_number").eq("id", id).maybeSingle();
+  if (!data || data.company_id !== companyId) throw new Error("Transfer not found.");
+  if (!user.isOwner && !user.branchIds.includes(data.source_branch_id) && !user.branchIds.includes(data.destination_branch_id)) {
+    throw new Error("Only the sending and receiving branches can work on this transfer.");
+  }
+  return data as { id: string; company_id: string; source_branch_id: string; destination_branch_id: string; status: string; posts_in_transit: boolean; document_number: string | null };
+}
+async function loadTrip(admin: Admin, tripId: string, companyId: string, user: U) {
+  const { data } = await admin.from("stock_transfer_dispatches").select("id, transfer_id, status, document_number, trip_no").eq("id", tripId).maybeSingle();
+  if (!data) throw new Error("Trip not found.");
+  const t = await loadTransfer(admin, data.transfer_id, companyId, user);
+  return { trip: data as { id: string; transfer_id: string; status: string; document_number: string | null; trip_no: number }, t };
+}
+function refresh(transferId: string) {
+  ["/inventory/transfers", "/inventory", "/dashboard"].forEach((p) => revalidatePath(p));
+  revalidatePath(`/inventory/transfers/${transferId}`);
+}
+const reqOk = (r: string) => typeof r === "string" && r.length >= 16;
+
+export interface TripInput {
+  transferId: string; dispatchDate: string; expectedArrivalAt?: string | null;
+  driverName?: string; driverPhone?: string; driverLicence?: string; vehicleRegistration?: string; trailerRegistration?: string;
+  transporterName?: string; transporterContact?: string; notes?: string; requestId: string;
+  lines: { transfer_line_id: string; qty: number }[];
+}
+
+/** Create a draft trip (cargo + driver / vehicle). Dispatching it posts stock. */
+export async function createTrip(input: TripInput): Promise<RpcResult> {
+  try {
+    const { user, ctx, admin } = await ctxFor("inventory.transfer_dispatch");
+    const t = await loadTransfer(admin, input.transferId, ctx.companyId, user);
+    if (!user.isOwner && !user.branchIds.includes(t.source_branch_id)) return { ok: false, error: "Only the sending branch prepares trips." };
+    if (!t.posts_in_transit) return { ok: false, error: "This transfer was dispatched before the upgrade and cannot take new trips." };
+    if (t.status === "voided") return { ok: false, error: "Transfer is voided." };
+    if (!reqOk(input.requestId)) return { ok: false, error: "Missing request id; reload the page." };
+    const { data: prior } = await admin.from("stock_transfer_dispatches").select("id").eq("company_id", ctx.companyId).eq("client_request_id", input.requestId).maybeSingle();
+    if (prior) return { ok: true, id: prior.id };
+    const lines = input.lines.filter((l) => l.qty > 0);
+    if (lines.length === 0) return { ok: false, error: "Enter the quantity loaded on this trip." };
+    const { data: tl } = await admin.from("stock_transfer_lines").select("id, transfer_id, qty_requested, qty_dispatched").in("id", lines.map((l) => l.transfer_line_id));
+    const tm = new Map((tl ?? []).map((x) => [x.id, x]));
+    for (const l of lines) {
+      const x = tm.get(l.transfer_line_id);
+      if (!x || x.transfer_id !== t.id) return { ok: false, error: "A cargo line is not part of this transfer." };
+    }
+    const { data: last } = await admin.from("stock_transfer_dispatches").select("trip_no").eq("transfer_id", t.id).order("trip_no", { ascending: false }).limit(1);
+    const { data: trip, error } = await admin.from("stock_transfer_dispatches").insert({
+      company_id: ctx.companyId, transfer_id: t.id, trip_no: (last?.[0]?.trip_no ?? 0) + 1, dispatch_date: input.dispatchDate,
+      expected_arrival_at: input.expectedArrivalAt || null, driver_name: input.driverName || null, driver_phone: input.driverPhone || null,
+      driver_licence: input.driverLicence || null, vehicle_registration: input.vehicleRegistration || null, trailer_registration: input.trailerRegistration || null,
+      transporter_name: input.transporterName || null, transporter_contact: input.transporterContact || null, notes: input.notes || null,
+      client_request_id: input.requestId, created_by: user.id,
+    }).select("id").single();
+    if (error) return { ok: false, error: error.message };
+    const { error: lErr } = await admin.from("stock_transfer_dispatch_lines").insert(lines.map((l) => ({
+      company_id: ctx.companyId, dispatch_id: trip.id, transfer_line_id: l.transfer_line_id, qty: l.qty,
+    })));
+    if (lErr) { await admin.from("stock_transfer_dispatches").delete().eq("id", trip.id); return { ok: false, error: lErr.message }; }
+    await writeAuditLog({ userId: user.id, companyId: ctx.companyId, branchId: t.source_branch_id, action: "transfer.trip_create", resourceType: "stock_transfer_dispatch", resourceId: trip.id });
+    refresh(t.id);
+    return { ok: true, id: trip.id };
+  } catch (e) { return fail(e); }
+}
+
+export async function deleteDraftTrip(tripId: string): Promise<RpcResult> {
+  try {
+    const { user, ctx, admin } = await ctxFor("inventory.transfer_dispatch");
+    const { trip, t } = await loadTrip(admin, tripId, ctx.companyId, user);
+    if (trip.status !== "draft") return { ok: false, error: "Only a draft trip can be deleted." };
+    const { error } = await admin.from("stock_transfer_dispatches").delete().eq("id", tripId).eq("status", "draft");
+    if (error) return { ok: false, error: error.message };
+    await writeAuditLog({ userId: user.id, companyId: ctx.companyId, action: "transfer.trip_delete", resourceType: "stock_transfer_dispatch", resourceId: tripId });
+    refresh(t.id);
+    return { ok: true };
+  } catch (e) { return fail(e); }
+}
+
+export async function dispatchTrip(tripId: string): Promise<RpcResult> {
+  try {
+    const { user, ctx, admin } = await ctxFor("inventory.transfer_dispatch");
+    const { t } = await loadTrip(admin, tripId, ctx.companyId, user);
+    const res = await callPostingRpc("dispatch_transfer_trip", { p_dispatch: tripId, p_user: user.id, p_idem: `dispatch_transfer_trip:${tripId}` });
+    if (!res.ok) return res;
+    await writeAuditLog({ userId: user.id, companyId: ctx.companyId, branchId: t.source_branch_id, action: "transfer.trip_dispatch", resourceType: "stock_transfer_dispatch", resourceId: tripId });
+    refresh(t.id);
+    return { ok: true, id: tripId };
+  } catch (e) { return fail(e); }
+}
+
+export async function receiveTrip(input: {
+  tripId: string; arrivedAt: string | null; notes?: string; signedBy?: string; requestId: string;
+  lines: { dispatch_line_id: string; accepted: number; quarantined: number; short: number }[];
+}): Promise<RpcResult> {
+  try {
+    const { user, ctx, admin } = await ctxFor("inventory.transfer_receive");
+    const { t } = await loadTrip(admin, input.tripId, ctx.companyId, user);
+    if (!reqOk(input.requestId)) return { ok: false, error: "Missing request id; reload the page." };
+    const lines = input.lines.filter((l) => l.accepted + l.quarantined + l.short > 0);
+    if (lines.length === 0) return { ok: false, error: "Enter what arrived." };
+    if (lines.some((l) => [l.accepted, l.quarantined, l.short].some((v) => !(v >= 0)))) return { ok: false, error: "Quantities cannot be negative." };
+    const res = await callPostingRpc("receive_transfer_trip", {
+      p_dispatch: input.tripId, p_user: user.id, p_lines: lines, p_arrived_at: input.arrivedAt || null, p_notes: input.notes || null,
+      p_signed_by: input.signedBy || null, p_request: input.requestId, p_idem: `receive_transfer_trip:${input.requestId}`,
+    });
+    if (!res.ok) return res;
+    await writeAuditLog({ userId: user.id, companyId: ctx.companyId, branchId: t.destination_branch_id, action: "transfer.trip_receive", resourceType: "stock_transfer_receipt", resourceId: res.id ?? input.tripId });
+    refresh(t.id);
+    return res;
+  } catch (e) { return fail(e); }
+}
+
+export async function resolveDiscrepancy(input: {
+  receiptLineId: string; kind: "quarantine" | "short"; resolution: "release" | "found" | "normal_loss" | "write_off" | "claim";
+  qty: number; notes?: string; requestId: string;
+}): Promise<RpcResult> {
+  try {
+    const { user, ctx, admin } = await ctxFor(input.resolution === "found" ? "inventory.transfer_receive" : "inventory.transfer_resolve");
+    const { data: rl } = await admin.from("stock_transfer_receipt_lines").select("id, company_id, receipt:stock_transfer_receipts(transfer_id)").eq("id", input.receiptLineId).maybeSingle();
+    const transferId = (rl as unknown as { receipt: { transfer_id: string } | null } | null)?.receipt?.transfer_id;
+    if (!rl || rl.company_id !== ctx.companyId || !transferId) return { ok: false, error: "Receipt line not found." };
+    const t = await loadTransfer(admin, transferId, ctx.companyId, user);
+    if (!reqOk(input.requestId)) return { ok: false, error: "Missing request id; reload the page." };
+    const res = await callPostingRpc("resolve_transfer_discrepancy", {
+      p_receipt_line: input.receiptLineId, p_kind: input.kind, p_resolution: input.resolution, p_qty: input.qty, p_notes: input.notes || null,
+      p_user: user.id, p_idem: `resolve_transfer_discrepancy:${input.requestId}`,
+    });
+    if (!res.ok) return res;
+    await writeAuditLog({ userId: user.id, companyId: ctx.companyId, branchId: t.destination_branch_id, action: "transfer.discrepancy_resolve",
+      resourceType: "stock_transfer_receipt_line", resourceId: input.receiptLineId, newValues: { kind: input.kind, resolution: input.resolution, qty: input.qty } });
+    refresh(t.id);
+    return res;
+  } catch (e) { return fail(e); }
+}
+
+export async function voidTrip(tripId: string, reason: string): Promise<RpcResult> {
+  try {
+    const { user, ctx, admin } = await ctxFor("transactions.void");
+    const { t } = await loadTrip(admin, tripId, ctx.companyId, user);
+    if (!reason?.trim()) return { ok: false, error: "Enter the reason." };
+    const res = await callPostingRpc("void_transfer_trip", { p_dispatch: tripId, p_user: user.id, p_reason: reason.trim(), p_idem: `void_transfer_trip:${tripId}` });
+    if (!res.ok) return res;
+    await writeAuditLog({ userId: user.id, companyId: ctx.companyId, action: "transfer.trip_void", resourceType: "stock_transfer_dispatch", resourceId: tripId, reason });
+    refresh(t.id);
+    return res;
+  } catch (e) { return fail(e); }
+}
+
+export async function changeTripTransport(tripId: string, changes: Record<string, string>, reason: string): Promise<RpcResult> {
+  try {
+    const { user, ctx, admin } = await ctxFor("inventory.transfer_dispatch");
+    const { t } = await loadTrip(admin, tripId, ctx.companyId, user);
+    const clean = Object.fromEntries(Object.entries(changes).filter(([, v]) => v !== undefined));
+    if (Object.keys(clean).length === 0) return { ok: false, error: "Nothing changed." };
+    if ("driver_licence" in clean && !(user.isOwner || user.permissions.has("documents.view_licence"))) {
+      return { ok: false, error: "Only users allowed to see licences can change the licence number." };
+    }
+    const res = await callPostingRpc("change_transfer_trip_transport", { p_dispatch: tripId, p_user: user.id, p_changes: clean, p_reason: reason });
+    if (!res.ok) return res;
+    await writeAuditLog({ userId: user.id, companyId: ctx.companyId, action: "transfer.trip_transport_change", resourceType: "stock_transfer_dispatch", resourceId: tripId, reason });
+    refresh(t.id);
+    return res;
+  } catch (e) { return fail(e); }
+}
+
+export async function addTransferUpdate(transferId: string, tripId: string | null, note: string): Promise<RpcResult> {
+  try {
+    const { user, ctx, admin } = await ctxFor("inventory.transfer_view");
+    await loadTransfer(admin, transferId, ctx.companyId, user);
+    const res = await callPostingRpc("add_transfer_update", { p_transfer: transferId, p_dispatch: tripId, p_user: user.id, p_note: note });
+    if (!res.ok) return res;
+    refresh(transferId);
+    return { ok: true };
+  } catch (e) { return fail(e); }
+}
+
+export async function addAgent(transferId: string, agent: { name: string; company?: string; phone?: string; role?: string }): Promise<RpcResult> {
+  try {
+    const { user, ctx, admin } = await ctxFor("inventory.transfer_view");
+    const t = await loadTransfer(admin, transferId, ctx.companyId, user);
+    if (!(user.isOwner || user.permissions.has("inventory.transfer_dispatch") || user.permissions.has("inventory.transfer_receive"))) {
+      return { ok: false, error: "Only the people moving the cargo can add agents." };
+    }
+    if (!agent.name?.trim()) return { ok: false, error: "Enter the agent's name." };
+    const { data, error } = await admin.from("stock_transfer_agents").insert({
+      company_id: ctx.companyId, transfer_id: t.id, name: agent.name.trim(), company_name: agent.company || null, phone: agent.phone || null,
+      role: agent.role || null, created_by: user.id,
+    }).select("id").single();
+    if (error) return { ok: false, error: error.message };
+    await admin.rpc("add_transfer_update", { p_transfer: t.id, p_dispatch: null, p_user: user.id, p_note: `Agent added: ${agent.name.trim()}${agent.role ? ` (${agent.role})` : ""}` });
+    refresh(t.id);
+    return { ok: true, id: data.id };
+  } catch (e) { return fail(e); }
+}
+
+/** Charge estimate on the transfer or one trip (sender or receiver). Estimates post nothing. */
+export async function addTransferCharge(input: {
+  transferId: string; tripId?: string | null; categoryId: string; description?: string; amount: number; basis?: string | null; supplierId?: string | null;
+}): Promise<RpcResult> {
+  try {
+    const { user, ctx, admin } = await ctxFor("inventory.transfer_view");
+    const t = await loadTransfer(admin, input.transferId, ctx.companyId, user);
+    if (!(await isFeatureEnabled(ctx.companyId, "transfer_logistics"))) return { ok: false, error: "Transfer logistics is not enabled." };
+    if (!(user.isOwner || user.permissions.has("inventory.transfer_cost") || user.permissions.has("inventory.transfer_dispatch") || user.permissions.has("inventory.transfer_receive"))) {
+      return { ok: false, error: "Not allowed to record transfer charges." };
+    }
+    if (!(input.amount >= 0)) return { ok: false, error: "Amount cannot be negative." };
+    const { data, error } = await admin.from("cost_sources").insert({
+      company_id: ctx.companyId, owner_type: "stock_transfer", stock_transfer_id: t.id, transfer_dispatch_id: input.tripId || null,
+      cost_category_id: input.categoryId, description: input.description || null, estimated_amount: round2(input.amount),
+      allocation_basis: input.basis || null, supplier_id: input.supplierId || null, created_by: user.id, updated_by: user.id,
+    }).select("id").single();
+    if (error) return { ok: false, error: error.message };
+    await writeAuditLog({ userId: user.id, companyId: ctx.companyId, action: "transfer.charge_add", resourceType: "cost_source", resourceId: data.id });
+    refresh(t.id);
+    return { ok: true, id: data.id };
+  } catch (e) { return fail(e); }
+}
+
+export async function accrueTransferCharge(sourceId: string, amount: number, date: string): Promise<RpcResult> {
+  try {
+    const { user, ctx, admin } = await ctxFor("inventory.transfer_cost");
+    const { data: s } = await admin.from("cost_sources").select("company_id, stock_transfer_id").eq("id", sourceId).maybeSingle();
+    if (!s || s.company_id !== ctx.companyId || !s.stock_transfer_id) return { ok: false, error: "Charge not found." };
+    const res = await callPostingRpc("accrue_transfer_cost", { p_source: sourceId, p_amount: round2(amount), p_date: date, p_user: user.id, p_idem: `accrue_transfer_cost:${sourceId}` });
+    if (!res.ok) return res;
+    await writeAuditLog({ userId: user.id, companyId: ctx.companyId, action: "transfer.charge_accrue", resourceType: "cost_source", resourceId: sourceId, newValues: { amount, date } });
+    refresh(s.stock_transfer_id);
+    return res;
+  } catch (e) { return fail(e); }
+}
+
+export async function voidTransferChargeEstimate(sourceId: string): Promise<RpcResult> {
+  try {
+    const { user, ctx, admin } = await ctxFor("inventory.transfer_view");
+    const { data: s } = await admin.from("cost_sources").select("company_id, stock_transfer_id, status").eq("id", sourceId).maybeSingle();
+    if (!s || s.company_id !== ctx.companyId || !s.stock_transfer_id) return { ok: false, error: "Charge not found." };
+    await loadTransfer(admin, s.stock_transfer_id, ctx.companyId, user);
+    if (s.status !== "estimated") return { ok: false, error: "Only an estimate can be removed; accrued or invoiced charges are corrected with credit notes." };
+    const { error } = await admin.from("cost_sources").update({ status: "voided", updated_by: user.id }).eq("id", sourceId).eq("status", "estimated");
+    if (error) return { ok: false, error: error.message };
+    refresh(s.stock_transfer_id);
+    return { ok: true };
+  } catch (e) { return fail(e); }
+}
+
+/** Issue (or reuse) the delivery-note version for a trip. Posts nothing. */
+export async function issueDeliveryNote(tripId: string): Promise<RpcResult & { version?: number }> {
+  try {
+    const { user, ctx, admin } = await ctxFor("inventory.transfer_view");
+    const { t } = await loadTrip(admin, tripId, ctx.companyId, user);
+    const { data, error } = await admin.rpc("issue_delivery_note", { p_dispatch: tripId, p_user: user.id });
+    if (error) return { ok: false, error: error.message.replace(/^ERROR:\s*/i, "") };
+    const row = (data as { version_id: string; version_no: number; is_new: boolean }[])[0];
+    if (row?.is_new) {
+      await writeAuditLog({ userId: user.id, companyId: ctx.companyId, action: "transfer.delivery_note_issue", resourceType: "document_version", resourceId: row.version_id });
+      refresh(t.id);
+    }
+    return { ok: true, id: row.version_id, version: row.version_no };
+  } catch (e) { return fail(e); }
+}

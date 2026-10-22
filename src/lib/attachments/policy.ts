@@ -11,18 +11,36 @@ export const SIGNED_URL_TTL_SECONDS = 60;
 
 export const OWNER_TYPES = [
   "import_shipment", "import_receipt", "cost_invoice", "purchase",
-  "stock_transfer", "stock_transfer_receipt", "rebag_order",
+  "stock_transfer", "stock_transfer_receipt", "rebag_order", "stock_transfer_dispatch",
 ] as const;
 export type OwnerType = (typeof OWNER_TYPES)[number];
 
 export const CATEGORIES = [
   "bill_of_lading", "packing_list", "customs_entry", "supplier_invoice", "cost_invoice",
   "delivery_note", "proof_of_delivery", "photo", "other",
+  // transfer cargo file (Stage 6)
+  "driver_licence", "cargo_papers", "loading_photo", "weighbridge_ticket", "transport_invoice", "signed_delivery_note", "offloading_photo",
 ] as const;
 export type AttachmentCategory = (typeof CATEGORIES)[number];
 
 /** Categories that need documents.view_financial to read or upload. */
-export const FINANCIAL_CATEGORIES: readonly AttachmentCategory[] = ["supplier_invoice", "cost_invoice"];
+export const FINANCIAL_CATEGORIES: readonly AttachmentCategory[] = ["supplier_invoice", "cost_invoice", "transport_invoice"];
+/** Driver licence images need documents.view_licence (physical access does not imply it). */
+export const LICENCE_CATEGORIES: readonly AttachmentCategory[] = ["driver_licence"];
+
+/** Extra permission a category needs beyond access to its record (mirrors attachment_category_permission in the database). */
+export function categoryPermission(category: string): "documents.view_financial" | "documents.view_licence" | null {
+  if (FINANCIAL_CATEGORIES.includes(category as AttachmentCategory)) return "documents.view_financial";
+  if (LICENCE_CATEGORIES.includes(category as AttachmentCategory)) return "documents.view_licence";
+  return null;
+}
+
+export const CATEGORY_LABEL: Record<AttachmentCategory, string> = {
+  bill_of_lading: "Bill of lading", packing_list: "Packing list", customs_entry: "Customs entry", supplier_invoice: "Supplier invoice",
+  cost_invoice: "Cost invoice", delivery_note: "Delivery note", proof_of_delivery: "Proof of delivery", photo: "Photo", other: "Other",
+  driver_licence: "Driver licence", cargo_papers: "Cargo papers / B/L", loading_photo: "Loading photo", weighbridge_ticket: "Weighbridge ticket",
+  transport_invoice: "Transport invoice", signed_delivery_note: "Signed delivery note", offloading_photo: "Offloading photo",
+};
 
 /** Only inert document / image types; nothing a browser would execute (no HTML, SVG, scripts). */
 const TYPES: Record<string, { ext: string; magic: (b: Uint8Array) => boolean }> = {

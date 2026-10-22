@@ -94,6 +94,8 @@ export const ACTIONS = [
   "finalize_cost",
   "transfer_view",
   "transfer_resolve",
+  "transfer_cost",
+  "view_licence",
   "view_financial",
   "upload",
   "settle",
@@ -172,9 +174,9 @@ export const PERMISSION_DEFS: PermissionDef[] = [
   ...p("imports", ["view", "create", "edit_draft", "post", "receive", "approve", "void", "view_cost", "finalize_cost"]),
   ...p("cost_invoices", ["view", "create", "post", "void"]),
   ...p("rebagging", ["view", "create", "post", "approve", "void"]),
-  ...p("documents", ["view_financial", "upload"]),
+  ...p("documents", ["view_financial", "view_licence", "upload"]),
   ...p("fx", ["settle", "revalue", "enter_rate"]),
-  ...p("inventory", ["transfer_view", "transfer_resolve"]),
+  ...p("inventory", ["transfer_view", "transfer_resolve", "transfer_cost"]),
 ];
 
 export const OWNER_ROLE = "OWNER";
@@ -226,8 +228,8 @@ export const ROLE_DEFS: RoleDef[] = [
       "imports.view_cost", "imports.finalize_cost",
       "cost_invoices.view", "cost_invoices.create", "cost_invoices.post",
       "rebagging.view", "rebagging.create", "rebagging.post", "rebagging.approve",
-      "inventory.transfer_view", "inventory.transfer_resolve",
-      "documents.view_financial", "documents.upload", "fx.settle", "fx.enter_rate",
+      "inventory.transfer_view", "inventory.transfer_resolve", "inventory.transfer_cost",
+      "documents.view_financial", "documents.view_licence", "documents.upload", "fx.settle", "fx.enter_rate",
     ],
   },
   {
@@ -257,7 +259,7 @@ export const ROLE_DEFS: RoleDef[] = [
       "periods.view",
       "imports.view", "imports.view_cost", "imports.finalize_cost",
       "cost_invoices.view", "cost_invoices.create", "cost_invoices.post",
-      "inventory.transfer_view", "documents.view_financial", "documents.upload", "fx.settle", "fx.revalue", "fx.enter_rate",
+      "inventory.transfer_view", "inventory.transfer_cost", "documents.view_financial", "documents.upload", "fx.settle", "fx.revalue", "fx.enter_rate",
     ],
   },
   {

@@ -24,6 +24,7 @@ export function TransferActions({
   const [receiveOpen, setReceiveOpen] = React.useState(false);
   const [voidOpen, setVoidOpen] = React.useState(false);
   const [pending, setPending] = React.useState(false);
+  const [requestId, setRequestId] = React.useState(() => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}-recv`));
   const [qty, setQty] = React.useState<Record<string, string>>(() =>
     Object.fromEntries(lines.map((l) => [l.id, String(Math.max(l.qty_dispatched - l.qty_received, 0))])));
 
@@ -40,9 +41,9 @@ export function TransferActions({
       .filter((x) => x.qty > 0);
     if (payload.length === 0) { toast.error("Enter quantities to receive."); return; }
     setPending(true);
-    const res = await receiveTransfer(id, payload);
+    const res = await receiveTransfer(id, payload, requestId);
     setPending(false);
-    if (res.ok) { toast.success("Received."); setReceiveOpen(false); router.refresh(); } else toast.error(res.error ?? "Failed.");
+    if (res.ok) { toast.success("Received."); setReceiveOpen(false); setRequestId(crypto.randomUUID()); router.refresh(); } else toast.error(res.error ?? "Failed.");
   }
 
   async function onVoid(reason: string) {

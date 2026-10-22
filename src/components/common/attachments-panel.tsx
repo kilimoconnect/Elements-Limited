@@ -4,7 +4,7 @@ import * as React from "react";
 import { toast } from "sonner";
 import { Download, Upload } from "lucide-react";
 import { uploadAttachmentAction, listAttachmentsAction, attachmentDownloadAction } from "@/lib/attachments/actions";
-import type { AttachmentCategory, OwnerType } from "@/lib/attachments/policy";
+import { CATEGORY_LABEL, type AttachmentCategory, type OwnerType } from "@/lib/attachments/policy";
 import { formatDateTime } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,10 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 interface Row { id: string; category: string; download_name: string; size_bytes: number; version: number; supersedes_id: string | null; uploaded_at: string }
 
-const LABEL: Record<string, string> = {
-  bill_of_lading: "Bill of lading", packing_list: "Packing list", customs_entry: "Customs entry", supplier_invoice: "Supplier invoice",
-  cost_invoice: "Cost invoice", delivery_note: "Delivery note", proof_of_delivery: "Proof of delivery", photo: "Photo / weighbridge", other: "Other",
-};
+const LABEL: Record<string, string> = CATEGORY_LABEL;
 
 /** Lists, uploads and downloads attachments of one record (private bucket, short-lived links). */
 export function AttachmentsPanel({ ownerType, ownerId, categories }: { ownerType: OwnerType; ownerId: string; categories: AttachmentCategory[] }) {
