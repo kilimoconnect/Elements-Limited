@@ -202,8 +202,8 @@ export const ROLE_DEFS: RoleDef[] = [
   },
   {
     code: "DIRECTOR",
-    name: "Director",
-    description: "Operational direction across modules.",
+    name: "Manager",
+    description: "Operational management across modules.",
     isSystem: true,
     isProtected: false,
     permissions: [
