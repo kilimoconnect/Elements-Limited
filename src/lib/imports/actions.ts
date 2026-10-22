@@ -343,6 +343,23 @@ export async function createAndPostCostInvoice(input: {
   } catch (e) { return fail(e); }
 }
 
+/** Void a posted import goods invoice (unpaid, no credits or revaluations); the shipment line returns to its provisional value. */
+export async function voidGoodsInvoice(purchaseId: string, reason: string): Promise<RpcResult> {
+  try {
+    const { user, ctx, admin } = await guard("imports.void");
+    if (!reason?.trim()) return { ok: false, error: "Enter the reason for the void." };
+    const { data: p } = await admin.from("purchases").select("id, company_id, branch_id, import_shipment_id, posting_mode").eq("id", purchaseId).maybeSingle();
+    if (!p || p.company_id !== ctx.companyId || p.posting_mode !== "invoice_only" || !p.import_shipment_id) return { ok: false, error: "Import goods invoice not found." };
+    assertBranchAccess(user, p.branch_id);
+    const res = await callPostingRpc("void_import_goods_invoice", { p_id: purchaseId, p_user: user.id, p_reason: reason.trim(), p_idem: `void_import_goods_invoice:${purchaseId}` });
+    if (!res.ok) return res;
+    await writeAuditLog({ userId: user.id, companyId: ctx.companyId, branchId: p.branch_id, action: "import.goods_invoice_void", resourceType: "purchase", resourceId: purchaseId, newValues: { reason: reason.trim() } });
+    revalidateShipment(p.import_shipment_id);
+    revalidatePath("/purchases"); revalidatePath(`/purchases/${purchaseId}`);
+    return { ok: true, id: purchaseId };
+  } catch (e) { return fail(e); }
+}
+
 /* ------------------------------- finalisation --------------------------- */
 export async function finalizeShipment(id: string): Promise<RpcResult> {
   try {

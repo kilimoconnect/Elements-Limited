@@ -238,6 +238,55 @@ async function main() {
     check("foreign shipment GR/IR cleared; payable USD 20,000 at TZS 53M",
       (await ledger(shf, "grir")) === 0 && (await one(db, "select fc_outstanding || '/' || outstanding from supplier_payables where purchase_id=$1", [gif])) === "20000.00/53000000.00");
 
+    // ---------------------------------------------------------- correcting a goods invoice (void, then re-invoice)
+    check("purchase void path stays blocked for import invoices", await fails(db,
+      "update purchases set document_status='voided' where id=$1", [gif], "voided from the shipment"));
+    check("void needs a reason", await fails(db, "select void_import_goods_invoice($1,$2,'  ',$3)", [gif, owner, key()], "reason"));
+    const kv = key();
+    await db.query("select void_import_goods_invoice($1,$2,'Wrong rate',$3)", [gif, owner, kv]);
+    check("void of the USD invoice: Dr 2110 53M / Cr 2130, value back to the 2,600 accrual (-1M across HQ and Mwanza)",
+      n((await stock(dap)).v) === 31200000 && n((await stock(dap, mwz)).v) === 20800000
+      && (await one(db, "select status || '/' || outstanding || '/' || fc_outstanding from supplier_payables where purchase_id=$1", [gif])) === "voided/0.00/0.00",
+      `${(await stock(dap)).v} ${(await stock(dap, mwz)).v} ${await jl("purchase_void", gif)}`);
+    check("voided invoice reopens GR/IR at the provisional value (52M) and the line's invoiced quantity",
+      (await ledger(shf, "grir")) === -52000000 && n(await one(db, "select goods_invoiced_qty from import_shipment_lines where id=$1", [lf])) === 0);
+    await db.query("select void_import_goods_invoice($1,$2,'Wrong rate',$3)", [gif, owner, kv]);
+    check("void retry posts nothing more", Number(await one(db, "select count(*) from journal_entries where source_type='purchase_void' and source_id=$1", [gif])) === 1);
+    check("a voided invoice cannot be voided again", await fails(db, "select void_import_goods_invoice($1,$2,'again',$3)", [gif, owner, key()], "only posted"));
+    const gif2 = await goodsInvoice(shf, [[lf, dap, 50000, 0.4]], "USD", 2650, d("02-21"), "YARA-USD-1R");
+    await db.query("select post_import_goods_invoice($1,$2,$3)", [gif2, owner, key()]);
+    check("replacement invoice restores 53M (1,060/kg) and clears GR/IR",
+      n((await stock(dap)).v) + n((await stock(dap, mwz)).v) === 53000000 && (await ledger(shf, "grir")) === 0);
+
+    // ---------------------------------------------------------- late cost after a sale that was voided
+    const sop = await one(db, "insert into products(company_id, sku, name, base_unit_id, stock_role) values ($1,'SOP-B','SOP bulk',$2,'bulk') returning id", [co, kg]);
+    const shr = await shipment({});
+    const lr = await line(shr, sop, 1000, 1000000);
+    const srcR = await source(shr, "CLEARING", 100000);
+    await db.query("select set_import_shipment_status($1,'dispatched',$2,$3)", [shr, d("04-01"), owner]);
+    await db.query("select recognise_import_ownership($1,$2,null,$3,$4)", [shr, d("04-02"), owner, key()]);
+    await db.query("select post_import_receipt($1,$2,$3)", [await receipt(shr, d("04-03"), [[lr, 1000, true, null]]), owner, key()]);
+    const giR = await goodsInvoice(shr, [[lr, sop, 1000, 1000]], "TZS", 1, d("04-03"), "SOP-1");
+    await db.query("select post_import_goods_invoice($1,$2,$3)", [giR, owner, key()]);
+    const cogsAcc = await one(db, "select account_for($1,'inventory.cost_of_sales')", [co]);
+    const inv1150 = await one(db, "select id from chart_of_accounts where company_id=$1 and code='1150'", [co]);
+    const saleMove = async (type: string, saleId: string, qIn: number, qOut: number, cost: number) => {
+      const v = n(await one(db, "select record_stock_movement($1,$2,$3,$4,$4,$5,'S-X',$6,$7,$8,$9)", [co, hq, sop, type, saleId, qIn, qOut, cost, owner]));
+      const val = qOut > 0 ? v : qIn * cost;
+      await db.query("select create_journal($1,$2,$3,$4,$5,'S-X','sale',$6,$7::jsonb)", [co, hq, d("04-04"), type, saleId, owner,
+        JSON.stringify([{ account_id: qOut > 0 ? cogsAcc : inv1150, debit: val, credit: 0 }, { account_id: qOut > 0 ? inv1150 : cogsAcc, debit: 0, credit: val }])]);
+    };
+    const saleA = await one(db, "select gen_random_uuid()"), saleB = await one(db, "select gen_random_uuid()"), saleC = await one(db, "select gen_random_uuid()");
+    await saleMove("sale", saleA, 0, 400, 0);
+    await saleMove("sale", saleC, 0, 100, 0);
+    await saleMove("sale_void", saleA, 400, 0, 1000);
+    await saleMove("sale", saleB, 0, 200, 0);
+    const ciR = await costInvoice(clear, d("04-05"), [["CLEARING", srcR, 100000]], "CLR-SOP");
+    await db.query("select post_cost_invoice($1,$2,$3)", [ciR, owner, key()]);
+    check("late cost follows units of a voided sale back into stock: 70k held (700 kg), 30k cost of sales (300 kg sold)",
+      (await jl("cost_invoice", ciR)) === "1150:70000/0 2110:0/100000 5100:30000/0" && n((await stock(sop)).v) === 770000,
+      `${await jl("cost_invoice", ciR)} ${(await stock(sop)).v}`);
+
     // ---------------------------------------------------------- shortfall resolution
     const shs = await shipment({ event: "receipt" });
     const ls = await line(shs, can, 1000, 1000000);
@@ -262,6 +311,10 @@ async function main() {
     await db.query("select set_import_shipment_status($1,'dispatched',$2,$3)", [shp, d("03-02"), owner]);
     await db.query("select recognise_import_ownership($1,$2,null,$3,$4)", [shp, d("03-03"), owner, key()]);
     const rp = await receipt(shp, d("03-04"), [[lp, 100, true, null]]);
+    check("storekeeper cannot void goods invoices (imports.void)", await fails(db,
+      "select void_import_goods_invoice($1,$2,'x',$3)", [gif2, keeper, key()], "imports.void"));
+    check("app users cannot call the goods-invoice void",
+      (await one<boolean>(db, "select has_function_privilege('authenticated','public.void_import_goods_invoice(uuid,uuid,text,text)','execute')")) === false);
     check("storekeeper can receive (imports.receive)", (await failMsg(db, "select post_import_receipt($1,$2,$3)", [rp, keeper, key()])) === null);
     check("app users cannot call import posting functions",
       (await one<boolean>(db, "select has_function_privilege('authenticated','public.post_import_receipt(uuid,uuid,text)','execute')")) === false

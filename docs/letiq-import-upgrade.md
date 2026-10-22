@@ -43,8 +43,8 @@ payables, transfers) rather than adding a parallel ERP.
 
 ## Stage 4 — Import shipments and landed cost (implemented)
 
-Migration `0027_import_shipments.sql` (additive; existing stock, journals and
-balances untouched) plus the Importation screens, all behind the `imports`
+Migrations `0027_import_shipments.sql` and `0028_import_corrections.sql`
+(additive; existing stock, journals and balances untouched) plus the Importation screens, all behind the `imports`
 feature flag and the `imports.*` / `cost_invoices.*` permissions.
 
 ### Behaviour
@@ -67,8 +67,17 @@ feature flag and the `imports.*` / `cost_invoices.*` permissions.
   purchase so it shares the supplier-invoice registry and foreign payables
   from Stage 3): clears 2130 and creates the supplier balance. If ownership
   is already recorded, only the difference from the provisional value moves
-  cost (to stock held / cost of sales / in transit pro rata). Void / return
-  of `invoice_only` purchases is blocked.
+  cost (to stock held / cost of sales / in transit pro rata). The ordinary
+  purchase void and purchase returns stay blocked for these invoices.
+- **Correcting a goods invoice** (`void_import_goods_invoice`, 0028,
+  permission `imports.void`, reason required): allowed while the supplier
+  balance is untouched (no payments, credits or revaluations). It reverses
+  AP, input VAT and GR/IR, cancels the payable, gives back the invoiced
+  quantity on the shipment line, and, once ownership is recorded, returns the
+  line to its provisional value (accrual rate; the voided invoice's rate if
+  none was recorded). Only that difference moves cost, through the same
+  propagation. The posted invoice and its journals are kept; the corrected
+  invoice is then posted normally.
 - **Cost lines** (`cost_sources`): category, description, supplier,
   allocation basis / targets, estimate. Estimates never post. `accrue_import_cost`
   is an explicit action (Dr 1157 or the expense account / Cr 2140).
@@ -92,6 +101,8 @@ feature flag and the `imports.*` / `cost_invoices.*` permissions.
   movements from that receipt, pro rata to what happened to the goods: still
   held → stock value; sold → cost of sales; written off → loss; in a branch
   transfer → in-transit unit cost or the destination branch (recursive).
+  Units of a sale that is later voided or returned rejoin the stock pool
+  (0028), so a later cost follows them back into stock.
 - **Landed-cost sheet** (`landed_cost_sheet`): estimated vs actual per cost,
   stock cost per kg and commercial cost per kg. **Finalisation**
   (`import_finalization_checks` / `finalize_import_shipment`) requires all
@@ -107,7 +118,8 @@ Importation menu: Shipments (KPIs: open, in transit, costs awaiting
 invoice, unallocated costs), New Shipment, shipment detail (quantities,
 landed-cost sheet, costs with accrue / void, goods invoices, receipts,
 traceability, finalisation checks, attachments), Goods Invoice, Receive
-Goods, Cost Invoices list and New Cost Invoice.
+Goods, Cost Invoices list and New Cost Invoice. Goods invoices on the
+shipment page have a Void action (reason required).
 
 ### Acceptance (actual results, `scripts/itest-import4.ts`)
 
@@ -124,17 +136,25 @@ Goods, Cost Invoices list and New Cost Invoice.
 - Receipt-time ownership with a 10 kg write-off: Dr 1150 990k, Dr 6300 10k,
   1157 / 2130 net to zero.
 - Foreign-currency shipment with a transfer: all stock ends at 1,060/kg.
+- Voiding the USD invoice (posted at 2,650) puts the goods back to the 2,600
+  accrual: -1M split across HQ (-0.6M) and Mwanza (-0.4M), payable cancelled,
+  GR/IR reopened at 52M. Retry posts nothing more; the replacement invoice
+  restores 53M and clears GR/IR.
+- Late cost of 100k after sales of 400 kg (later voided), 100 kg and 200 kg
+  from a 1,000 kg receipt: 70k to stock held (700 kg), 30k to cost of sales.
 - Reconciliations 1150 = stock subledger, and 1157 / 2130 / 2140 per shipment.
 
-### Checks actually run (21/10/2026)
+### Checks actually run (21/10/2026, re-run 22/10/2026 after 0028)
 
 | Check | Result |
 | --- | --- |
 | `npx tsc --noEmit` | Clean |
 | `npm run lint` | 20 problems (11 errors, 9 warnings), all in files not touched by Stage 4 — same count as the tree without Stage 4 changes. Stage 4 files lint clean. |
-| `npm run test:db` | All suites pass: 19 + 26 + 11 + 51 + 114 + 79 + **48 (Stage 4)** + 20 upgrade-path checks |
+| `npm run test:db` | All suites pass: 19 + 26 + 11 + 51 + 114 + 79 + **58 (Stage 4)** + 20 upgrade-path checks |
 | `npm test` | 25 attachment policy checks pass |
 | Deliberate breakage: late-cost propagation stopped adjusting held stock | Stage 4 suite failed 5 checks (900/kg remainder, storage, FX transfer cost, 1,060/kg, 1150 reconciliation); migration restored byte-for-byte and suite green again |
+| Deliberate breakage (0028): returned units not given back to the pool | Sale-void check failed (64,814.81 held instead of 70,000); restored |
+| Deliberate breakage (0028): sale voids ignored (pre-0028 behaviour) | Sale-void check failed (38,888.89 held instead of 70,000); restored |
 
 ### Decisions and assumptions
 
@@ -148,14 +168,18 @@ Goods, Cost Invoices list and New Cost Invoice.
 
 ### Limitations
 
-- Voiding or crediting an import goods invoice is not supported (blocked);
-  use a supplier credit outside the shipment until a later stage adds it.
-- Late-cost propagation ignores sales voids and sales returns that happen
-  after a receipt (their stock comes back at the cost recorded at the time).
+- A paid, credited or revalued goods invoice cannot be voided until those
+  are reversed; there is no partial credit note for goods (void and re-post).
+- The sales-return path of the return-aware replay shares the sale-void code
+  but has no test of its own (a sales return needs a full posted sale in the
+  fixture); the sale-void path is tested.
 - Screens type-check and lint clean but have **not** been walked through in
-  a browser; no real concurrent-request test was run (concurrency safety rests
+  a browser: the only configured Supabase project is production and there is
+  no local Supabase (no Docker), so a walkthrough would write live data; no real concurrent-request test was run (concurrency safety rests
   on row locks and idempotency keys tested sequentially).
-- Not applied to any live database; no push or deploy.
+- Not applied to the live database. The code was pushed to GitHub on
+  21/10/2026 at the user's request; migrations 0024–0028 must be applied to
+  the live database before that code runs there (see Stage 0 instructions).
 - Stage 2b defects (D1 for openings / adjustments, D2–D5) remain open.
 
 ## Stage 3 — Foreign purchases with TZS books (implemented)

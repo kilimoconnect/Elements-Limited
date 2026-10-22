@@ -4,8 +4,9 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  setShipmentStatus, recogniseOwnership, addCostSource, accrueCost, voidCostEstimate, finalizeShipment,
+  setShipmentStatus, recogniseOwnership, addCostSource, accrueCost, voidCostEstimate, finalizeShipment, voidGoodsInvoice,
 } from "@/lib/imports/actions";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -116,6 +117,24 @@ export function AddCostForm({ shipmentId, categories, suppliers, lines, includes
       <p className="text-xs text-muted-foreground">Estimates are for planning and post nothing. Freight / insurance are hidden when the goods price already includes them.</p>
       {error && <p className="text-sm text-destructive">{error}</p>}
     </div>
+  );
+}
+
+export function VoidGoodsInvoiceButton({ purchaseId, label }: { purchaseId: string; label: string }) {
+  const router = useRouter();
+  const [open, setOpen] = React.useState(false);
+  return (
+    <>
+      <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => setOpen(true)}>Void</Button>
+      <ConfirmDialog open={open} onOpenChange={setOpen} destructive requireReason confirmLabel="Void invoice"
+        title={`Void goods invoice ${label}?`}
+        description="Allowed only while nothing has been paid, credited or revalued on it. The supplier balance is cancelled and the goods go back to their provisional value; post the corrected invoice afterwards."
+        onConfirm={async (reason) => {
+          const res = await voidGoodsInvoice(purchaseId, reason);
+          if (!res.ok) return res.error ?? "Failed.";
+          toast.success("Goods invoice voided."); router.refresh();
+        }} />
+    </>
   );
 }
 

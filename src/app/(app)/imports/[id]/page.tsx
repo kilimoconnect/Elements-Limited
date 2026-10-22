@@ -14,7 +14,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AttachmentsPanel } from "@/components/common/attachments-panel";
 import { formatDate, formatMoney, formatQuantity } from "@/lib/format";
-import { StatusActions, OwnershipAction, AddCostForm, CostRowActions, FinalizeButton, type CategoryOpt } from "./shipment-actions";
+import { StatusActions, OwnershipAction, AddCostForm, CostRowActions, FinalizeButton, VoidGoodsInvoiceButton, type CategoryOpt } from "./shipment-actions";
 
 export const metadata: Metadata = { title: "Import Shipment" };
 type Params = Promise<{ id: string }>;
@@ -208,7 +208,9 @@ export default async function ShipmentPage(props: { params: Params }) {
           {(invoices ?? []).length === 0 ? <p className="text-muted-foreground">None yet.</p> : (invoices ?? []).map((i) => (
             <div key={i.id} className="flex justify-between border-b border-border py-1 last:border-0">
               <span><Link className="font-mono text-xs underline" href={`/purchases/${i.id}`}>{i.document_number ?? "draft"}</Link> · {i.supplier_invoice_number} · {formatDate(i.document_date)}</span>
-              <span className="tabular-nums">{i.currency_code !== "TZS" && <>{i.currency_code} {formatMoney(N(i.fc_grand_total))} @ {N(i.exchange_rate)} · </>}TZS {formatMoney(N(i.grand_total))}</span>
+              <span className="flex items-center gap-1 tabular-nums">{i.currency_code !== "TZS" && <>{i.currency_code} {formatMoney(N(i.fc_grand_total))} @ {N(i.exchange_rate)} · </>}TZS {formatMoney(N(i.grand_total))}
+                {i.document_status === "voided" ? <Badge variant="secondary">voided</Badge>
+                  : i.document_status === "posted" && can(ctx.user, "imports.void") && <VoidGoodsInvoiceButton purchaseId={i.id} label={i.document_number ?? ""} />}</span>
             </div>
           ))}
         </CardContent></Card>
