@@ -237,16 +237,17 @@ export function SaleForm({
               </Button>
             </div>
             {payments.length === 0 && <p className="text-sm text-muted-foreground">No payments — this will be a credit sale.</p>}
-            {paid > 0 && (
-              <div className="mt-3 space-y-1.5 rounded-md border border-dashed border-border p-3">
-                <Label htmlFor="proof">Proof of payment {!initial?.hasProof && <span className="text-destructive">*</span>}</Label>
-                <Input id="proof" type="file" accept="application/pdf,image/jpeg,image/png,image/webp"
-                  onChange={(e) => setProof(e.target.files?.[0] ?? null)} />
-                <p className="text-xs text-muted-foreground">
-                  {initial?.hasProof ? "Proof already attached; choose a file only to add another. " : ""}PDF or photo (JPEG, PNG, WebP), up to 4 MB.
-                </p>
-              </div>
-            )}
+            <div className="mt-3 space-y-1.5 rounded-md border border-dashed border-border p-3">
+              <Label htmlFor="proof">
+                Proof of payment {paid > 0 && !initial?.hasProof && <span className="text-destructive">*</span>}
+              </Label>
+              <Input id="proof" type="file" accept="application/pdf,image/jpeg,image/png,image/webp"
+                onChange={(e) => setProof(e.target.files?.[0] ?? null)} />
+              <p className="text-xs text-muted-foreground">
+                {initial?.hasProof ? "Proof already attached; choose a file only to add another. " : ""}
+                Required when the customer has paid. PDF or photo (JPEG, PNG, WebP), up to 4 MB.
+              </p>
+            </div>
             <div className="space-y-2">
               {payments.map((p) => (
                 <div key={p.key} className="flex items-center gap-2">
