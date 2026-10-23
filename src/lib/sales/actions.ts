@@ -148,10 +148,13 @@ export async function saveSaleDraft(input: SaleDraftInput): Promise<RpcResult> {
 
     let saleId = input.saleId ?? null;
     if (saleId) {
-      const { data: existing } = await admin.from("sales").select("document_status, company_id").eq("id", saleId).maybeSingle();
+      const { data: existing } = await admin.from("sales").select("document_status, approval_status, company_id, branch_id").eq("id", saleId).maybeSingle();
       if (!existing || existing.company_id !== ctx.companyId) return { ok: false, error: "Sale not found." };
       if (existing.document_status !== "draft") return { ok: false, error: "Only drafts can be edited." };
-      const { error } = await admin.from("sales").update(header).eq("id", saleId);
+      if (existing.approval_status === "pending") return { ok: false, error: "This order is awaiting approval and cannot be edited." };
+      assertBranchAccess(user, existing.branch_id);
+      // An edited order (including a rejected one) goes back to "not submitted".
+      const { error } = await admin.from("sales").update({ ...header, approval_status: "not_submitted" }).eq("id", saleId);
       if (error) return { ok: false, error: error.message };
       await admin.from("sale_lines").delete().eq("sale_id", saleId);
       await admin.from("sale_payments").delete().eq("sale_id", saleId);
@@ -184,10 +187,81 @@ export async function saveSaleDraft(input: SaleDraftInput): Promise<RpcResult> {
   }
 }
 
-export async function postSale(saleId: string): Promise<RpcResult> {
+/** Proof of payment is required on an order the customer has paid (fully or partly). */
+async function proofProblem(admin: ReturnType<typeof createAdminClient>, saleId: string, amountPaid: number): Promise<string | null> {
+  if (!(Number(amountPaid) > 0)) return null;
+  const { count } = await admin.from("document_attachments").select("id", { count: "exact", head: true })
+    .eq("owner_type", "sale").eq("owner_id", saleId).eq("category", "proof_of_payment");
+  return (count ?? 0) > 0 ? null : "Attach proof of payment before this order can be approved.";
+}
+
+/** Sales / Cashier sends a sales order to the Branch Manager for approval. */
+export async function submitSaleForApproval(saleId: string): Promise<RpcResult> {
   try {
     const user = await assertActiveUser();
-    assertPermission(user, "sales.post");
+    assertPermission(user, "sales.create");
+    const ctx = await getActiveContext();
+    const admin = createAdminClient();
+    const { data: sale } = await admin.from("sales").select("*").eq("id", saleId).maybeSingle();
+    if (!sale || sale.company_id !== ctx.companyId) return { ok: false, error: "Sale not found." };
+    assertBranchAccess(user, sale.branch_id);
+    if (sale.document_status !== "draft") return { ok: false, error: "Only draft orders can be submitted." };
+    if (sale.approval_status === "pending") return { ok: false, error: "This order is already awaiting approval." };
+
+    if (Number(sale.outstanding) > 0) {
+      if (!sale.due_date) return { ok: false, error: "A due date is required when there is an outstanding balance." };
+      const { data: cust } = await admin.from("customers").select("is_protected").eq("id", sale.customer_id).maybeSingle();
+      if (cust?.is_protected) return { ok: false, error: "A Walk-in Customer order must be paid in full." };
+    }
+    const proof = await proofProblem(admin, saleId, Number(sale.amount_paid));
+    if (proof) return { ok: false, error: proof };
+
+    const { error } = await admin.from("sales").update({
+      approval_status: "pending", submitted_by: user.id, submitted_at: new Date().toISOString(),
+      rejected_by: null, rejected_at: null, rejection_reason: null, updated_by: user.id,
+    }).eq("id", saleId).eq("document_status", "draft");
+    if (error) return { ok: false, error: error.message };
+    await writeAuditLog({ userId: user.id, companyId: ctx.companyId, branchId: sale.branch_id, action: "sale.submit_for_approval", resourceType: "sale", resourceId: saleId });
+    revalidatePath("/sales/history"); revalidatePath("/sales/approvals"); revalidatePath(`/sales/${saleId}`);
+    return { ok: true, id: saleId };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed." };
+  }
+}
+
+/** Sends a sales order back to its creator with a reason; it can be corrected and resubmitted. */
+export async function rejectSale(saleId: string, reason: string): Promise<RpcResult> {
+  try {
+    const user = await assertActiveUser();
+    assertPermission(user, "sales.approve");
+    const ctx = await getActiveContext();
+    if (!reason?.trim()) return { ok: false, error: "A reason is required." };
+    const admin = createAdminClient();
+    const { data: sale } = await admin.from("sales").select("company_id, branch_id, document_status, approval_status").eq("id", saleId).maybeSingle();
+    if (!sale || sale.company_id !== ctx.companyId) return { ok: false, error: "Sale not found." };
+    assertBranchAccess(user, sale.branch_id);
+    if (sale.document_status !== "draft" || sale.approval_status !== "pending") return { ok: false, error: "Only orders awaiting approval can be rejected." };
+    const { error } = await admin.from("sales").update({
+      approval_status: "rejected", rejected_by: user.id, rejected_at: new Date().toISOString(),
+      rejection_reason: reason.trim(), updated_by: user.id,
+    }).eq("id", saleId).eq("approval_status", "pending");
+    if (error) return { ok: false, error: error.message };
+    await writeAuditLog({ userId: user.id, companyId: ctx.companyId, branchId: sale.branch_id, action: "sale.reject", resourceType: "sale", resourceId: saleId, reason });
+    revalidatePath("/sales/history"); revalidatePath("/sales/approvals"); revalidatePath(`/sales/${saleId}`);
+    return { ok: true, id: saleId };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed." };
+  }
+}
+
+/**
+ * Approves a sales order, which posts the sale (stock, accounts, invoice
+ * number). Only approvers (sales.approve) of the order's branch can do this.
+ */
+export async function approveSale(saleId: string): Promise<RpcResult> {
+  try {
+    const user = await assertActiveUser();
+    assertPermission(user, "sales.approve");
     const ctx = await getActiveContext();
 
     const admin = createAdminClient();
@@ -203,6 +277,8 @@ export async function postSale(saleId: string): Promise<RpcResult> {
         return { ok: false, error: "A Walk-in Customer sale cannot be posted on credit." };
       }
     }
+    const proof = await proofProblem(admin, saleId, Number(sale.amount_paid));
+    if (proof) return { ok: false, error: proof };
 
     // Below-cost check
     if (!userHasPermission(user, "sales.sell_below_cost")) {
@@ -224,8 +300,14 @@ export async function postSale(saleId: string): Promise<RpcResult> {
 
     const res = await callPostingRpc("post_sale", { p_id: saleId, p_user: user.id, p_idem: randomUUID() });
     if (res.ok) {
+      const now = new Date().toISOString();
+      await admin.from("sales").update({
+        approval_status: "approved", approved_by: user.id, approved_at: now,
+        submitted_by: sale.submitted_by ?? user.id, submitted_at: sale.submitted_at ?? now,
+      }).eq("id", saleId);
+      await writeAuditLog({ userId: user.id, companyId: ctx.companyId, branchId: sale.branch_id, action: "sale.approve", resourceType: "sale", resourceId: saleId });
       await writeAuditLog({ userId: user.id, companyId: ctx.companyId, branchId: sale.branch_id, action: "sale.post", resourceType: "sale", resourceId: saleId });
-      revalidatePath("/sales/history"); revalidatePath(`/sales/${saleId}`); revalidatePath("/inventory"); revalidatePath("/dashboard");
+      revalidatePath("/sales/history"); revalidatePath("/sales/approvals"); revalidatePath(`/sales/${saleId}`); revalidatePath("/inventory"); revalidatePath("/dashboard");
     }
     return res;
   } catch (e) {

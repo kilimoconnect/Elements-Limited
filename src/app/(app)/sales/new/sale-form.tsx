@@ -4,7 +4,8 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
-import { saveSaleDraft, postSale, type SaleDraftInput } from "@/lib/sales/actions";
+import { saveSaleDraft, submitSaleForApproval, approveSale, type SaleDraftInput } from "@/lib/sales/actions";
+import { uploadAttachmentAction } from "@/lib/attachments/actions";
 import { calcLine, calcTotals, round2 } from "@/lib/sales/calc";
 import { formatMoney, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -28,23 +29,37 @@ export interface CustomerOpt { id: string; code: string; name: string; is_protec
 interface Line { key: string; product_id: string; quantity: string; unit_price: string; discount: string; tax_code_id: string }
 interface Payment { key: string; payment_account_id: string; amount: string }
 
+/** An existing draft order being edited (e.g. after it was rejected). */
+export interface SaleFormInitial {
+  saleId: string; customerId: string; date: string; dueDate: string; reference: string; notes: string;
+  lines: { product_id: string; quantity: number; unit_price: number; discount: number; tax_code_id: string | null }[];
+  payments: { payment_account_id: string; amount: number }[];
+  hasProof: boolean;
+}
+
 const NONE = "__none__";
-function nl(): Line { return { key: Math.random().toString(36).slice(2), product_id: "", quantity: "1", unit_price: "", discount: "0", tax_code_id: NONE }; }
+const key = () => Math.random().toString(36).slice(2);
+function nl(): Line { return { key: key(), product_id: "", quantity: "1", unit_price: "", discount: "0", tax_code_id: NONE }; }
 
 export function SaleForm({
-  branchId, products, taxCodes, accounts, customers, stock, canViewCost, walkInId,
+  branchId, products, taxCodes, accounts, customers, stock, canViewCost, walkInId, canApprove, initial,
 }: {
   branchId: string; products: ProductOpt[]; taxCodes: TaxOpt[]; accounts: AccountOpt[];
   customers: CustomerOpt[]; stock: Record<string, number>; canViewCost: boolean; walkInId: string | null;
+  /** Approvers post straight away; everyone else submits the order for approval. */
+  canApprove: boolean; initial?: SaleFormInitial;
 }) {
   const router = useRouter();
-  const [customerId, setCustomerId] = React.useState(walkInId ?? "");
-  const [date, setDate] = React.useState(todayISO());
-  const [dueDate, setDueDate] = React.useState("");
-  const [reference, setReference] = React.useState("");
-  const [notes, setNotes] = React.useState("");
-  const [lines, setLines] = React.useState<Line[]>([nl()]);
-  const [payments, setPayments] = React.useState<Payment[]>([]);
+  const [customerId, setCustomerId] = React.useState(initial?.customerId ?? walkInId ?? "");
+  const [date, setDate] = React.useState(initial?.date ?? todayISO());
+  const [dueDate, setDueDate] = React.useState(initial?.dueDate ?? "");
+  const [reference, setReference] = React.useState(initial?.reference ?? "");
+  const [notes, setNotes] = React.useState(initial?.notes ?? "");
+  const [lines, setLines] = React.useState<Line[]>(initial?.lines.length
+    ? initial.lines.map((l) => ({ key: key(), product_id: l.product_id, quantity: String(l.quantity), unit_price: String(l.unit_price), discount: String(l.discount), tax_code_id: l.tax_code_id ?? NONE }))
+    : [nl()]);
+  const [payments, setPayments] = React.useState<Payment[]>((initial?.payments ?? []).map((p) => ({ key: key(), payment_account_id: p.payment_account_id, amount: String(p.amount) })));
+  const [proof, setProof] = React.useState<File | null>(null);
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -95,8 +110,12 @@ export function SaleForm({
       return;
     }
     if (post && outstanding > 0 && !dueDate) { setError("A due date is required when there is an outstanding balance."); return; }
+    if (post && paid > 0 && !proof && !initial?.hasProof) { setError("Attach proof of payment for the amount paid."); return; }
+    // Uploads travel through the server, which accepts about 4.5 MB per request.
+    if (proof && proof.size > 4 * 1024 * 1024) { setError("The proof of payment file is larger than 4 MB. Use a smaller photo or PDF."); return; }
 
     const input: SaleDraftInput = {
+      saleId: initial?.saleId,
       branchId, documentDate: date, dueDate: dueDate || null, customerId,
       customerReference: reference, notes,
       lines: validLines.map((l) => ({
@@ -110,15 +129,29 @@ export function SaleForm({
     setPending(true);
     const res = await saveSaleDraft(input);
     if (!res.ok || !res.id) { setError(res.error ?? "Failed."); setPending(false); return; }
+    const saleId = res.id;
+    if (proof) {
+      const fd = new FormData();
+      fd.set("ownerType", "sale"); fd.set("ownerId", saleId); fd.set("category", "proof_of_payment"); fd.set("file", proof);
+      const up = await uploadAttachmentAction(fd);
+      if (!up.ok) {
+        toast.error(`Order saved, but the proof of payment did not upload: ${up.error}`);
+        router.push(`/sales/${saleId}`);
+        return;
+      }
+    }
     if (post) {
-      const p = await postSale(res.id);
-      if (!p.ok) { setError(p.error ?? "Draft saved but posting failed."); setPending(false); return; }
-      toast.success("Sale posted.");
-      router.push(`/sales/${res.id}`);
+      const p = canApprove ? await approveSale(saleId) : await submitSaleForApproval(saleId);
+      if (!p.ok) {
+        toast.error(`Order saved as a draft: ${p.error ?? "it could not be sent."}`);
+        router.push(`/sales/${saleId}`);
+        return;
+      }
+      toast.success(canApprove ? "Sale approved and posted." : "Sent to the Branch Manager for approval.");
     } else {
       toast.success("Draft saved.");
-      router.push(`/sales/${res.id}`);
     }
+    router.push(`/sales/${saleId}`);
   }
 
   return (
@@ -204,6 +237,16 @@ export function SaleForm({
               </Button>
             </div>
             {payments.length === 0 && <p className="text-sm text-muted-foreground">No payments — this will be a credit sale.</p>}
+            {paid > 0 && (
+              <div className="mt-3 space-y-1.5 rounded-md border border-dashed border-border p-3">
+                <Label htmlFor="proof">Proof of payment {!initial?.hasProof && <span className="text-destructive">*</span>}</Label>
+                <Input id="proof" type="file" accept="application/pdf,image/jpeg,image/png,image/webp"
+                  onChange={(e) => setProof(e.target.files?.[0] ?? null)} />
+                <p className="text-xs text-muted-foreground">
+                  {initial?.hasProof ? "Proof already attached; choose a file only to add another. " : ""}PDF or photo (JPEG, PNG, WebP), up to 4 MB.
+                </p>
+              </div>
+            )}
             <div className="space-y-2">
               {payments.map((p) => (
                 <div key={p.key} className="flex items-center gap-2">
@@ -236,7 +279,7 @@ export function SaleForm({
 
             {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
             <div className="flex flex-col gap-2 pt-2">
-              <Button onClick={() => submit(true)} disabled={pending}>{pending ? "Working..." : "Post sale"}</Button>
+              <Button onClick={() => submit(true)} disabled={pending}>{pending ? "Working..." : canApprove ? "Approve & post" : "Submit for approval"}</Button>
               <Button variant="outline" onClick={() => submit(false)} disabled={pending}>Save draft</Button>
             </div>
           </CardContent>

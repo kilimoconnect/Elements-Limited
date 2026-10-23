@@ -5,8 +5,9 @@ import { getActiveContext, can } from "@/lib/context";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent } from "@/components/ui/card";
-import { DocStatusBadge, PayStatusBadge } from "@/components/common/doc-status-badge";
-import { formatMoney, formatQuantity, formatDate } from "@/lib/format";
+import { DocStatusBadge, PayStatusBadge, saleStatus } from "@/components/common/doc-status-badge";
+import { AttachmentsPanel } from "@/components/common/attachments-panel";
+import { formatMoney, formatQuantity, formatDate, formatDateTime } from "@/lib/format";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -34,7 +35,19 @@ export default async function SaleDetailPage(props: { params: Params }) {
     admin.from("sales_returns").select("id, document_number, document_date, total, refund_amount, document_status").eq("sale_id", id).order("created_at", { ascending: false }),
   ]);
 
+  const people = [sale.submitted_by, sale.approved_by, sale.rejected_by].filter(Boolean) as string[];
+  const { data: profiles } = people.length
+    ? await admin.from("user_profiles").select("id, full_name, email").in("id", people)
+    : { data: [] as { id: string; full_name: string | null; email: string }[] };
+  const nameOf = (uid: string | null) => {
+    const p = (profiles ?? []).find((x) => x.id === uid);
+    return p ? (p.full_name || p.email) : "—";
+  };
+
   const s = sale as Record<string, unknown> as {
+    approval_status: string; submitted_by: string | null; submitted_at: string | null;
+    approved_by: string | null; approved_at: string | null; rejected_by: string | null; rejected_at: string | null;
+    rejection_reason: string | null; branch_id: string;
     document_number: string | null; document_status: string; payment_status: string; document_date: string;
     due_date: string | null; grand_total: number; net_total: number; tax_total: number; discount_total: number;
     subtotal: number; amount_paid: number; outstanding: number; cogs_total: number; void_reason: string | null;
@@ -47,19 +60,28 @@ export default async function SaleDetailPage(props: { params: Params }) {
     unit_cost: number; cogs: number;
   }>;
   const gp = Number(s.net_total) - Number(s.cogs_total);
+  const status = saleStatus(s.document_status, s.approval_status);
+  const inMyBranch = ctx.user.isOwner || ctx.user.branchIds.includes(s.branch_id);
 
   return (
     <div>
       <PageHeader
-        title={s.document_number ?? "Sale (draft)"}
+        title={s.document_number ?? "Sales order"}
         description={`${s.branch?.name} · ${formatDate(s.document_date)}`}
         actions={
-          <SaleActions id={id} status={s.document_status} outstanding={Number(s.outstanding)} customerId={s.customer_id}
-            canPost={can(ctx.user, "sales.post")} canVoid={can(ctx.user, "transactions.void")}
+          <SaleActions id={id} status={s.document_status} approvalStatus={s.approval_status} outstanding={Number(s.outstanding)} customerId={s.customer_id}
+            canEdit={inMyBranch && can(ctx.user, "sales.edit_draft")} canSubmit={inMyBranch && can(ctx.user, "sales.create")}
+            canApprove={inMyBranch && can(ctx.user, "sales.approve")} canVoid={can(ctx.user, "transactions.void")}
             canDelete={can(ctx.user, "transactions.delete_draft")} canReceive={can(ctx.user, "sales.receive_payment")}
             canReturn={can(ctx.user, "sales.create_return")} />
         }
       />
+
+      {status === "rejected" && s.rejection_reason && (
+        <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <span className="font-semibold">Rejected by {nameOf(s.rejected_by)}:</span> {s.rejection_reason}
+        </div>
+      )}
 
       <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card><CardContent className="space-y-1 p-5 text-sm">
@@ -69,7 +91,7 @@ export default async function SaleDetailPage(props: { params: Params }) {
           {s.customer?.tin && <p className="text-muted-foreground">TIN: {s.customer.tin}</p>}
         </CardContent></Card>
         <Card><CardContent className="space-y-2 p-5 text-sm">
-          <div className="flex justify-between"><span className="text-muted-foreground">Status</span><DocStatusBadge status={s.document_status} /></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Status</span><DocStatusBadge status={status} /></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Payment</span><PayStatusBadge status={s.payment_status} /></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Due date</span><span>{s.due_date ? formatDate(s.due_date) : "—"}</span></div>
           {s.void_reason && <div className="flex justify-between"><span className="text-muted-foreground">Void reason</span><span>{s.void_reason}</span></div>}
@@ -148,6 +170,27 @@ export default async function SaleDetailPage(props: { params: Params }) {
               })}
             </div>
           )}
+        </CardContent></Card>
+
+        <Card><CardContent className="p-5">
+          <h3 className="mb-2 text-sm font-semibold">Approval</h3>
+          <div className="space-y-1 text-sm">
+            <div className="flex justify-between"><span className="text-muted-foreground">Submitted</span>
+              <span>{s.submitted_at ? `${nameOf(s.submitted_by)} · ${formatDateTime(s.submitted_at)}` : "Not yet"}</span></div>
+            {s.approved_at && (
+              <div className="flex justify-between"><span className="text-muted-foreground">Approved</span>
+                <span>{nameOf(s.approved_by)} · {formatDateTime(s.approved_at)}</span></div>
+            )}
+            {s.rejected_at && s.approval_status === "rejected" && (
+              <div className="flex justify-between"><span className="text-muted-foreground">Rejected</span>
+                <span>{nameOf(s.rejected_by)} · {formatDateTime(s.rejected_at)}</span></div>
+            )}
+          </div>
+        </CardContent></Card>
+
+        <Card><CardContent className="p-5">
+          <h3 className="mb-2 text-sm font-semibold">Proof of payment & documents</h3>
+          <AttachmentsPanel ownerType="sale" ownerId={id} categories={["proof_of_payment", "other"]} />
         </CardContent></Card>
       </div>
     </div>

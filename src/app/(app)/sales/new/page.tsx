@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SaleForm } from "./sale-form";
 
-export const metadata: Metadata = { title: "Create Sale" };
+export const metadata: Metadata = { title: "New Sales Order" };
 
 export default async function NewSalePage() {
   await requirePermissionPage("sales.create");
@@ -17,8 +17,8 @@ export default async function NewSalePage() {
   if (!ctx.branchId) {
     return (
       <div>
-        <PageHeader title="Create Sale" />
-        <EmptyState title="No active branch" description="You need an assigned branch to create sales." />
+        <PageHeader title="New Sales Order" />
+        <EmptyState title="No active branch" description="You need an assigned branch to create sales orders." />
       </div>
     );
   }
@@ -38,7 +38,7 @@ export default async function NewSalePage() {
 
   return (
     <div>
-      <PageHeader title="Create Sale" description="Fast sales entry. Totals and stock are validated on the server at posting." />
+      <PageHeader title="New Sales Order" description={can(ctx.user, "sales.approve") ? "You approve your own orders: approving posts the sale." : "Attach proof of payment, then submit. The Branch Manager approves the order, which posts the sale."} />
       <SaleForm
         branchId={ctx.branchId}
         products={flattenProducts(products)}
@@ -48,6 +48,7 @@ export default async function NewSalePage() {
         stock={stock}
         canViewCost={can(ctx.user, "sales.view_cost")}
         walkInId={walkIn?.id ?? null}
+        canApprove={can(ctx.user, "sales.approve")}
       />
     </div>
   );

@@ -201,9 +201,17 @@ export const ROLE_DEFS: RoleDef[] = [
     permissions: "*",
   },
   {
+    code: "CEO",
+    name: "CEO",
+    description: "Full access like the Owner, except managing users and roles.",
+    isSystem: true,
+    isProtected: false,
+    permissions: PERMISSION_DEFS.map((d) => d.code).filter((c) => c !== "users.manage" && c !== "roles.manage"),
+  },
+  {
     code: "DIRECTOR",
-    name: "Manager",
-    description: "Operational management across modules.",
+    name: "Branch Manager",
+    description: "Runs a branch and approves its sales orders.",
     isSystem: true,
     isProtected: false,
     permissions: [
@@ -263,15 +271,31 @@ export const ROLE_DEFS: RoleDef[] = [
     ],
   },
   {
+    code: "SALES_MANAGER",
+    name: "Sales Manager",
+    description: "Leads the sales team: orders, customers, payments and sales reports.",
+    isSystem: true,
+    isProtected: false,
+    permissions: [
+      "dashboard.view",
+      "sales.view", "sales.create", "sales.edit_draft", "sales.export",
+      "sales.override_price", "sales.receive_payment", "sales.create_return",
+      "inventory.view", "inventory.view_kardex", "kardex.view",
+      "reports.view", "reports.export", "reports.view_receivables",
+      "documents.upload",
+    ],
+  },
+  {
     code: "CASHIER",
     name: "Sales / Cashier",
-    description: "Point-of-sale and receipts.",
+    description: "Creates sales orders with proof of payment and receives payments.",
     isSystem: true,
     isProtected: false,
     permissions: [
       "dashboard.view",
       "sales.view", "sales.create", "sales.edit_draft", "sales.post", "sales.receive_payment",
       "inventory.view", "inventory.view_kardex", "kardex.view",
+      "documents.upload",
     ],
   },
   {

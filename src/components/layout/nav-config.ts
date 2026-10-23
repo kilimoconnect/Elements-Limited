@@ -44,7 +44,8 @@ export const NAV: NavEntry[] = [
     enabled: true,
     requires: "sales.view",
     items: [
-      { label: "Create Sale", href: "/sales/new", enabled: true, requires: "sales.create" },
+      { label: "New Sales Order", href: "/sales/new", enabled: true, requires: "sales.create" },
+      { label: "Sales Approvals", href: "/sales/approvals", enabled: true, requires: "sales.approve" },
       { label: "Sales History", href: "/sales/history", enabled: true, requires: "sales.view" },
       { label: "Customer Payments", href: "/sales/customer-payments", enabled: true, requires: "sales.view" },
     ],

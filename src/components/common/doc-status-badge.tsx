@@ -2,6 +2,8 @@ import { Badge } from "@/components/ui/badge";
 
 const DOC: Record<string, { label: string; variant: "default" | "success" | "muted" | "destructive" | "warning" | "secondary" }> = {
   draft: { label: "Draft", variant: "muted" },
+  pending_approval: { label: "Awaiting approval", variant: "warning" },
+  rejected: { label: "Rejected", variant: "destructive" },
   posted: { label: "Posted", variant: "success" },
   voided: { label: "Voided", variant: "destructive" },
   dispatched: { label: "Dispatched", variant: "default" },
@@ -16,6 +18,14 @@ const PAY: Record<string, { label: string; variant: "default" | "success" | "mut
   refunded: { label: "Refunded", variant: "muted" },
   partially_refunded: { label: "Part. refunded", variant: "warning" },
 };
+
+/** A sale's status as people see it: a draft shows its approval state. */
+export function saleStatus(documentStatus: string, approvalStatus: string | null | undefined): string {
+  if (documentStatus !== "draft") return documentStatus;
+  if (approvalStatus === "pending") return "pending_approval";
+  if (approvalStatus === "rejected") return "rejected";
+  return "draft";
+}
 
 export function DocStatusBadge({ status }: { status: string }) {
   const s = DOC[status] ?? { label: status, variant: "secondary" as const };

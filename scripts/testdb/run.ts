@@ -35,6 +35,7 @@ const STEPS: [string, string][] = [
   ["End-to-end scenario (Stage 9)", "scripts/itest-scenario.ts"],
   ["Negative cases and regression (Stage 9)", "scripts/itest-negative.ts"],
   ["Valuation fixes D1 / D8", "scripts/itest-valuation.ts"],
+  ["Sales order approval", "scripts/itest-sales-approval.ts"],
 ];
 
 function run(label: string, script: string, env: NodeJS.ProcessEnv): boolean {
