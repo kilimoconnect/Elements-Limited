@@ -11,6 +11,7 @@ import { formatMoney, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -60,6 +61,8 @@ export function SaleForm({
     : [nl()]);
   const [payments, setPayments] = React.useState<Payment[]>((initial?.payments ?? []).map((p) => ({ key: key(), payment_account_id: p.payment_account_id, amount: String(p.amount) })));
   const [proof, setProof] = React.useState<File | null>(null);
+  // Ticked when the customer pays later (all of it or part of it).
+  const [isCredit, setIsCredit] = React.useState(!!initial?.dueDate);
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -100,6 +103,22 @@ export function SaleForm({
     return (requested.get(pid) ?? 0) > (stock[pid] ?? 0);
   };
 
+  // What still stops the order being submitted (or approved); the button stays faint until this is empty.
+  const validLineCount = lines.filter((l) => l.product_id && Number(l.quantity) > 0).length;
+  const shortNames = [...new Set(lines.filter((l) => l.product_id && Number(l.quantity) > 0).map((l) => l.product_id))]
+    .filter(shortOf).map((pid) => prodMap.get(pid)?.name ?? "a product");
+  const isWalkIn = !!customerId && customers.find((c) => c.id === customerId)?.is_protected === true;
+  const blockers: string[] = [];
+  if (!customerId) blockers.push("Choose a customer.");
+  if (validLineCount === 0) blockers.push("Add at least one product.");
+  if (shortNames.length) blockers.push(`Not enough stock for ${shortNames.join(", ")}.`);
+  if (payments.some((p) => Number(p.amount) > 0 && !p.payment_account_id)) blockers.push("Choose the account for each payment.");
+  if (paid > totals.grand + 0.001) blockers.push("Payments are more than the order total.");
+  if (!isCredit && outstanding > 0.001 && validLineCount > 0) blockers.push("Enter payment for the full amount, or tick Credit sale.");
+  if (isCredit && isWalkIn) blockers.push("A Walk-in Customer cannot buy on credit.");
+  if (isCredit && outstanding > 0.001 && !dueDate) blockers.push("Enter the due date for the credit.");
+  if (paid > 0 && !proof && !initial?.hasProof) blockers.push("Attach proof of payment.");
+
   async function submit(post: boolean) {
     setError(null);
     const validLines = lines.filter((l) => l.product_id && Number(l.quantity) > 0);
@@ -109,6 +128,7 @@ export function SaleForm({
       setError(`Not enough stock for: ${short.map((pid) => `${prodMap.get(pid)?.name} (available ${stock[pid] ?? 0})`).join(", ")}.`);
       return;
     }
+    if (post && blockers.length) { setError(blockers[0]); return; }
     if (post && outstanding > 0 && !dueDate) { setError("A due date is required when there is an outstanding balance."); return; }
     if (post && paid > 0 && !proof && !initial?.hasProof) { setError("Attach proof of payment for the amount paid."); return; }
     // Uploads travel through the server, which accepts about 4.5 MB per request.
@@ -168,7 +188,7 @@ export function SaleForm({
               <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
             <div className="space-y-1.5"><Label>Customer reference</Label>
               <Input value={reference} onChange={(e) => setReference(e.target.value)} /></div>
-            <div className="space-y-1.5"><Label>Due date {outstanding > 0 && <span className="text-destructive">*</span>}</Label>
+            <div className="space-y-1.5"><Label>Due date {isCredit && outstanding > 0 && <span className="text-destructive">*</span>}</Label>
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></div>
           </CardContent>
         </Card>
@@ -236,7 +256,18 @@ export function SaleForm({
                 <Plus className="h-4 w-4" /> Add payment
               </Button>
             </div>
-            {payments.length === 0 && <p className="text-sm text-muted-foreground">No payments — this will be a credit sale.</p>}
+            <label className="mb-3 flex cursor-pointer items-start gap-2 rounded-md bg-muted/50 p-2.5 text-sm">
+              <Checkbox className="mt-0.5" checked={isCredit} onCheckedChange={(v) => setIsCredit(v === true)} />
+              <span>
+                <span className="font-medium">Credit sale (full or partial)</span>
+                <span className="block text-xs text-muted-foreground">Tick when the customer pays all or part later. A due date is then required.</span>
+              </span>
+            </label>
+            {payments.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                {isCredit ? "No payment now — full credit." : "No payment yet. Add the payment, or tick Credit sale."}
+              </p>
+            )}
             <div className="mt-3 space-y-1.5 rounded-md border border-dashed border-border p-3">
               <Label htmlFor="proof">
                 Proof of payment {paid > 0 && !initial?.hasProof && <span className="text-destructive">*</span>}
@@ -280,8 +311,14 @@ export function SaleForm({
 
             {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
             <div className="flex flex-col gap-2 pt-2">
-              <Button onClick={() => submit(true)} disabled={pending}>{pending ? "Working..." : canApprove ? "Approve & post" : "Submit for approval"}</Button>
+              <Button onClick={() => submit(true)} disabled={pending || blockers.length > 0}>{pending ? "Working..." : canApprove ? "Approve & post" : "Submit for approval"}</Button>
               <Button variant="outline" onClick={() => submit(false)} disabled={pending}>Save draft</Button>
+              {blockers.length > 0 && (
+                <div className="pt-1 text-xs text-muted-foreground">
+                  <p className="font-medium">Before you can {canApprove ? "approve" : "submit"}:</p>
+                  <ul className="mt-1 list-disc space-y-0.5 pl-4">{blockers.map((b) => <li key={b}>{b}</li>)}</ul>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
