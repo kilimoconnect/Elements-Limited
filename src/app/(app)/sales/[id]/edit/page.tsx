@@ -5,6 +5,7 @@ import { getActiveContext, can } from "@/lib/context";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { flattenProducts } from "@/lib/products";
 import { PageHeader } from "@/components/ui/page-header";
+import { loadPromotionPreview } from "@/lib/sales/promotion-data";
 import { SaleForm } from "../../new/sale-form";
 
 export const metadata: Metadata = { title: "Edit Sales Order" };
@@ -28,11 +29,12 @@ export default async function EditSalePage(props: { params: Params }) {
     admin.from("payment_accounts").select("id, code, name, branch_id").eq("company_id", ctx.companyId).eq("is_active", true).order("code"),
     admin.from("customers").select("id, code, name, is_protected").eq("company_id", ctx.companyId).eq("is_active", true).order("code"),
     admin.from("stock_balances").select("product_id, quantity").eq("company_id", ctx.companyId).eq("branch_id", sale.branch_id),
-    admin.from("sale_lines").select("product_id, quantity, unit_price, discount, tax_code_id").eq("sale_id", id).order("line_no"),
+    admin.from("sale_lines").select("product_id, quantity, unit_price, discount, tax_code_id").eq("sale_id", id).eq("is_free", false).order("line_no"),
     admin.from("sale_payments").select("payment_account_id, amount").eq("sale_id", id),
     admin.from("document_attachments").select("id", { count: "exact", head: true }).eq("owner_type", "sale").eq("owner_id", id).eq("category", "proof_of_payment"),
   ]);
 
+  const promo = await loadPromotionPreview(ctx.companyId);
   const stock: Record<string, number> = {};
   for (const b of bals ?? []) stock[b.product_id] = Number(b.quantity);
   const branchAccounts = (accounts ?? []).filter((a) => !a.branch_id || a.branch_id === sale.branch_id);
@@ -56,6 +58,8 @@ export default async function EditSalePage(props: { params: Params }) {
         canViewCost={can(ctx.user, "sales.view_cost")}
         walkInId={walkIn?.id ?? null}
         canApprove={can(ctx.user, "sales.approve")}
+        promotions={promo.rules}
+        rewards={promo.rewards}
         initial={{
           saleId: id,
           customerId: sale.customer_id,

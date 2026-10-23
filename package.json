@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "tsx scripts/test.ts && tsx scripts/test-attachments.ts && tsx scripts/test-pricing.ts",
+    "test": "tsx scripts/test.ts && tsx scripts/test-attachments.ts && tsx scripts/test-pricing.ts && tsx scripts/test-promotions.ts",
     "test:integration": "tsx scripts/itest.ts",
     "test:phase3": "tsx scripts/itest3.ts",
     "test:phase4": "tsx scripts/itest4.ts",

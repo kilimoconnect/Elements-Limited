@@ -33,6 +33,8 @@ export const RESOURCES = [
   "rebagging",
   "documents",
   "fx",
+  // Sales promotions (free goods)
+  "promotions",
 ] as const;
 export type Resource = (typeof RESOURCES)[number];
 
@@ -177,6 +179,7 @@ export const PERMISSION_DEFS: PermissionDef[] = [
   ...p("documents", ["view_financial", "view_licence", "upload"]),
   ...p("fx", ["settle", "revalue", "enter_rate"]),
   ...p("inventory", ["transfer_view", "transfer_resolve", "transfer_cost"]),
+  ...p("promotions", ["view", "manage"]),
 ];
 
 export const OWNER_ROLE = "OWNER";
@@ -238,6 +241,7 @@ export const ROLE_DEFS: RoleDef[] = [
       "rebagging.view", "rebagging.create", "rebagging.post", "rebagging.approve",
       "inventory.transfer_view", "inventory.transfer_resolve", "inventory.transfer_cost",
       "documents.view_financial", "documents.view_licence", "documents.upload", "fx.settle", "fx.enter_rate",
+      "promotions.view",
     ],
   },
   {
@@ -282,7 +286,7 @@ export const ROLE_DEFS: RoleDef[] = [
       "sales.override_price", "sales.receive_payment", "sales.create_return",
       "inventory.view", "inventory.view_kardex", "kardex.view",
       "reports.view", "reports.export", "reports.view_receivables",
-      "documents.upload",
+      "documents.upload", "promotions.view",
     ],
   },
   {

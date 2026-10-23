@@ -9,6 +9,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { getActiveContext } from "@/lib/context";
 import { callPostingRpc, type RpcResult } from "@/lib/rpc";
 import { calcLine, calcTotals, round2 } from "@/lib/sales/calc";
+import { earnedFreeGoods, type PromotionRule } from "@/lib/sales/promotions";
 
 export interface SaleLineInput {
   product_id: string;
@@ -34,6 +35,80 @@ export interface SaleDraftInput {
   notes?: string;
   lines: SaleLineInput[];
   payments: SalePaymentInput[];
+  /** Give the customer the free goods they earned in earlier orders (default yes). */
+  redeemRewards?: boolean;
+}
+
+/** Free-goods lines (price 0) for the order: same-order promotions plus earlier rewards being redeemed. */
+async function promotionLines(
+  admin: ReturnType<typeof createAdminClient>, companyId: string, input: SaleDraftInput,
+): Promise<Record<string, unknown>[]> {
+  const { data: cust } = await admin.from("customers").select("is_protected, company_id").eq("id", input.customerId).maybeSingle();
+  if (!cust || cust.company_id !== companyId || cust.is_protected) return [];
+
+  const bought = new Map<string, number>();
+  for (const l of input.lines) bought.set(l.product_id, (bought.get(l.product_id) ?? 0) + Number(l.quantity));
+  const { data: rules } = await admin.from("sales_promotions")
+    .select("id, name, product_id, min_quantity, free_quantity, repeat_per_multiple, reward_timing, starts_on, ends_on")
+    .eq("company_id", companyId).eq("is_active", true).eq("reward_timing", "current_order")
+    .in("product_id", [...bought.keys()]);
+  const earned = earnedFreeGoods((rules ?? []).map(toRule), bought, input.documentDate, false);
+
+  const rewards = input.redeemRewards === false ? [] : ((await admin.from("promotion_rewards")
+    .select("id, promotion_id, product_id, quantity, promotion:sales_promotions(name)")
+    .eq("company_id", companyId).eq("customer_id", input.customerId).eq("status", "available")).data ?? []) as unknown as
+    { id: string; promotion_id: string; product_id: string; quantity: number; promotion: { name: string } | null }[];
+
+  const ids = [...new Set([...earned.map((e) => e.promotion.product_id), ...rewards.map((r) => r.product_id)])];
+  if (ids.length === 0) return [];
+  const { data: prods } = await admin.from("products").select("id, name, selling_price, track_inventory, is_active").in("id", ids);
+  const pm = new Map((prods ?? []).map((p) => [p.id, p]));
+  const free = (productId: string, qty: number, label: string, promotionId: string, rewardId: string | null) => {
+    const p = pm.get(productId);
+    if (!p || !p.is_active) return null;
+    return {
+      product_id: productId, description: `${p.name} - FREE (${label})`, quantity: qty, unit_price: 0,
+      original_price: Number(p.selling_price), discount: 0, tax_code_id: null, tax_rate: 0, tax_type: null, tax_name: null,
+      tax_inclusive: false, net_amount: 0, tax_amount: 0, line_total: 0, track_inventory: p.track_inventory,
+      is_free: true, promotion_id: promotionId, promotion_reward_id: rewardId,
+    };
+  };
+  return [
+    ...earned.map((e) => free(e.promotion.product_id, e.quantity, e.promotion.name, e.promotion.id, null)),
+    ...rewards.map((r) => free(r.product_id, Number(r.quantity), `${r.promotion?.name ?? "promotion"}, earned earlier`, r.promotion_id, r.id)),
+  ].filter(Boolean) as Record<string, unknown>[];
+}
+
+async function releaseRewards(admin: ReturnType<typeof createAdminClient>, ids: string[]) {
+  if (ids.length) await admin.from("promotion_rewards").update({ status: "available", redeemed_sale_id: null, redeemed_at: null }).in("id", ids);
+}
+
+/** After a sale posts: record the free goods it earns for the customer's next order. */
+async function earnNextOrderRewards(admin: ReturnType<typeof createAdminClient>, sale: { id: string; company_id: string; customer_id: string; document_date: string }) {
+  const { data: cust } = await admin.from("customers").select("is_protected").eq("id", sale.customer_id).maybeSingle();
+  if (!cust || cust.is_protected) return;
+  const { data: lines } = await admin.from("sale_lines").select("product_id, quantity").eq("sale_id", sale.id).eq("is_free", false);
+  const bought = new Map<string, number>();
+  for (const l of lines ?? []) bought.set(l.product_id, (bought.get(l.product_id) ?? 0) + Number(l.quantity));
+  if (bought.size === 0) return;
+  const { data: rules } = await admin.from("sales_promotions")
+    .select("id, name, product_id, min_quantity, free_quantity, repeat_per_multiple, reward_timing, starts_on, ends_on")
+    .eq("company_id", sale.company_id).eq("is_active", true).eq("reward_timing", "next_order").in("product_id", [...bought.keys()]);
+  const earned = earnedFreeGoods((rules ?? []).map(toRule), bought, sale.document_date, false);
+  if (earned.length === 0) return;
+  await admin.from("promotion_rewards").upsert(earned.map((e) => ({
+    company_id: sale.company_id, promotion_id: e.promotion.id, customer_id: sale.customer_id,
+    product_id: e.promotion.product_id, quantity: e.quantity, earned_sale_id: sale.id,
+  })), { onConflict: "promotion_id,earned_sale_id", ignoreDuplicates: true });
+}
+
+function toRule(r: Record<string, unknown>): PromotionRule {
+  return {
+    id: String(r.id), name: String(r.name), product_id: String(r.product_id),
+    min_quantity: Number(r.min_quantity), free_quantity: Number(r.free_quantity),
+    repeat_per_multiple: r.repeat_per_multiple === true, reward_timing: r.reward_timing as PromotionRule["reward_timing"],
+    starts_on: String(r.starts_on), ends_on: (r.ends_on as string | null) ?? null,
+  };
 }
 
 export async function saveSaleDraft(input: SaleDraftInput): Promise<RpcResult> {
@@ -164,7 +239,9 @@ export async function saveSaleDraft(input: SaleDraftInput): Promise<RpcResult> {
       saleId = data.id;
     }
 
-    await admin.from("sale_lines").insert(lineRows.map((r) => ({ ...r, sale_id: saleId })));
+    // Free goods are recomputed by the server on every save; the form only previews them.
+    const freeRows = (await promotionLines(admin, ctx.companyId, input)).map((r, i) => ({ ...r, line_no: lineRows.length + i + 1 }));
+    await admin.from("sale_lines").insert([...lineRows, ...freeRows].map((r) => ({ ...r, sale_id: saleId })));
     if (input.payments.length) {
       await admin.from("sale_payments").insert(input.payments.filter((p) => p.amount > 0).map((p) => ({
         sale_id: saleId, payment_account_id: p.payment_account_id, amount: p.amount,
@@ -282,14 +359,15 @@ export async function approveSale(saleId: string): Promise<RpcResult> {
 
     // Below-cost check
     if (!userHasPermission(user, "sales.sell_below_cost")) {
-      const { data: lines } = await admin.from("sale_lines").select("product_id, unit_price, track_inventory").eq("sale_id", saleId);
+      const { data: lines } = await admin.from("sale_lines").select("product_id, unit_price, track_inventory, is_free").eq("sale_id", saleId);
       const prodIds = (lines ?? []).filter((l) => l.track_inventory).map((l) => l.product_id);
       if (prodIds.length) {
         const { data: bals } = await admin.from("stock_balances").select("product_id, avg_unit_cost")
           .eq("company_id", ctx.companyId).eq("branch_id", sale.branch_id).in("product_id", prodIds);
         const costMap = new Map((bals ?? []).map((b) => [b.product_id, Number(b.avg_unit_cost)]));
         for (const l of lines ?? []) {
-          if (!l.track_inventory) continue;
+          // Promotion free goods are given at price 0 by design.
+          if (!l.track_inventory || l.is_free) continue;
           const cost = costMap.get(l.product_id) ?? 0;
           if (cost > 0 && Number(l.unit_price) < cost) {
             return { ok: false, error: "You are not allowed to sell below cost." };
@@ -298,13 +376,29 @@ export async function approveSale(saleId: string): Promise<RpcResult> {
       }
     }
 
+    // Claim the earlier rewards this order gives out, so the same free goods cannot be given twice.
+    const { data: rewardLines } = await admin.from("sale_lines").select("promotion_reward_id").eq("sale_id", saleId).not("promotion_reward_id", "is", null);
+    const rewardIds = [...new Set((rewardLines ?? []).map((l) => l.promotion_reward_id as string))];
+    const claimedAt = new Date().toISOString();
+    if (rewardIds.length) {
+      const { data: claimed } = await admin.from("promotion_rewards")
+        .update({ status: "redeemed", redeemed_sale_id: saleId, redeemed_at: claimedAt })
+        .in("id", rewardIds).eq("status", "available").eq("customer_id", sale.customer_id).select("id");
+      if ((claimed ?? []).length !== rewardIds.length) {
+        await releaseRewards(admin, (claimed ?? []).map((c) => c.id));
+        return { ok: false, error: "Free goods earned earlier on this order were already given in another order. Edit and save the order to refresh them." };
+      }
+    }
+
     const res = await callPostingRpc("post_sale", { p_id: saleId, p_user: user.id, p_idem: randomUUID() });
+    if (!res.ok) await releaseRewards(admin, rewardIds);
     if (res.ok) {
       const now = new Date().toISOString();
       await admin.from("sales").update({
         approval_status: "approved", approved_by: user.id, approved_at: now,
         submitted_by: sale.submitted_by ?? user.id, submitted_at: sale.submitted_at ?? now,
       }).eq("id", saleId);
+      await earnNextOrderRewards(admin, sale);
       await writeAuditLog({ userId: user.id, companyId: ctx.companyId, branchId: sale.branch_id, action: "sale.approve", resourceType: "sale", resourceId: saleId });
       await writeAuditLog({ userId: user.id, companyId: ctx.companyId, branchId: sale.branch_id, action: "sale.post", resourceType: "sale", resourceId: saleId });
       revalidatePath("/sales/history"); revalidatePath("/sales/approvals"); revalidatePath(`/sales/${saleId}`); revalidatePath("/inventory"); revalidatePath("/dashboard");
@@ -321,6 +415,11 @@ export async function voidSale(saleId: string, reason: string): Promise<RpcResul
     assertPermission(user, "transactions.void");
     const res = await callPostingRpc("void_sale", { p_id: saleId, p_user: user.id, p_reason: reason });
     if (res.ok) {
+      // Free goods this sale earned for a next order are withdrawn (unless already given);
+      // free goods it gave out from earlier orders become available again.
+      const admin = createAdminClient();
+      await admin.from("promotion_rewards").update({ status: "cancelled" }).eq("earned_sale_id", saleId).eq("status", "available");
+      await admin.from("promotion_rewards").update({ status: "available", redeemed_sale_id: null, redeemed_at: null }).eq("redeemed_sale_id", saleId).eq("status", "redeemed");
       await writeAuditLog({ userId: user.id, action: "sale.void", resourceType: "sale", resourceId: saleId, reason });
       revalidatePath("/sales/history"); revalidatePath(`/sales/${saleId}`); revalidatePath("/inventory"); revalidatePath("/dashboard");
     }

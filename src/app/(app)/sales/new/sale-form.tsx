@@ -3,10 +3,11 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { Gift, Plus, Trash2 } from "lucide-react";
 import { saveSaleDraft, submitSaleForApproval, approveSale, type SaleDraftInput } from "@/lib/sales/actions";
 import { uploadAttachmentAction } from "@/lib/attachments/actions";
 import { calcLine, calcTotals, round2 } from "@/lib/sales/calc";
+import { earnedFreeGoods, type PromotionRule } from "@/lib/sales/promotions";
 import { formatMoney, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,12 +45,16 @@ function nl(): Line { return { key: key(), product_id: "", quantity: "1", unit_p
 
 export function SaleForm({
   branchId, products, taxCodes, accounts, customers, stock, canViewCost, walkInId, canApprove, initial,
+  promotions = [], rewards = {},
 }: {
   branchId: string; products: ProductOpt[]; taxCodes: TaxOpt[]; accounts: AccountOpt[];
   customers: CustomerOpt[]; stock: Record<string, number>; canViewCost: boolean; walkInId: string | null;
   /** Approvers post straight away; everyone else submits the order for approval. */
   canApprove: boolean; initial?: SaleFormInitial;
+  /** Active promotions and each customer's free goods waiting from earlier orders. */
+  promotions?: PromotionRule[]; rewards?: Record<string, { product_id: string; quantity: number; label: string }[]>;
 }) {
+  const [redeem, setRedeem] = React.useState(true);
   const router = useRouter();
   const [customerId, setCustomerId] = React.useState(initial?.customerId ?? walkInId ?? "");
   const [date, setDate] = React.useState(initial?.date ?? todayISO());
@@ -91,12 +96,27 @@ export function SaleForm({
   const paid = round2(payments.reduce((s, p) => s + Number(p.amount || 0), 0));
   const outstanding = round2(totals.grand - paid);
 
-  // Stock guard: total requested per tracked product (across lines) must not
-  // exceed what the branch has. The server re-checks at posting.
+  // Promotion preview (the server applies the same rules when the order is saved).
+  const walkInSelected = !!customerId && customers.find((c) => c.id === customerId)?.is_protected === true;
+  const bought = new Map<string, number>();
+  for (const l of lines) {
+    if (l.product_id && Number(l.quantity) > 0) bought.set(l.product_id, (bought.get(l.product_id) ?? 0) + Number(l.quantity));
+  }
+  const freeNow = earnedFreeGoods(promotions.filter((r) => r.reward_timing === "current_order"), bought, date, walkInSelected || !customerId);
+  const freeNext = earnedFreeGoods(promotions.filter((r) => r.reward_timing === "next_order"), bought, date, walkInSelected || !customerId);
+  const waiting = walkInSelected || !customerId ? [] : (rewards[customerId] ?? []);
+  const freeLines = [
+    ...freeNow.map((f) => ({ product_id: f.promotion.product_id, quantity: f.quantity, label: f.promotion.name })),
+    ...(redeem ? waiting.map((w) => ({ ...w, label: `${w.label}, earned earlier` })) : []),
+  ];
+
+  // Stock guard: total requested per tracked product (across lines, free goods
+  // included) must not exceed what the branch has. The server re-checks at posting.
   const requested = new Map<string, number>();
   for (const l of lines) {
     if (l.product_id) requested.set(l.product_id, (requested.get(l.product_id) ?? 0) + Number(l.quantity || 0));
   }
+  for (const f of freeLines) requested.set(f.product_id, (requested.get(f.product_id) ?? 0) + f.quantity);
   const shortOf = (pid: string) => {
     const p = prodMap.get(pid);
     if (!p || !p.track_inventory) return false;
@@ -105,9 +125,9 @@ export function SaleForm({
 
   // What still stops the order being submitted (or approved); the button stays faint until this is empty.
   const validLineCount = lines.filter((l) => l.product_id && Number(l.quantity) > 0).length;
-  const shortNames = [...new Set(lines.filter((l) => l.product_id && Number(l.quantity) > 0).map((l) => l.product_id))]
+  const shortNames = [...requested.keys()].filter((pid) => (requested.get(pid) ?? 0) > 0)
     .filter(shortOf).map((pid) => prodMap.get(pid)?.name ?? "a product");
-  const isWalkIn = !!customerId && customers.find((c) => c.id === customerId)?.is_protected === true;
+  const isWalkIn = walkInSelected;
   const blockers: string[] = [];
   if (!customerId) blockers.push("Choose a customer.");
   if (validLineCount === 0) blockers.push("Add at least one product.");
@@ -142,6 +162,7 @@ export function SaleForm({
         product_id: l.product_id, quantity: Number(l.quantity), unit_price: Number(l.unit_price || 0),
         discount: Number(l.discount || 0), tax_code_id: l.tax_code_id === NONE ? null : l.tax_code_id,
       })),
+      redeemRewards: redeem,
       payments: payments.filter((p) => p.payment_account_id && Number(p.amount) > 0)
         .map((p) => ({ payment_account_id: p.payment_account_id, amount: Number(p.amount), payment_date: date })),
     };
@@ -247,6 +268,37 @@ export function SaleForm({
             <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => setLines([...lines, nl()])}><Plus className="h-4 w-4" /> Add line</Button>
           </CardContent>
         </Card>
+
+        {(freeNow.length > 0 || waiting.length > 0 || freeNext.length > 0) && (
+          <Card className="border-success/40">
+            <CardContent className="space-y-2 p-5 text-sm">
+              <p className="flex items-center gap-2 font-medium"><Gift className="h-4 w-4 text-success" /> Promotion free goods</p>
+              {freeNow.map((f) => (
+                <p key={f.promotion.id} className="flex justify-between">
+                  <span>{prodMap.get(f.promotion.product_id)?.name ?? "Product"} <span className="text-muted-foreground">({f.promotion.name})</span></span>
+                  <span className="font-medium tabular-nums">{f.quantity} free in this order</span>
+                </p>
+              ))}
+              {waiting.length > 0 && (
+                <label className="flex cursor-pointer items-start gap-2 rounded-md bg-muted/50 p-2.5">
+                  <Checkbox className="mt-0.5" checked={redeem} onCheckedChange={(v) => setRedeem(v === true)} />
+                  <span>
+                    Give the free goods this customer earned in earlier orders:
+                    <span className="block text-muted-foreground">
+                      {waiting.map((w) => `${w.quantity} × ${prodMap.get(w.product_id)?.name ?? "product"} (${w.label})`).join("; ")}
+                    </span>
+                  </span>
+                </label>
+              )}
+              {freeNext.map((f) => (
+                <p key={f.promotion.id} className="text-muted-foreground">
+                  This order earns {f.quantity} × {prodMap.get(f.promotion.product_id)?.name ?? "product"} free on the customer’s next order ({f.promotion.name}).
+                </p>
+              ))}
+              <p className="text-xs text-muted-foreground">Free goods are added at price 0 when the order is saved and leave stock when it is approved.</p>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardContent className="p-5">

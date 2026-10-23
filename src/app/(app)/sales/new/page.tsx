@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { flattenProducts } from "@/lib/products";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
+import { loadPromotionPreview } from "@/lib/sales/promotion-data";
 import { SaleForm } from "./sale-form";
 
 export const metadata: Metadata = { title: "New Sales Order" };
@@ -31,6 +32,7 @@ export default async function NewSalePage() {
     admin.from("stock_balances").select("product_id, quantity").eq("company_id", ctx.companyId).eq("branch_id", ctx.branchId),
   ]);
 
+  const promo = await loadPromotionPreview(ctx.companyId);
   const stock: Record<string, number> = {};
   for (const b of bals ?? []) stock[b.product_id] = Number(b.quantity);
   const branchAccounts = (accounts ?? []).filter((a) => !a.branch_id || a.branch_id === ctx.branchId);
@@ -49,6 +51,8 @@ export default async function NewSalePage() {
         canViewCost={can(ctx.user, "sales.view_cost")}
         walkInId={walkIn?.id ?? null}
         canApprove={can(ctx.user, "sales.approve")}
+        promotions={promo.rules}
+        rewards={promo.rewards}
       />
     </div>
   );
