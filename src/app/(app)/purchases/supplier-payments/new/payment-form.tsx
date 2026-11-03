@@ -117,7 +117,7 @@ export function SupplierPaymentForm({ branchId, suppliers, accounts, initialSupp
                   <tr key={p.payable_id} className="border-t border-border">
                     <td className="px-3 py-2 font-mono text-xs">{p.label}</td>
                     <td className="px-3 py-2">{formatDate(p.date)}</td>
-                    {isFc && <td className="px-3 py-2 text-right tabular-nums">{formatMoney(p.fc_outstanding)}</td>}
+                    {isFc && <td className="px-3 py-2 text-right tabular-nums">{formatMoney(p.fc_outstanding, currency)}</td>}
                     <td className="px-3 py-2 text-right tabular-nums">{formatMoney(p.outstanding)}</td>
                     <td className="px-3 py-2 text-right"><Input className="h-8 w-32 text-right tabular-nums" type="number" min="0" max={isFc ? p.fc_outstanding : p.outstanding} step="0.01" value={alloc[p.payable_id] ?? ""} onChange={(e) => setAlloc({ ...alloc, [p.payable_id]: e.target.value })} /></td>
                     {isFc && <td className={`px-3 py-2 text-right tabular-nums ${pv && pv.fx > 0 ? "text-destructive" : ""}`}>{pv ? formatMoney(pv.fx) : "—"}</td>}
@@ -162,7 +162,7 @@ export function SupplierPaymentForm({ branchId, suppliers, accounts, initialSupp
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">
           {isFc
-            ? <>Settling <span className="font-semibold text-foreground tabular-nums">{currency} {formatMoney(fcTotal)}</span> for <span className="tabular-nums">TZS {formatMoney(fundTotal)}</span>{fcTotal > 0 && fundTotal > 0 && <> (≈ {round2(effRate)}) · FX {fxPreview > 0 ? "loss" : "gain"} preview <span className="tabular-nums">{formatMoney(Math.abs(fxPreview))}</span></>}</>
+            ? <>Settling <span className="font-semibold text-foreground tabular-nums">{formatMoney(fcTotal, currency)}</span> for <span className="tabular-nums">{formatMoney(fundTotal)}</span>{fcTotal > 0 && fundTotal > 0 && <> (≈ {round2(effRate)}) · FX {fxPreview > 0 ? "loss" : "gain"} preview <span className="tabular-nums">{formatMoney(Math.abs(fxPreview))}</span></>}</>
             : <>Allocated: <span className="font-semibold text-foreground tabular-nums">{formatMoney(allocTotal)}</span>{adv > 0 && <> + advance {formatMoney(adv)}</>} · Funding: <span className="tabular-nums">{formatMoney(fundTotal)}</span></>}
         </p>
         <div className="flex items-center gap-2">

@@ -88,9 +88,9 @@ export function RevaluationForm({ balances, tableRates, history }: { balances: O
                 return (
                   <tr key={p.currency} className="border-t border-border align-top">
                     <td className="px-3 py-2 font-medium">{p.currency}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{formatMoney(p.payFc)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatMoney(p.payFc, p.currency)}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{formatMoney(p.payCarrying)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{formatMoney(p.credFc)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatMoney(p.credFc, p.currency)}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{formatMoney(p.credCarrying)}</td>
                     <td className="px-3 py-2">
                       <Input className="h-8 w-36 text-right tabular-nums" type="number" min="0" step="0.000001" value={rates[p.currency]?.rate ?? ""}

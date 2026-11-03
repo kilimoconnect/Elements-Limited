@@ -51,7 +51,7 @@ export default async function PricingPage(props: { searchParams: Promise<SP> }) 
             <h3 className="mb-2 font-semibold">Approved price history</h3>
             {(history ?? []).length === 0 ? <p className="text-muted-foreground">No changes recorded through pricing yet.</p> :
               ((history ?? []) as { old_price: number; new_price: number; basis: Record<string, unknown>; reason: string | null; changed_at: string }[]).map((h, i) => (
-                <p key={i} className="border-b border-border py-1 last:border-0">{formatDateTime(h.changed_at)} · TZS {formatMoney(N(h.old_price))} → <span className="font-semibold">{formatMoney(N(h.new_price))}</span>
+                <p key={i} className="border-b border-border py-1 last:border-0">{formatDateTime(h.changed_at)} · {formatMoney(N(h.old_price))} → <span className="font-semibold">{formatMoney(N(h.new_price))}</span>
                   <span className="text-xs text-muted-foreground"> · {String(h.basis.mode ?? "")} {String(h.basis.ratePct ?? "")}% on inventory cost {formatMoney(N(h.basis.inventoryCost ?? h.basis.pricingCost))}{h.reason && ` · ${h.reason}`}</span></p>
               ))}
           </CardContent></Card>

@@ -95,8 +95,8 @@ export function PurchaseReturnForm({ purchaseId, lines, accounts, currency = "TZ
       </CardContent></Card>
 
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">Return value: {isFc && <><span className="font-semibold text-foreground tabular-nums">{currency} {formatMoney(fcValue)}</span> · </>}
-          <span className={`tabular-nums ${isFc ? "" : "font-semibold text-foreground"}`}>TZS {formatMoney(value)}</span>{isFc && " at the original rate"}</p>
+        <p className="text-sm text-muted-foreground">Return value: {isFc && <><span className="font-semibold text-foreground tabular-nums">{formatMoney(fcValue, currency)}</span> · </>}
+          <span className={`tabular-nums ${isFc ? "" : "font-semibold text-foreground"}`}>{formatMoney(value)}</span>{isFc && " at the original rate"}</p>
         <div className="flex items-center gap-2">
           {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
           <Button variant="outline" onClick={() => router.push(`/purchases/${purchaseId}`)} disabled={pending}>Cancel</Button>

@@ -210,7 +210,7 @@ export default async function ShipmentPage(props: { params: Params }) {
           {(invoices ?? []).length === 0 ? <p className="text-muted-foreground">None yet.</p> : (invoices ?? []).map((i) => (
             <div key={i.id} className="flex justify-between border-b border-border py-1 last:border-0">
               <span><Link className="font-mono text-xs underline" href={`/purchases/${i.id}`}>{i.document_number ?? "draft"}</Link> · {i.supplier_invoice_number} · {formatDate(i.document_date)}</span>
-              <span className="flex items-center gap-1 tabular-nums">{i.currency_code !== "TZS" && <>{i.currency_code} {formatMoney(N(i.fc_grand_total))} @ {N(i.exchange_rate)} · </>}TZS {formatMoney(N(i.grand_total))}
+              <span className="flex items-center gap-1 tabular-nums">{i.currency_code !== "TZS" && <>{formatMoney(N(i.fc_grand_total), i.currency_code)} @ {N(i.exchange_rate)} · </>}{formatMoney(N(i.grand_total))}
                 {i.document_status === "voided" ? <Badge variant="secondary">voided</Badge>
                   : i.document_status === "posted" && can(ctx.user, "imports.void") && <VoidGoodsInvoiceButton purchaseId={i.id} label={i.document_number ?? ""} />}</span>
             </div>
@@ -239,7 +239,7 @@ export default async function ShipmentPage(props: { params: Params }) {
             <div>
               <p className="mb-1 text-xs uppercase text-muted-foreground">Stock received</p>
               {(movements ?? []).length === 0 ? <p className="text-muted-foreground">—</p> : ((movements ?? []) as unknown as Array<{ source_number: string; qty_in: number; movement_value: number; branch: { code: string } | null; product: { name: string } | null }>).map((m, i) => (
-                <p key={i} className="text-xs">{m.source_number} · {m.branch?.code} · {m.product?.name} · {formatQuantity(N(m.qty_in))} @ TZS {formatMoney(N(m.movement_value))}</p>
+                <p key={i} className="text-xs">{m.source_number} · {m.branch?.code} · {m.product?.name} · {formatQuantity(N(m.qty_in))} @ {formatMoney(N(m.movement_value))}</p>
               ))}
             </div>
             <div>

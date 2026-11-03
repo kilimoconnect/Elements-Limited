@@ -40,8 +40,8 @@ export function AgeingView({ data, controlLabel }: { data: AgeingData; controlLa
       {hasForeign && (
         <Card className="report-card"><CardContent className="flex flex-wrap gap-6 p-4 text-sm">
           {fcTotals.map((t) => (
-            <div key={t.currency}>Open {t.currency}: <span className="font-semibold tabular-nums">{t.currency} {formatMoney(t.fc)}</span>
-              <span className="text-muted-foreground"> · carrying TZS {formatMoney(t.carrying)}</span></div>
+            <div key={t.currency}>Open {t.currency}: <span className="font-semibold tabular-nums">{formatMoney(t.fc, t.currency)}</span>
+              <span className="text-muted-foreground"> · carrying {formatMoney(t.carrying)}</span></div>
           ))}
         </CardContent></Card>
       )}
@@ -62,7 +62,7 @@ export function AgeingView({ data, controlLabel }: { data: AgeingData; controlLa
                   <TableCell className="text-sm">{formatDate(r.due)}</TableCell>
                   {hasForeign && <>
                     <TableCell className="text-sm">{r.currency ?? "TZS"}</TableCell>
-                    <TableCell className="text-right tabular-nums">{r.currency && r.currency !== "TZS" ? formatMoney(r.fcOutstanding ?? 0) : "—"}</TableCell>
+                    <TableCell className="text-right tabular-nums">{r.currency && r.currency !== "TZS" ? formatMoney(r.fcOutstanding ?? 0, r.currency) : "—"}</TableCell>
                   </>}
                   <TableCell className="text-right tabular-nums">{formatMoney(r.original)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatMoney(r.outstanding)}</TableCell>

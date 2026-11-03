@@ -110,9 +110,9 @@ export default async function PurchaseDetailPage(props: { params: Params }) {
         <Card><CardContent className="space-y-1.5 p-5 text-sm">
           {isFc && (
             <div className="mb-2 space-y-1 border-b border-border pb-2">
-              <div className="flex justify-between"><span className="text-muted-foreground">Invoice ({s.currency_code})</span><span className="tabular-nums font-semibold">{formatMoney(s.fc_grand_total)}</span></div>
-              {Number(s.advance_applied_fc) > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Advances applied ({s.currency_code})</span><span className="tabular-nums">{formatMoney(s.advance_applied_fc)}</span></div>}
-              {pb && <div className="flex justify-between font-medium"><span>Open ({s.currency_code})</span><span className="tabular-nums">{formatMoney(pb.fc_outstanding)}</span></div>}
+              <div className="flex justify-between"><span className="text-muted-foreground">Invoice ({s.currency_code})</span><span className="tabular-nums font-semibold">{formatMoney(s.fc_grand_total, s.currency_code)}</span></div>
+              {Number(s.advance_applied_fc) > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Advances applied ({s.currency_code})</span><span className="tabular-nums">{formatMoney(s.advance_applied_fc, s.currency_code)}</span></div>}
+              {pb && <div className="flex justify-between font-medium"><span>Open ({s.currency_code})</span><span className="tabular-nums">{formatMoney(pb.fc_outstanding, s.currency_code)}</span></div>}
               <p className="text-xs text-muted-foreground">TZS figures below are the posted TZS amounts; &quot;Outstanding&quot; is the TZS carrying amount of the open {s.currency_code} balance.</p>
             </div>
           )}
@@ -139,10 +139,10 @@ export default async function PurchaseDetailPage(props: { params: Params }) {
               <TableRow key={l.id}>
                 <TableCell>{l.description}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatQuantity(l.quantity)}</TableCell>
-                <TableCell className="text-right tabular-nums">{isFc ? `${s.currency_code} ` : ""}{formatMoney(l.unit_cost)}</TableCell>
-                <TableCell className="text-right tabular-nums">{formatMoney(l.discount)}</TableCell>
+                <TableCell className="text-right tabular-nums">{formatMoney(l.unit_cost, isFc ? s.currency_code : undefined)}</TableCell>
+                <TableCell className="text-right tabular-nums">{formatMoney(l.discount, isFc ? s.currency_code : undefined)}</TableCell>
                 <TableCell className="text-xs text-muted-foreground">{l.tax_name ? `${l.tax_name} (${l.tax_rate}%)` : "—"}</TableCell>
-                {isFc && <TableCell className="text-right tabular-nums">{l.fc_gross_amount == null ? "—" : formatMoney(l.fc_gross_amount)}</TableCell>}
+                {isFc && <TableCell className="text-right tabular-nums">{l.fc_gross_amount == null ? "—" : formatMoney(l.fc_gross_amount, s.currency_code)}</TableCell>}
                 <TableCell className="text-right tabular-nums">{formatMoney(l.net_amount)}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatMoney(l.gross_amount)}</TableCell>
               </TableRow>
@@ -161,7 +161,7 @@ export default async function PurchaseDetailPage(props: { params: Params }) {
         <Card><CardContent className="p-5">
           <h3 className="mb-2 text-sm font-semibold">Returns</h3>
           {(returns ?? []).length === 0 ? <p className="text-sm text-muted-foreground">No returns.</p> : (
-            <div className="space-y-1 text-sm">{(returns ?? []).map((r) => { const rr = r as { id: string; document_number: string | null; document_date: string; total: number; fc_total: number; document_status: string }; return <div key={rr.id} className="flex justify-between"><span className="text-muted-foreground">{rr.document_number} · {formatDate(rr.document_date)} · <DocStatusBadge status={rr.document_status} /></span><span className="tabular-nums">{isFc && <>{s.currency_code} {formatMoney(rr.fc_total)} · </>}TZS {formatMoney(rr.total)}</span></div>; })}</div>
+            <div className="space-y-1 text-sm">{(returns ?? []).map((r) => { const rr = r as { id: string; document_number: string | null; document_date: string; total: number; fc_total: number; document_status: string }; return <div key={rr.id} className="flex justify-between"><span className="text-muted-foreground">{rr.document_number} · {formatDate(rr.document_date)} · <DocStatusBadge status={rr.document_status} /></span><span className="tabular-nums">{isFc && <>{formatMoney(rr.fc_total, s.currency_code)} · </>}{formatMoney(rr.total)}</span></div>; })}</div>
           )}
         </CardContent></Card>
       </div>
@@ -212,7 +212,7 @@ export default async function PurchaseDetailPage(props: { params: Params }) {
                 <TableRow key={i}>
                   <TableCell>{formatDate(e.event_date)}</TableCell>
                   <TableCell>{EVENT_LABEL[e.event_type] ?? e.event_type}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatMoney(e.fc_delta)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatMoney(e.fc_delta, s.currency_code)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatMoney(e.tzs_delta)}</TableCell>
                 </TableRow>
               ))}

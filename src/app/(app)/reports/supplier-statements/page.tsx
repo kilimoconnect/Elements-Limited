@@ -37,7 +37,7 @@ export default async function SupplierStatementsPage(props: { searchParams: Prom
             <div key={f.currency} className="space-y-2">
               <StatementTable title={`${f.currency} (amounts in ${f.currency})`} st={f} />
               <p className="text-sm text-muted-foreground">
-                TZS carrying amount of open {f.currency} invoices at {formatDate(end)}: <span className="font-medium text-foreground tabular-nums">TZS {formatMoney(f.carryingOpenInvoices)}</span>
+                TZS carrying amount of open {f.currency} invoices at {formatDate(end)}: <span className="font-medium text-foreground tabular-nums">{formatMoney(f.carryingOpenInvoices)}</span>
                 {" "}(original rate, updated by revaluations and settlements). Unapplied advances and credits are shown in {f.currency} above.
               </p>
             </div>

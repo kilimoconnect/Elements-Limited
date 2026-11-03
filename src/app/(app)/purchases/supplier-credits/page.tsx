@@ -38,8 +38,8 @@ export default async function SupplierCreditsPage() {
                   <TableCell>{formatDate(c.credit_date)}</TableCell>
                   <TableCell>{c.supplier?.name}</TableCell>
                   <TableCell className="text-xs">{c.return?.document_number ? `Return ${c.return.document_number}` : "Credit note"}</TableCell>
-                  <TableCell className="text-right tabular-nums">{c.currency_code} {formatMoney(Number(c.amount))}</TableCell>
-                  <TableCell className="text-right tabular-nums">{c.currency_code === "TZS" ? formatMoney(Number(c.remaining)) : `${c.currency_code} ${formatMoney(Number(c.fc_remaining))}`}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatMoney(Number(c.amount), c.currency_code)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{c.currency_code === "TZS" ? formatMoney(Number(c.remaining)) : formatMoney(Number(c.fc_remaining), c.currency_code)}</TableCell>
                   <TableCell className="text-xs">{c.refunds.map((r, i) => <p key={i}>{formatDate(r.refund_date)} · {formatMoney(Number(r.amount))}{r.reference && ` · ${r.reference}`}</p>)}</TableCell>
                   <TableCell>{canRefund && c.status === "open" && c.currency_code === "TZS" && Number(c.remaining) > 0 &&
                     <RefundButton creditId={c.id} open={Number(c.remaining)} accounts={(accounts ?? []).map((a) => ({ id: a.id, label: a.name }))} />}</TableCell>

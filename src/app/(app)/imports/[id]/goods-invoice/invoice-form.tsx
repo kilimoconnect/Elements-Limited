@@ -76,15 +76,15 @@ export function GoodsInvoiceForm({ shipmentId, currency, lines, taxCodes, tableR
                 <td className="px-3 py-2"><Select value={rows[i].tax} onValueChange={(v) => setRows(rows.map((r, j) => j === i ? { ...r, tax: v } : r))}>
                   <SelectTrigger className="h-8 w-40"><SelectValue /></SelectTrigger>
                   <SelectContent><SelectItem value={NONE}>No tax</SelectItem>{taxCodes.map((t) => <SelectItem key={t.id} value={t.id}>{t.name} ({t.rate}%)</SelectItem>)}</SelectContent></Select></td>
-                <td className="px-3 py-2 text-right tabular-nums">{formatMoney(round2(Number(rows[i].qty || 0) * Number(rows[i].price || 0)))}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{formatMoney(round2(Number(rows[i].qty || 0) * Number(rows[i].price || 0)), currency)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </CardContent></Card>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-muted-foreground">Net {currency} <span className="font-semibold text-foreground tabular-nums">{formatMoney(total)}</span>
-          {isFc && Number(rate) > 0 && <> · ≈ TZS {formatMoney(round2(total * Number(rate)))}</>}. Recoverable VAT stays out of stock cost; non-recoverable tax is part of it.</p>
+        <p className="text-sm text-muted-foreground">Net <span className="font-semibold text-foreground tabular-nums">{formatMoney(total, currency)}</span>
+          {isFc && Number(rate) > 0 && <> · ≈ {formatMoney(round2(total * Number(rate)))}</>}. Recoverable VAT stays out of stock cost; non-recoverable tax is part of it.</p>
         <div className="flex items-center gap-2">
           {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
           <Button onClick={submit} disabled={pending}>{pending ? "Posting..." : "Post goods invoice"}</Button>

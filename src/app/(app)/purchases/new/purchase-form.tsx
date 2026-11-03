@@ -177,7 +177,7 @@ export function PurchaseForm({
                         <SelectContent><SelectItem value={NONE}>No tax</SelectItem>{taxCodes.map((t) => <SelectItem key={t.id} value={t.id}>{t.name} ({t.rate}%)</SelectItem>)}</SelectContent>
                       </Select>
                     </td>
-                    <td className="px-2 py-1 text-right tabular-nums">{formatMoney(computed[i].lineTotal)}</td>
+                    <td className="px-2 py-1 text-right tabular-nums">{formatMoney(computed[i].lineTotal, currency)}</td>
                     <td className="px-1 py-1 text-center"><button type="button" onClick={() => setLines(lines.filter((x) => x.key !== l.key))} className="text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></button></td>
                   </tr>
                 ))}
@@ -194,7 +194,7 @@ export function PurchaseForm({
             <div className="space-y-2">
               {supplierAdvances.map((a) => (
                 <div key={a.id} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="text-muted-foreground">{a.label} · open {currency} {formatMoney(a.fc_remaining)}</span>
+                  <span className="text-muted-foreground">{a.label} · open {formatMoney(a.fc_remaining, currency)}</span>
                   <Input className="h-8 w-32 text-right tabular-nums" type="number" min="0" max={a.fc_remaining} step="0.01"
                     value={advApply[a.id] ?? ""} onChange={(e) => setAdvApply({ ...advApply, [a.id]: e.target.value })} />
                 </div>
@@ -233,15 +233,15 @@ export function PurchaseForm({
       <div>
         <Card className="sticky top-20"><CardContent className="space-y-2 p-5 text-sm">
           {isFc && <p className="text-xs font-medium uppercase text-muted-foreground">Amounts in {currency}</p>}
-          <Row label="Subtotal" value={formatMoney(totals.subtotal)} />
-          <Row label="Discount" value={formatMoney(totals.discount)} />
-          <Row label="Net" value={formatMoney(totals.net)} />
-          <Row label="Tax" value={formatMoney(totals.tax)} />
+          <Row label="Subtotal" value={formatMoney(totals.subtotal, currency)} />
+          <Row label="Discount" value={formatMoney(totals.discount, currency)} />
+          <Row label="Net" value={formatMoney(totals.net, currency)} />
+          <Row label="Tax" value={formatMoney(totals.tax, currency)} />
           <div className="my-1 border-t border-border" />
-          <Row label="Grand total" value={formatMoney(totals.grand)} bold />
-          {advTotal > 0 && <Row label="Advances applied" value={formatMoney(advTotal)} />}
-          {!isFc && <Row label="Paid" value={formatMoney(paid)} />}
-          <Row label="Outstanding" value={formatMoney(outstanding)} bold />
+          <Row label="Grand total" value={formatMoney(totals.grand, currency)} bold />
+          {advTotal > 0 && <Row label="Advances applied" value={formatMoney(advTotal, currency)} />}
+          {!isFc && <Row label="Paid" value={formatMoney(paid, currency)} />}
+          <Row label="Outstanding" value={formatMoney(outstanding, currency)} bold />
           {isFc && fxRate > 0 && (
             <div className="mt-2 space-y-1 rounded-md bg-muted/50 p-2 text-xs">
               <p className="font-medium">TZS at {fxRate} (preview)</p>
