@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { Plus, X } from "lucide-react";
 import { createTransferWithTrip } from "@/lib/transfers/actions";
 import { todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -45,8 +46,14 @@ export function NewTransferForm({
     driverName: "", driverPhone: "", driverLicence: "", vehicleRegistration: "", trailerRegistration: "", transporterName: "", transporterContact: "",
   });
   const byCode = (code: string) => categories.find((c) => c.code === code)?.id ?? "";
-  const [charges, setCharges] = React.useState<ChargeRow[]>(() =>
-    chargesEnabled ? [newCharge(byCode("LOADING")), newCharge(byCode("TRANSPORT"))] : []);
+  // Transfer costs are optional: hidden until the user chooses to add them.
+  const [showCharges, setShowCharges] = React.useState(false);
+  const [charges, setCharges] = React.useState<ChargeRow[]>([]);
+  function openCharges() {
+    setShowCharges(true);
+    if (charges.length === 0) setCharges([newCharge(byCode("LOADING")), newCharge(byCode("TRANSPORT"))]);
+  }
+  function closeCharges() { setShowCharges(false); setCharges([]); }
   const [requestId] = React.useState(rid);
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -127,15 +134,24 @@ export function NewTransferForm({
         <p className="text-xs text-muted-foreground">Licence photos, loading photos and weighbridge tickets can be attached on the transfer after saving.</p>
       </CardContent></Card>
 
-      <Card><CardContent className="space-y-3 p-5">
-        <div>
-          <h3 className="font-semibold">Transfer costs</h3>
-          <p className="text-xs text-muted-foreground">Loading, transport and any other fees for this move. They are added to the inventory cost of these goods at the receiving branch (shared by weight). Offloading is entered when the goods are received.</p>
+      {chargesEnabled && !showCharges && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed border-border px-4 py-3">
+          <p className="text-sm text-muted-foreground">Transfer costs (loading, transport and other fees) are optional.</p>
+          <Button type="button" variant="outline" size="sm" onClick={openCharges}><Plus className="h-4 w-4" /> Add transfer cost</Button>
         </div>
-        {chargesEnabled
-          ? <ChargeRows categories={categories} rows={charges} setRows={setCharges} />
-          : <p className="rounded-md bg-muted px-3 py-2 text-sm">Transfer costs need <strong>Transfer logistics</strong> switched on (Admin → Feature Flags).</p>}
-      </CardContent></Card>
+      )}
+      {chargesEnabled && showCharges && (
+        <Card><CardContent className="space-y-3 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h3 className="font-semibold">Transfer costs</h3>
+              <p className="text-xs text-muted-foreground">Loading, transport and any other fees for this move. They are added to the inventory cost of these goods at the receiving branch (shared by weight). Offloading is entered when the goods are received.</p>
+            </div>
+            <Button type="button" variant="ghost" size="sm" onClick={closeCharges}><X className="h-4 w-4" /> Remove costs</Button>
+          </div>
+          <ChargeRows categories={categories} rows={charges} setRows={setCharges} />
+        </CardContent></Card>
+      )}
 
       <Card><CardContent className="space-y-1.5 p-5"><Label>Notes</Label><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} /></CardContent></Card>
 

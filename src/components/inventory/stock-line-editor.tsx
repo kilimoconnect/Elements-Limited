@@ -58,60 +58,72 @@ export function StockLineEditor({
     return total > (available[l.product_id] ?? 0) + 1e-9;
   };
 
+  const cols = showCost ? "sm:grid-cols-[minmax(0,1fr)_140px_140px_40px]" : "sm:grid-cols-[minmax(0,1fr)_160px_40px]";
+  const fmt = (v: number) => Number(v).toLocaleString("en-US", { maximumFractionDigits: 4 });
+
   return (
     <div className="space-y-2">
-      <div className="overflow-x-auto rounded-md border border-border">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50">
-            <tr>
-              <th className="px-3 py-2 text-left font-medium">Product</th>
-              <th className="px-3 py-2 text-right font-medium">{qtyLabel}</th>
-              {showCost && <th className="px-3 py-2 text-right font-medium">Unit cost</th>}
-              <th className="w-10" />
-            </tr>
-          </thead>
-          <tbody>
-            {lines.map((l) => (
-              <tr key={l.key} className="border-t border-border">
-                <td className="px-2 py-1.5">
-                  <Select value={l.product_id} onValueChange={(v) => {
-                    const p = products.find((x) => x.id === v);
-                    update(l.key, { product_id: v, unit_cost: l.unit_cost || (p?.selling_price ? "" : l.unit_cost) });
-                  }}>
-                    <SelectTrigger className="h-8"><SelectValue placeholder={available && products.length === 0 ? "No products in stock" : "Select product"} /></SelectTrigger>
-                    <SelectContent>
-                      {products.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.sku} — {p.name}{available ? `  (in stock: ${Number(available[p.id] ?? 0).toLocaleString("en-US", { maximumFractionDigits: 4 })})` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </td>
-                <td className="px-2 py-1.5">
-                  <Input className={`h-8 text-right tabular-nums ${over(l) ? "border-destructive focus-visible:ring-destructive" : ""}`} type="number" step="0.0001" min="0"
-                    max={available && l.product_id ? available[l.product_id] ?? 0 : undefined}
+      <div className="rounded-md border border-border">
+        {/* Column headings (wide screens); on phones each line stacks with its own labels. */}
+        <div className={`hidden gap-2 bg-muted/50 px-3 py-2 text-sm font-medium sm:grid ${cols}`}>
+          <span>Product</span>
+          <span className="text-right">{qtyLabel}</span>
+          {showCost && <span className="text-right">Unit cost</span>}
+          <span />
+        </div>
+        {lines.map((l) => {
+          const onHand = available && l.product_id ? available[l.product_id] ?? 0 : null;
+          return (
+            <div key={l.key} className={`grid grid-cols-1 gap-2 border-t border-border p-2 first:border-t-0 sm:items-start sm:border-t ${cols}`}>
+              <div className="min-w-0">
+                <span className="mb-1 block text-xs font-medium text-muted-foreground sm:hidden">Product</span>
+                <Select value={l.product_id} onValueChange={(v) => {
+                  const p = products.find((x) => x.id === v);
+                  update(l.key, { product_id: v, unit_cost: l.unit_cost || (p?.selling_price ? "" : l.unit_cost) });
+                }}>
+                  <SelectTrigger className="h-auto min-h-9 py-1.5 text-left [&>span]:line-clamp-2 [&>span]:whitespace-normal">
+                    <SelectValue placeholder={available && products.length === 0 ? "No products in stock" : "Select product"} />
+                  </SelectTrigger>
+                  <SelectContent className="max-w-[calc(100vw-2rem)]">
+                    {products.map((p) => (
+                      <SelectItem key={p.id} value={p.id} className="whitespace-normal">
+                        <span className="block">{p.sku} — {p.name}</span>
+                        {available && <span className="block text-xs text-muted-foreground">In stock: {fmt(available[p.id] ?? 0)}</span>}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className={`grid gap-2 sm:contents ${showCost ? "grid-cols-[1fr_1fr_auto]" : "grid-cols-[1fr_auto]"}`}>
+                <div>
+                  <span className="mb-1 block text-xs font-medium text-muted-foreground sm:hidden">
+                    {qtyLabel}{onHand !== null ? ` (in stock ${fmt(onHand)})` : ""}
+                  </span>
+                  <Input className={`h-9 text-right tabular-nums ${over(l) ? "border-destructive focus-visible:ring-destructive" : ""}`} type="number" inputMode="decimal" step="0.0001" min="0"
+                    max={onHand ?? undefined}
                     value={l.quantity} onChange={(e) => update(l.key, { quantity: e.target.value })} />
-                  {over(l) && <p className="pt-0.5 text-right text-xs font-medium text-destructive">Only {available![l.product_id] ?? 0} in stock</p>}
-                </td>
+                  {over(l) && <p className="pt-0.5 text-right text-xs font-medium text-destructive">Only {fmt(onHand ?? 0)} in stock</p>}
+                </div>
                 {showCost && (
-                  <td className="px-2 py-1.5">
-                    <Input className="h-8 text-right tabular-nums" type="number" step="0.01" min="0"
+                  <div>
+                    <span className="mb-1 block text-xs font-medium text-muted-foreground sm:hidden">Unit cost</span>
+                    <Input className="h-9 text-right tabular-nums" type="number" inputMode="decimal" step="0.01" min="0"
                       value={l.unit_cost} onChange={(e) => update(l.key, { unit_cost: e.target.value })} />
-                  </td>
+                  </div>
                 )}
-                <td className="px-2 py-1.5 text-center">
-                  <button type="button" onClick={() => remove(l.key)} className="text-muted-foreground hover:text-destructive">
+                <div className="flex items-end justify-center sm:h-9 sm:items-center">
+                  <button type="button" onClick={() => remove(l.key)} aria-label="Remove line"
+                    className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-destructive">
                     <Trash2 className="h-4 w-4" />
                   </button>
-                </td>
-              </tr>
-            ))}
-            {lines.length === 0 && (
-              <tr><td colSpan={showCost ? 4 : 3} className="px-3 py-6 text-center text-sm text-muted-foreground">No lines yet.</td></tr>
-            )}
-          </tbody>
-        </table>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        {lines.length === 0 && (
+          <p className="px-3 py-6 text-center text-sm text-muted-foreground">No lines yet.</p>
+        )}
       </div>
       <Button type="button" variant="outline" size="sm" onClick={() => setLines([...lines, newLine()])}>
         <Plus className="h-4 w-4" /> Add line
