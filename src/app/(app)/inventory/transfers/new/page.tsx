@@ -21,6 +21,13 @@ export default async function NewTransferPage() {
     isFeatureEnabled(ctx.companyId, "transfer_logistics"),
   ]);
   const myBranches = ctx.user.isOwner ? ctx.branches : ctx.branches.filter((b) => ctx.user.branchIds.includes(b.id));
+  // Stock on hand at each branch the user can send from: only these products can be transferred.
+  const { data: bals } = myBranches.length
+    ? await admin.from("stock_balances").select("branch_id, product_id, quantity").eq("company_id", ctx.companyId)
+        .in("branch_id", myBranches.map((b) => b.id)).gt("quantity", 0)
+    : { data: [] as { branch_id: string; product_id: string; quantity: number }[] };
+  const stockByBranch: Record<string, Record<string, number>> = {};
+  for (const b of bals ?? []) (stockByBranch[b.branch_id] ??= {})[b.product_id] = Number(b.quantity);
   return (
     <div>
       <PageHeader title="New Transfer"
@@ -28,6 +35,7 @@ export default async function NewTransferPage() {
       {!ctx.branchId || myBranches.length === 0 ? <EmptyState title="Choose a branch first" /> : (
         <NewTransferForm
           products={(products ?? []) as never}
+          stockByBranch={stockByBranch}
           sourceBranches={myBranches}
           allBranches={ctx.branches}
           sourceBranchId={ctx.branchId}

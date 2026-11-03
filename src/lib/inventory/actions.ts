@@ -219,6 +219,21 @@ export async function createTransferDraft(input: {
     if (!br || br.length !== 2 || br.some((b) => b.company_id !== ctx.companyId))
       return { ok: false, error: "Both branches must belong to your company." };
 
+    // Only stock the sending branch holds can be transferred.
+    const want = new Map<string, number>();
+    for (const l of input.lines) want.set(l.product_id, (want.get(l.product_id) ?? 0) + Number(l.qty_requested));
+    const [{ data: bals }, { data: prods }] = await Promise.all([
+      admin.from("stock_balances").select("product_id, quantity")
+        .eq("company_id", ctx.companyId).eq("branch_id", input.sourceBranchId).in("product_id", [...want.keys()]),
+      admin.from("products").select("id, sku").in("id", [...want.keys()]),
+    ]);
+    const onHand = new Map((bals ?? []).map((b) => [b.product_id, Number(b.quantity)]));
+    const short = [...want].filter(([pid, q]) => q > (onHand.get(pid) ?? 0) + 1e-9);
+    if (short.length) {
+      const sku = (pid: string) => (prods ?? []).find((p) => p.id === pid)?.sku ?? "a product";
+      return { ok: false, error: `Not enough stock at the sending branch for: ${short.map(([pid]) => `${sku(pid)} (in stock ${onHand.get(pid) ?? 0})`).join(", ")}.` };
+    }
+
     const { data, error } = await admin.from("stock_transfers").insert({
       company_id: ctx.companyId, source_branch_id: input.sourceBranchId,
       destination_branch_id: input.destinationBranchId, transfer_date: input.transferDate,

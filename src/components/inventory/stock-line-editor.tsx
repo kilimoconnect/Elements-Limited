@@ -29,24 +29,34 @@ export function newLine(): StockLine {
 }
 
 export function StockLineEditor({
-  products,
+  products: allProducts,
   lines,
   setLines,
   showCost = true,
   qtyLabel = "Quantity",
+  available,
 }: {
   products: ProductOption[];
   lines: StockLine[];
   setLines: (l: StockLine[]) => void;
   showCost?: boolean;
   qtyLabel?: string;
+  /** Stock on hand by product id. When given, only products with stock can be chosen and quantities are capped. */
+  available?: Record<string, number>;
 }) {
+  const products = available ? allProducts.filter((p) => (available[p.id] ?? 0) > 0) : allProducts;
   function update(key: string, patch: Partial<StockLine>) {
     setLines(lines.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   }
   function remove(key: string) {
     setLines(lines.filter((l) => l.key !== key));
   }
+  // More requested than on hand, counting every line of the same product.
+  const over = (l: StockLine) => {
+    if (!available || !l.product_id) return false;
+    const total = lines.filter((x) => x.product_id === l.product_id).reduce((s, x) => s + Number(x.quantity || 0), 0);
+    return total > (available[l.product_id] ?? 0) + 1e-9;
+  };
 
   return (
     <div className="space-y-2">
@@ -68,17 +78,21 @@ export function StockLineEditor({
                     const p = products.find((x) => x.id === v);
                     update(l.key, { product_id: v, unit_cost: l.unit_cost || (p?.selling_price ? "" : l.unit_cost) });
                   }}>
-                    <SelectTrigger className="h-8"><SelectValue placeholder="Select product" /></SelectTrigger>
+                    <SelectTrigger className="h-8"><SelectValue placeholder={available && products.length === 0 ? "No products in stock" : "Select product"} /></SelectTrigger>
                     <SelectContent>
                       {products.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>{p.sku} — {p.name}</SelectItem>
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.sku} — {p.name}{available ? `  (in stock: ${Number(available[p.id] ?? 0).toLocaleString("en-US", { maximumFractionDigits: 4 })})` : ""}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </td>
                 <td className="px-2 py-1.5">
-                  <Input className="h-8 text-right tabular-nums" type="number" step="0.0001" min="0"
+                  <Input className={`h-8 text-right tabular-nums ${over(l) ? "border-destructive focus-visible:ring-destructive" : ""}`} type="number" step="0.0001" min="0"
+                    max={available && l.product_id ? available[l.product_id] ?? 0 : undefined}
                     value={l.quantity} onChange={(e) => update(l.key, { quantity: e.target.value })} />
+                  {over(l) && <p className="pt-0.5 text-right text-xs font-medium text-destructive">Only {available![l.product_id] ?? 0} in stock</p>}
                 </td>
                 {showCost && (
                   <td className="px-2 py-1.5">

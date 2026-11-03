@@ -20,9 +20,9 @@ type Branch = { id: string; name: string; code: string };
 const rid = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}-transfer`);
 
 export function NewTransferForm({
-  products, sourceBranches, allBranches, sourceBranchId, canDispatch, canLicence, chargesEnabled, categories,
+  products, stockByBranch, sourceBranches, allBranches, sourceBranchId, canDispatch, canLicence, chargesEnabled, categories,
 }: {
-  products: ProductOption[]; sourceBranches: Branch[]; allBranches: Branch[]; sourceBranchId: string;
+  products: ProductOption[]; stockByBranch: Record<string, Record<string, number>>; sourceBranches: Branch[]; allBranches: Branch[]; sourceBranchId: string;
   canDispatch: boolean; canLicence: boolean; chargesEnabled: boolean; categories: ChargeCategory[];
 }) {
   const router = useRouter();
@@ -33,6 +33,14 @@ export function NewTransferForm({
   const [reference, setReference] = React.useState("");
   const [notes, setNotes] = React.useState("");
   const [lines, setLines] = React.useState<StockLine[]>([newLine()]);
+  const available = stockByBranch[source] ?? {};
+  // Another sending branch has different stock: drop lines for products it does not hold.
+  function changeSource(id: string) {
+    setSource(id);
+    const there = stockByBranch[id] ?? {};
+    const kept = lines.filter((l) => !l.product_id || (there[l.product_id] ?? 0) > 0);
+    setLines(kept.length ? kept : [newLine()]);
+  }
   const [tp, setTp] = React.useState({
     driverName: "", driverPhone: "", driverLicence: "", vehicleRegistration: "", trailerRegistration: "", transporterName: "", transporterContact: "",
   });
@@ -50,6 +58,13 @@ export function NewTransferForm({
     if (dest === source) { setError("Sending and receiving branches must differ."); return; }
     const parsed = lines.filter((l) => l.product_id && Number(l.quantity) > 0).map((l) => ({ product_id: l.product_id, qty: Number(l.quantity) }));
     if (parsed.length === 0) { setError("Add at least one product line."); return; }
+    const want = new Map<string, number>();
+    for (const l of parsed) want.set(l.product_id, (want.get(l.product_id) ?? 0) + l.qty);
+    const short = [...want].filter(([pid, q]) => q > (available[pid] ?? 0) + 1e-9);
+    if (short.length) {
+      setError(`Not enough stock at the sending branch for: ${short.map(([pid]) => { const p = products.find((x) => x.id === pid); return `${p?.sku ?? "product"} (in stock ${available[pid] ?? 0})`; }).join(", ")}.`);
+      return;
+    }
     if (!tp.vehicleRegistration.trim() || !tp.driverName.trim()) { setError("Enter the truck registration and the driver's name."); return; }
     const parsedCharges = parseCharges(charges);
     if (!parsedCharges) { setError("Each charge needs a type and an amount above zero (remove empty rows)."); return; }
@@ -75,7 +90,7 @@ export function NewTransferForm({
         <h3 className="font-semibold">Route</h3>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
           <div className="space-y-1.5"><Label>From branch</Label>
-            <Select value={source} onValueChange={setSource}>
+            <Select value={source} onValueChange={changeSource}>
               <SelectTrigger><SelectValue placeholder="Sending branch" /></SelectTrigger>
               <SelectContent>{sourceBranches.map((b) => <SelectItem key={b.id} value={b.id}>{b.code} — {b.name}</SelectItem>)}</SelectContent>
             </Select></div>
@@ -92,7 +107,7 @@ export function NewTransferForm({
 
       <Card><CardContent className="space-y-3 p-5">
         <h3 className="font-semibold">Goods</h3>
-        <StockLineEditor products={products} lines={lines} setLines={setLines} showCost={false} qtyLabel="Qty to send" />
+        <StockLineEditor products={products} lines={lines} setLines={setLines} showCost={false} qtyLabel="Qty to send" available={available} />
       </CardContent></Card>
 
       <Card><CardContent className="space-y-4 p-5">
