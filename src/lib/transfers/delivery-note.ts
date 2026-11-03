@@ -1,9 +1,9 @@
 /**
  * Printable delivery note for one transfer trip, rendered from the stored
  * snapshot of a delivery-note version (document_versions). Pure: no database,
- * no costs, no licence numbers. Producing it posts nothing.
+ * no costs, no licence numbers, no supplier. Producing it posts nothing.
  */
-import { A4, SimplePdf, textWidth } from "@/lib/pdf/simple-pdf";
+import { brandedPdf, header, panel, kvRows, banner, table, signatures, finish, fmtDate, qty, C, L, R, W, type Col } from "@/lib/pdf/brand";
 
 export interface DeliveryNoteSnapshot {
   company: { name: string; legal_name: string | null; address: string | null; phone: string | null; email: string | null };
@@ -21,120 +21,62 @@ export interface DeliveryNoteSnapshot {
   notes: string | null;
 }
 
-const TZ = "Africa/Dar_es_Salaam";
-function fmtDate(iso: string | null): string {
-  if (!iso) return "-";
-  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) { const [y, m, d] = iso.split("-"); return `${d}/${m}/${y}`; }
-  const dt = new Date(iso);
-  const p = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })
-    .formatToParts(dt).reduce<Record<string, string>>((a, x) => { a[x.type] = x.value; return a; }, {});
-  return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}`;
-}
-const qty = (n: number) => Number(n).toLocaleString("en-US", { maximumFractionDigits: 4 });
-
 export function renderDeliveryNote(s: DeliveryNoteSnapshot, v: { version: number; sha256: string; issuedAt: string }): Uint8Array {
-  const pdf = new SimplePdf();
-  const L = 40, R = A4.width - 40, W = R - L;
-  let y = A4.height - 50;
-
+  const pdf = brandedPdf();
   const dn = s.delivery_note_number || s.reference;
-  const header = () => {
-    y = A4.height - 50;
-    pdf.text(L, y, s.company.legal_name || s.company.name, 15, "bold");
-    pdf.textRight(R, y, "DELIVERY NOTE", 15, "bold");
-    y -= 14;
-    const contact = [s.company.address, s.company.phone, s.company.email].filter(Boolean).join("  |  ");
-    if (contact) pdf.textFit(L, y, contact, W * 0.62, 8);
-    pdf.textRight(R, y, `No. ${dn}   (version ${v.version})`, 10, "bold");
-    y -= 8;
-    pdf.line(L, y, R, y, 1);
-    y -= 16;
+  const title = "DELIVERY NOTE";
+  const top = () => header(pdf, s.company, title, dn, `Version ${v.version}  -  issued ${fmtDate(v.issuedAt)}`);
+  let y = top();
+
+  y = banner(pdf, y, "GOING TO", `${s.receiver.code} - ${s.receiver.name}${s.receiver.location ? `   (warehouse ${s.receiver.location})` : ""}`);
+
+  // From / To
+  const bw = W / 2 - 6, h = 70;
+  const branchBox = (x: number, t: string, b: DeliveryNoteSnapshot["sender"]) => {
+    const iy = panel(pdf, x, y, bw, h, t);
+    pdf.textFit(x + 9, iy - 15, `${b.code} - ${b.name}`, bw - 18, 10.5, "bold", C.green);
+    pdf.textFit(x + 9, iy - 28, b.address ?? "", bw - 18, 8.5, "regular", C.text);
+    pdf.textFit(x + 9, iy - 40, [b.location ? `Warehouse: ${b.location}` : "", b.phone ? `Tel ${b.phone}` : ""].filter(Boolean).join("    "), bw - 18, 8.5, "regular", C.muted);
   };
-  header();
+  branchBox(L, "From (sending branch)", s.sender);
+  branchBox(L + bw + 12, "To (receiving branch)", s.receiver);
+  y -= h + 12;
 
-  // Document references and dates
-  const kv = (x: number, label: string, value: string, w = 120) => { pdf.text(x, y, label, 7.5); pdf.textFit(x, y - 10, value || "-", w, 9.5, "bold"); };
-  kv(L, "Delivery note no.", dn);
-  kv(L + 130, "Transfer no.", s.transfer_number ?? "-");
-  kv(L + 240, "Trip", String(s.trip_no), 60);
-  kv(L + 300, "Dispatch date", fmtDate(s.dispatch_date), 110);
-  kv(L + 415, "Expected arrival", fmtDate(s.expected_arrival_at), 100);
-  y -= 30;
-
-  // Where the goods are going, in large type for the gate and the driver.
-  pdf.rect(L, y - 24, W, 24, 0.8, 0.93);
-  pdf.textFit(L + 8, y - 16, `GOING TO: ${s.receiver.code} - ${s.receiver.name}${s.receiver.location ? `  (warehouse ${s.receiver.location})` : ""}`, W - 16, 12, "bold");
-  y -= 36;
-
-  // Sender / receiver
-  const box = (x: number, title: string, b: DeliveryNoteSnapshot["sender"]) => {
-    const h = 62;
-    pdf.rect(x, y - h, W / 2 - 6, h);
-    pdf.text(x + 6, y - 12, title, 7.5, "bold");
-    pdf.textFit(x + 6, y - 25, `${b.code} - ${b.name}`, W / 2 - 18, 10, "bold");
-    pdf.textFit(x + 6, y - 37, b.address ?? "", W / 2 - 18, 8.5);
-    pdf.textFit(x + 6, y - 48, [b.location ? `Warehouse: ${b.location}` : "", b.phone ? `Tel ${b.phone}` : ""].filter(Boolean).join("   "), W / 2 - 18, 8.5);
-  };
-  box(L, "FROM (SENDING BRANCH)", s.sender);
-  box(L + W / 2 + 6, "TO (RECEIVING BRANCH)", s.receiver);
-  y -= 76;
-
-  // Transport
-  pdf.text(L, y, "TRANSPORT", 8, "bold"); y -= 13;
-  const t1 = [`Driver: ${s.driver.name ?? "-"}`, `Phone: ${s.driver.phone ?? "-"}`, `Vehicle: ${s.vehicle.registration ?? "-"}`, `Trailer: ${s.vehicle.trailer ?? "-"}`];
-  t1.forEach((t, i) => pdf.textFit(L + i * (W / 4), y, t, W / 4 - 6, 9));
-  y -= 13;
-  pdf.textFit(L, y, `Transporter: ${s.transporter.name ?? "-"}${s.transporter.contact ? `  (${s.transporter.contact})` : ""}`, W, 9);
-  y -= 13;
+  // Document details / transport
+  const dh = 86;
+  const di = panel(pdf, L, y, bw, dh, "Document");
+  kvRows(pdf, L, di, bw, [
+    ["Delivery note no.", dn], ["Transfer no.", s.transfer_number ?? "Draft"], ["Trip", `${s.trip_no}  (${s.reference})`],
+    ["Dispatch date", fmtDate(s.dispatch_date)], ["Expected arrival", fmtDate(s.expected_arrival_at)],
+  ]);
+  const ti = panel(pdf, L + bw + 12, y, bw, dh, "Truck and driver");
+  kvRows(pdf, L + bw + 12, ti, bw, [
+    ["Truck", s.vehicle.registration ?? "-"], ["Trailer", s.vehicle.trailer ?? "-"], ["Driver", s.driver.name ?? "-"],
+    ["Driver phone", s.driver.phone ?? "-"], ["Transporter", [s.transporter.name, s.transporter.contact].filter(Boolean).join("  ") || "-"],
+  ]);
+  y -= dh + 10;
   for (const a of s.agents) {
-    pdf.textFit(L, y, `Agent${a.role ? ` (${a.role})` : ""}: ${a.name}${a.company ? `, ${a.company}` : ""}${a.phone ? `  Tel ${a.phone}` : ""}`, W, 9);
+    pdf.textFit(L, y, `Agent${a.role ? ` (${a.role})` : ""}: ${a.name}${a.company ? `, ${a.company}` : ""}${a.phone ? `   Tel ${a.phone}` : ""}`, W, 8.5, "regular", C.text);
     y -= 12;
   }
   y -= 6;
 
-  // Cargo table
-  const cols = [
-    { h: "#", x: L + 4, w: 18 }, { h: "SKU", x: L + 24, w: 70 }, { h: "Description", x: L + 98, w: 190 }, { h: "Batch", x: L + 292, w: 70 },
-    { h: "Quantity", x: R - 150, w: 60, right: true }, { h: "Unit", x: R - 84, w: 40 }, { h: "Net kg", x: R - 4, w: 70, right: true },
+  // Cargo
+  pdf.text(L, y, "CARGO", 8, "bold", C.green);
+  y -= 8;
+  const cols: Col[] = [
+    { h: "#", x: L + 8, w: 16 }, { h: "SKU", x: L + 28, w: 72 }, { h: "Description", x: L + 104, w: 200 }, { h: "Batch", x: L + 308, w: 62 },
+    { h: "Quantity", x: R - 118, w: 60, right: true }, { h: "Unit", x: R - 108, w: 40 }, { h: "Net kg", x: R - 8, w: 60, right: true },
   ];
-  const tableHead = () => {
-    pdf.rect(L, y - 16, W, 16, 0.5, 0.9);
-    cols.forEach((c) => (c.right ? pdf.textRight(c.x, y - 11, c.h, 8.5, "bold") : pdf.text(c.x, y - 11, c.h, 8.5, "bold")));
-    y -= 16;
-  };
-  tableHead();
-  let totalQty = 0, totalKg = 0;
-  s.lines.forEach((ln, i) => {
-    if (y < 190) {
-      pdf.text(L, 40, `${dn} v${v.version} - continued`, 7.5);
-      pdf.addPage(); header(); tableHead();
-    }
-    const row = [String(i + 1), ln.sku, ln.name, ln.batch ?? "", qty(ln.qty), ln.unit ?? "", ln.net_kg == null ? "-" : qty(ln.net_kg)];
-    cols.forEach((c, j) => (c.right ? pdf.textRight(c.x, y - 12, row[j], 9) : pdf.textFit(c.x, y - 12, row[j], c.w, 9)));
-    pdf.line(L, y - 17, R, y - 17, 0.3);
-    y -= 17;
-    totalQty += Number(ln.qty); totalKg += Number(ln.net_kg ?? 0);
-  });
-  pdf.text(L + 98, y - 12, "Total", 9, "bold");
-  pdf.textRight(R - 150, y - 12, qty(totalQty), 9, "bold");
-  pdf.textRight(R - 4, y - 12, qty(totalKg), 9, "bold");
-  y -= 24;
-  if (s.notes) { pdf.textFit(L, y, `Notes: ${s.notes}`, W, 9); y -= 16; }
+  const totalQty = s.lines.reduce((a, l) => a + Number(l.qty), 0);
+  const totalKg = s.lines.reduce((a, l) => a + Number(l.net_kg ?? 0), 0);
+  y = table(pdf, y, cols, s.lines.map((ln, i) => [String(i + 1), ln.sku, ln.name, ln.batch ?? "", qty(ln.qty), ln.unit ?? "", ln.net_kg == null ? "-" : qty(ln.net_kg)]),
+    top, ["", "", "Total", "", qty(totalQty), "", qty(totalKg)]);
+  y -= 12;
+  if (s.notes) { pdf.textFit(L, y, `Notes: ${s.notes}`, W, 8.5, "regular", C.text); y -= 14; }
 
-  // Signatures
-  if (y < 150) { pdf.addPage(); header(); }
-  y = Math.min(y, 160);
-  const sigW = W / 3 - 8;
-  ["Dispatched by (sender)", "Driver", "Received by (receiver)"].forEach((title, i) => {
-    const x = L + i * (sigW + 12);
-    pdf.rect(x, y - 92, sigW, 92);
-    pdf.text(x + 6, y - 12, title, 8, "bold");
-    ["Name", "Signature", "Date / time"].forEach((f, j) => {
-      pdf.text(x + 6, y - 34 - j * 22, f, 7.5);
-      pdf.line(x + 6 + textWidth(f, 7.5) + 4, y - 35 - j * 22, x + sigW - 6, y - 35 - j * 22, 0.4);
-    });
-  });
-  pdf.text(L, 48, `Issued ${fmtDate(v.issuedAt)} - ${dn} version ${v.version} - trip ${s.reference} - content ${v.sha256.slice(0, 12)}`, 7);
-  pdf.text(L, 38, "Quantities are as dispatched. This note does not move stock; the receiving branch records what arrives.", 7);
+  signatures(pdf, y - 4, ["Dispatched by (sender)", "Driver", "Received by (receiver)"], top);
+  finish(pdf, s.company, `${title}  ${dn}  v${v.version}`,
+    `Quantities are as dispatched; no prices are shown. Trip ${s.reference} - content ${v.sha256.slice(0, 12)}.`);
   return pdf.toBytes({ title: `Delivery note ${dn} v${v.version}` });
 }
