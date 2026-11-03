@@ -22,7 +22,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ versionId: str
   const snap = v.snapshot as DeliveryNoteSnapshot;
   const pdf = renderDeliveryNote(snap, { version: v.version, sha256: v.content_sha256, issuedAt: v.created_at });
   await writeAuditLog({ userId: user.id, companyId: v.company_id, action: "transfer.delivery_note_download", resourceType: "document_version", resourceId: v.id });
-  const name = `${snap.reference}-v${v.version}.pdf`.replace(/[^A-Za-z0-9._-]/g, "_");
+  const name = `${snap.delivery_note_number || snap.reference}-v${v.version}.pdf`.replace(/[^A-Za-z0-9._-]/g, "_");
   return new Response(new Blob([pdf as BlobPart], { type: "application/pdf" }), {
     headers: {
       "Content-Type": "application/pdf",

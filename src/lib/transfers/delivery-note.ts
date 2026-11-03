@@ -7,6 +7,8 @@ import { A4, SimplePdf, textWidth } from "@/lib/pdf/simple-pdf";
 
 export interface DeliveryNoteSnapshot {
   company: { name: string; legal_name: string | null; address: string | null; phone: string | null; email: string | null };
+  /** Auto-generated delivery note number (null on versions issued before migration 0038). */
+  delivery_note_number?: string | null;
   transfer_number: string | null; reference: string; trip_no: number; status: string;
   transfer_date: string; dispatch_date: string; dispatched_at: string | null; expected_arrival_at: string | null;
   sender: { code: string; name: string; address: string | null; phone: string | null; location: string | null };
@@ -35,6 +37,7 @@ export function renderDeliveryNote(s: DeliveryNoteSnapshot, v: { version: number
   const L = 40, R = A4.width - 40, W = R - L;
   let y = A4.height - 50;
 
+  const dn = s.delivery_note_number || s.reference;
   const header = () => {
     y = A4.height - 50;
     pdf.text(L, y, s.company.legal_name || s.company.name, 15, "bold");
@@ -42,7 +45,7 @@ export function renderDeliveryNote(s: DeliveryNoteSnapshot, v: { version: number
     y -= 14;
     const contact = [s.company.address, s.company.phone, s.company.email].filter(Boolean).join("  |  ");
     if (contact) pdf.textFit(L, y, contact, W * 0.62, 8);
-    pdf.textRight(R, y, `${s.reference}   (version ${v.version})`, 10, "bold");
+    pdf.textRight(R, y, `No. ${dn}   (version ${v.version})`, 10, "bold");
     y -= 8;
     pdf.line(L, y, R, y, 1);
     y -= 16;
@@ -51,12 +54,17 @@ export function renderDeliveryNote(s: DeliveryNoteSnapshot, v: { version: number
 
   // Document references and dates
   const kv = (x: number, label: string, value: string, w = 120) => { pdf.text(x, y, label, 7.5); pdf.textFit(x, y - 10, value || "-", w, 9.5, "bold"); };
-  kv(L, "Delivery note ref.", s.reference);
+  kv(L, "Delivery note no.", dn);
   kv(L + 130, "Transfer no.", s.transfer_number ?? "-");
   kv(L + 240, "Trip", String(s.trip_no), 60);
   kv(L + 300, "Dispatch date", fmtDate(s.dispatch_date), 110);
   kv(L + 415, "Expected arrival", fmtDate(s.expected_arrival_at), 100);
   y -= 30;
+
+  // Where the goods are going, in large type for the gate and the driver.
+  pdf.rect(L, y - 24, W, 24, 0.8, 0.93);
+  pdf.textFit(L + 8, y - 16, `GOING TO: ${s.receiver.code} - ${s.receiver.name}${s.receiver.location ? `  (warehouse ${s.receiver.location})` : ""}`, W - 16, 12, "bold");
+  y -= 36;
 
   // Sender / receiver
   const box = (x: number, title: string, b: DeliveryNoteSnapshot["sender"]) => {
@@ -98,7 +106,7 @@ export function renderDeliveryNote(s: DeliveryNoteSnapshot, v: { version: number
   let totalQty = 0, totalKg = 0;
   s.lines.forEach((ln, i) => {
     if (y < 190) {
-      pdf.text(L, 40, `${s.reference} v${v.version} - continued`, 7.5);
+      pdf.text(L, 40, `${dn} v${v.version} - continued`, 7.5);
       pdf.addPage(); header(); tableHead();
     }
     const row = [String(i + 1), ln.sku, ln.name, ln.batch ?? "", qty(ln.qty), ln.unit ?? "", ln.net_kg == null ? "-" : qty(ln.net_kg)];
@@ -126,7 +134,7 @@ export function renderDeliveryNote(s: DeliveryNoteSnapshot, v: { version: number
       pdf.line(x + 6 + textWidth(f, 7.5) + 4, y - 35 - j * 22, x + sigW - 6, y - 35 - j * 22, 0.4);
     });
   });
-  pdf.text(L, 48, `Issued ${fmtDate(v.issuedAt)} - ${s.reference} version ${v.version} - content ${v.sha256.slice(0, 12)}`, 7);
+  pdf.text(L, 48, `Issued ${fmtDate(v.issuedAt)} - ${dn} version ${v.version} - trip ${s.reference} - content ${v.sha256.slice(0, 12)}`, 7);
   pdf.text(L, 38, "Quantities are as dispatched. This note does not move stock; the receiving branch records what arrives.", 7);
-  return pdf.toBytes({ title: `Delivery note ${s.reference} v${v.version}` });
+  return pdf.toBytes({ title: `Delivery note ${dn} v${v.version}` });
 }

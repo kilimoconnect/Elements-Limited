@@ -15,6 +15,7 @@ import { DocStatusBadge } from "@/components/common/doc-status-badge";
 import { AttachmentsPanel } from "@/components/common/attachments-panel";
 import type { AttachmentCategory } from "@/lib/attachments/policy";
 import { TransferActions, type TLine } from "./transfer-actions";
+import { isHeadOfficeUser, transferGrnGroups } from "@/lib/transfers/grn-data";
 import { TripActions, ResolveButton, AddAgentForm, AddUpdateForm, ChargeForm, ChargeRowActions } from "./transfer-file";
 
 export const metadata: Metadata = { title: "Transfer" };
@@ -41,6 +42,8 @@ export default async function TransferDetailPage(props: { params: Params }) {
   const canDispatch = can(ctx.user, "inventory.transfer_dispatch") && isSender;
   const logistics = await isFeatureEnabled(ctx.companyId, "transfer_logistics");
   const attachmentsOn = await isFeatureEnabled(ctx.companyId, "attachments");
+  const headOffice = await isHeadOfficeUser(ctx.user, ctx.companyId);
+  const grnGroups = headOffice && t.status !== "voided" ? await transferGrnGroups(id) : [];
 
   const [{ data: lines }, { data: trips }, { data: receipts }, { data: agents }, { data: events }, { data: charges }, { data: categories }, { data: versions }] = await Promise.all([
     admin.from("stock_transfer_lines").select("id, line_no, qty_requested, qty_dispatched, qty_received, qty_quarantined, qty_short_pending, qty_lost_normal, qty_lost_abnormal, unit_cost, transit_value, received_value, lost_value, charges_applied, batch_reference, kg_per_unit, product:products(sku,name)").eq("transfer_id", id).order("line_no"),
@@ -56,7 +59,7 @@ export default async function TransferDetailPage(props: { params: Params }) {
     qty_lost_normal: number; qty_lost_abnormal: number; unit_cost: number; transit_value: number; received_value: number; lost_value: number; charges_applied: number;
     batch_reference: string | null; kg_per_unit: number | null; product: { sku: string; name: string } | null };
   const ls = (lines ?? []) as unknown as L[];
-  type Trip = Record<string, unknown> & { id: string; trip_no: number; status: string; document_number: string | null; driver_name: string | null; driver_phone: string | null;
+  type Trip = Record<string, unknown> & { id: string; trip_no: number; status: string; document_number: string | null; delivery_note_number: string | null; driver_name: string | null; driver_phone: string | null;
     driver_licence: string | null; vehicle_registration: string | null; trailer_registration: string | null; transporter_name: string | null; transporter_contact: string | null;
     dispatch_date: string; dispatched_at: string | null; expected_arrival_at: string | null; arrived_at: string | null; notes: string | null; void_reason: string | null;
     lines: { id: string; transfer_line_id: string; qty: number; net_kg: number | null; value: number; transit_value: number; qty_reported: number; qty_accepted: number; qty_quarantined: number; qty_short: number; qty_lost_normal: number; qty_lost_abnormal: number }[];
@@ -134,6 +137,24 @@ export default async function TransferDetailPage(props: { params: Params }) {
         </Table>
       </Card>
 
+      {grnGroups.length > 0 && (
+        <Card><CardContent className="space-y-3 p-5 text-sm">
+          <div>
+            <h3 className="font-semibold">Goods Received Notes (Head Office)</h3>
+            <p className="text-xs text-muted-foreground">One GRN per supplier of the goods on this transfer, with the supplier’s details, to submit to the supplier. The GRN number is given on the first download and kept.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {grnGroups.map((g) => (
+              <Button key={g.key} asChild variant="outline" size="sm">
+                <a href={`/api/transfers/${id}/grn/${g.supplierId ?? "none"}`}>
+                  GRN{g.number ? ` ${g.number}` : ""} — {g.supplierName} ({g.lineIds.length} {g.lineIds.length === 1 ? "product" : "products"})
+                </a>
+              </Button>
+            ))}
+          </div>
+        </CardContent></Card>
+      )}
+
       {tripsList.map((trip) => {
         const vers = ((versions ?? []) as { id: string; owner_id: string; version: number; created_at: string }[]).filter((v) => v.owner_id === trip.id);
         const tripReceipts = rcs.filter((r) => r.dispatch_id === trip.id);
@@ -153,7 +174,7 @@ export default async function TransferDetailPage(props: { params: Params }) {
                 {canLicence && trip.driver_licence && <p className="text-xs text-muted-foreground">Licence {trip.driver_licence}</p>}</div>
               <div><p className="text-xs text-muted-foreground">Truck / trailer</p><p>{trip.vehicle_registration ?? "—"} / {trip.trailer_registration ?? "—"}</p></div>
               <div><p className="text-xs text-muted-foreground">Transporter</p><p>{trip.transporter_name ?? "—"}{trip.transporter_contact && <> · {trip.transporter_contact}</>}</p></div>
-              <div><p className="text-xs text-muted-foreground">Delivery note</p>{vers.length === 0 ? <p>—</p> : vers.map((v) => (
+              <div><p className="text-xs text-muted-foreground">Delivery note{trip.delivery_note_number ? ` ${trip.delivery_note_number}` : ""}</p>{vers.length === 0 ? <p className="text-xs text-muted-foreground">Not issued yet. Use Delivery note (PDF).</p> : vers.map((v) => (
                 <p key={v.id}><a className="underline" href={`/api/transfers/delivery-notes/${v.id}`} target="_blank" rel="noopener">v{v.version}</a> <span className="text-xs text-muted-foreground">{formatDateTime(v.created_at)}</span></p>
               ))}</div>
             </div>
