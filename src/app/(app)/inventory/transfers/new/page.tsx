@@ -13,12 +13,14 @@ export default async function NewTransferPage() {
   await requirePermissionPage("inventory.transfer_create");
   const ctx = await getActiveContext();
   const admin = createAdminClient();
-  const [{ data: products }, { data: categories }, logistics] = await Promise.all([
+  const [{ data: products }, { data: categories }, logistics, { data: companyBranches }] = await Promise.all([
     admin.from("products").select("id, sku, name").eq("company_id", ctx.companyId).eq("is_active", true).order("sku"),
     // Only charge types that go into inventory cost.
     admin.from("cost_categories").select("id, code, name").eq("company_id", ctx.companyId).eq("is_active", true)
       .eq("applies_to_transfer", true).eq("inventory_treatment", "capitalize").order("code"),
     isFeatureEnabled(ctx.companyId, "transfer_logistics"),
+    // Goods can go to any branch of the company, not only the branches this user is assigned to.
+    admin.from("branches").select("id, code, name").eq("company_id", ctx.companyId).eq("is_active", true).order("code"),
   ]);
   const myBranches = ctx.user.isOwner ? ctx.branches : ctx.branches.filter((b) => ctx.user.branchIds.includes(b.id));
   // Stock on hand at each branch the user can send from: only these products can be transferred.
@@ -37,7 +39,7 @@ export default async function NewTransferPage() {
           products={(products ?? []) as never}
           stockByBranch={stockByBranch}
           sourceBranches={myBranches}
-          allBranches={ctx.branches}
+          allBranches={companyBranches ?? []}
           sourceBranchId={ctx.branchId}
           canDispatch={can(ctx.user, "inventory.transfer_dispatch")}
           canLicence={can(ctx.user, "documents.view_licence")}
