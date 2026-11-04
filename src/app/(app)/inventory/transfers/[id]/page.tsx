@@ -74,7 +74,7 @@ export default async function TransferDetailPage(props: { params: Params }) {
   const remainingToDispatch = ls.some((l) => N(l.qty_requested) > N(l.qty_dispatched));
   const tripOpts = tripsList.filter((x) => x.status !== "voided").map((x) => ({ id: x.id, label: x.document_number ?? `Trip ${x.trip_no} (draft)` }));
   const legacy = !t.posts_in_transit;
-  const tripCats: AttachmentCategory[] = ["cargo_papers", "loading_photo", "weighbridge_ticket", "signed_delivery_note", "offloading_photo", "other",
+  const tripCats: AttachmentCategory[] = ["loading_photo", "cargo_papers", "weighbridge_ticket", "signed_delivery_note", "offloading_photo", "other",
     ...(canLicencePhoto ? ["driver_licence" as const] : []), ...(can(ctx.user, "documents.view_financial") ? ["transport_invoice" as const] : [])];
 
   return (
