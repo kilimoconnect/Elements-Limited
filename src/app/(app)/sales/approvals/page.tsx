@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatMoney, formatDate, formatDateTime } from "@/lib/format";
+import { ClickableRow } from "@/components/common/clickable-row";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -67,7 +68,7 @@ export default async function SalesApprovalsPage() {
             </TableHeader>
             <TableBody>
               {rows.map((r) => (
-                <TableRow key={r.id}>
+                <ClickableRow key={r.id} href={`/sales/${r.id}`}>
                   <TableCell className="text-sm">{r.submitted_at ? formatDateTime(r.submitted_at) : "—"}</TableCell>
                   <TableCell className="text-sm">{nameOf(r.submitted_by)}</TableCell>
                   <TableCell className="text-sm">{r.branch?.code}</TableCell>
@@ -82,7 +83,7 @@ export default async function SalesApprovalsPage() {
                   <TableCell className="text-right">
                     <Link href={`/sales/${r.id}`} className="text-sm font-medium text-primary hover:underline">Review</Link>
                   </TableCell>
-                </TableRow>
+                </ClickableRow>
               ))}
             </TableBody>
           </Table>

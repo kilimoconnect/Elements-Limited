@@ -11,6 +11,7 @@ import { DocStatusBadge } from "@/components/common/doc-status-badge";
 import { TxnActions } from "@/components/common/txn-actions";
 import { formatMoney, formatDate } from "@/lib/format";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ClickableRow } from "@/components/common/clickable-row";
 
 export const metadata: Metadata = { title: "Supplier Payments" };
 
@@ -39,7 +40,7 @@ export default async function SupplierPaymentsPage() {
             </TableRow></TableHeader>
             <TableBody>
               {list.map((r) => (
-                <TableRow key={r.id}>
+                <ClickableRow key={r.id} href={`/purchases/supplier-payments/${r.id}`}>
                   <TableCell className="font-mono text-xs">{r.document_number ?? "—"}</TableCell>
                   <TableCell className="text-sm">{formatDate(r.document_date)}</TableCell>
                   <TableCell className="text-sm">{r.supplier?.name}</TableCell>
@@ -50,7 +51,7 @@ export default async function SupplierPaymentsPage() {
                     <TxnActions id={r.id} status={r.document_status} canOwner={canOwner} voidAction={voidSupplierPayment}
                       extraItems={[{ label: "View", href: `/purchases/supplier-payments/${r.id}` }]} />
                   </TableCell>
-                </TableRow>
+                </ClickableRow>
               ))}
             </TableBody>
           </Table>

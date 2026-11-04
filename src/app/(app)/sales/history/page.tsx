@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ListToolbar } from "@/components/common/list-toolbar";
 import { DocStatusBadge, PayStatusBadge, saleStatus } from "@/components/common/doc-status-badge";
 import { formatMoney, formatDate } from "@/lib/format";
+import { ClickableRow } from "@/components/common/clickable-row";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -96,7 +97,7 @@ export default async function SalesHistoryPage(props: { searchParams: SP }) {
             </TableHeader>
             <TableBody>
               {rows.map((r) => (
-                <TableRow key={r.id}>
+                <ClickableRow key={r.id} href={`/sales/${r.id}`}>
                   <TableCell className="text-sm">{formatDate(r.document_date)}</TableCell>
                   <TableCell className="font-mono text-xs">{r.document_number ?? <Badge variant="muted">Order</Badge>}</TableCell>
                   <TableCell className="text-sm">{r.branch?.code}</TableCell>
@@ -108,7 +109,7 @@ export default async function SalesHistoryPage(props: { searchParams: SP }) {
                   <TableCell className="text-right">
                     <Link href={`/sales/${r.id}`} className="text-sm font-medium text-primary hover:underline">Open</Link>
                   </TableCell>
-                </TableRow>
+                </ClickableRow>
               ))}
             </TableBody>
           </Table>

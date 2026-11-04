@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { formatMoney } from "@/lib/format";
 import { OverdraftButton } from "./overdraft-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ClickableRow } from "@/components/common/clickable-row";
 
 export const metadata: Metadata = { title: "Cash and Banks" };
 
@@ -55,7 +56,7 @@ export default async function CashAndBanksPage() {
             </TableRow></TableHeader>
             <TableBody>
               {withBal.map((a) => (
-                <TableRow key={a.id}>
+                <ClickableRow key={a.id} href={`/cash-and-banks/accounts/${a.id}`}>
                   <TableCell><div className="font-medium">{a.name}</div><div className="font-mono text-xs text-muted-foreground">{a.code}</div></TableCell>
                   <TableCell className="text-sm capitalize">{a.account_type.replace("_", " ")}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{a.provider ?? "—"}</TableCell>
@@ -68,7 +69,7 @@ export default async function CashAndBanksPage() {
                       {showLedger && <Link href={`/cash-and-banks/accounts/${a.id}`} className="text-sm font-medium text-primary hover:underline">Ledger</Link>}
                     </div>
                   </TableCell>
-                </TableRow>
+                </ClickableRow>
               ))}
             </TableBody>
           </Table>

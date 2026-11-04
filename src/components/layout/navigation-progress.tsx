@@ -23,6 +23,8 @@ export function NavigationProgress() {
   // Started from page `from`; it stops by itself once a different page is on screen.
   const [state, setState] = React.useState<null | { mode: "page" | "download"; from: string }>(null);
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The link or button that was clicked shows its own spinner (CSS .nav-loading).
+  const clicked = React.useRef<HTMLElement | null>(null);
 
   const show = React.useCallback((m: "page" | "download") => {
     setState({ mode: m, from: `${window.location.pathname}?${window.location.search.slice(1)}` });
@@ -31,6 +33,12 @@ export function NavigationProgress() {
     timer.current = setTimeout(() => setState(null), m === "download" ? 4000 : 15000);
   }, []);
   const mode = state && (state.mode === "download" || state.from === here) ? state.mode : null;
+  React.useEffect(() => {
+    if (mode || !clicked.current) return;
+    clicked.current.classList.remove("nav-loading");
+    clicked.current.removeAttribute("aria-busy");
+    clicked.current = null;
+  }, [mode]);
 
   React.useEffect(() => {
     function onClick(e: MouseEvent) {
@@ -39,9 +47,12 @@ export function NavigationProgress() {
       if (!a || !a.href || a.target === "_blank") return;
       const url = new URL(a.href, window.location.href);
       if (url.origin !== window.location.origin) return;
-      if (url.pathname.startsWith("/api/") || a.hasAttribute("download")) { show("download"); return; }
-      if (url.pathname === window.location.pathname && url.search === window.location.search) return;
-      show("page");
+      const download = url.pathname.startsWith("/api/") || a.hasAttribute("download");
+      if (!download && url.pathname === window.location.pathname && url.search === window.location.search) return;
+      clicked.current?.classList.remove("nav-loading");
+      a.classList.add("nav-loading"); a.setAttribute("aria-busy", "true");
+      clicked.current = a;
+      show(download ? "download" : "page");
     }
     const onStart = () => show("page");
     document.addEventListener("click", onClick, true);

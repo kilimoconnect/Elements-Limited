@@ -13,6 +13,7 @@ import { DocStatusBadge, PayStatusBadge } from "@/components/common/doc-status-b
 import { TxnActions } from "@/components/common/txn-actions";
 import { formatMoney, formatDate } from "@/lib/format";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ClickableRow } from "@/components/common/clickable-row";
 
 export const metadata: Metadata = { title: "Purchase History" };
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -66,7 +67,7 @@ export default async function PurchaseHistoryPage(props: { searchParams: SP }) {
             </TableRow></TableHeader>
             <TableBody>
               {rows.map((r) => (
-                <TableRow key={r.id}>
+                <ClickableRow key={r.id} href={`/purchases/${r.id}`}>
                   <TableCell className="text-sm">{formatDate(r.document_date)}</TableCell>
                   <TableCell className="font-mono text-xs">{r.document_number ?? <Badge variant="muted">Draft</Badge>}</TableCell>
                   <TableCell className="text-sm">{r.supplier_invoice_number ?? "—"}</TableCell>
@@ -85,7 +86,7 @@ export default async function PurchaseHistoryPage(props: { searchParams: SP }) {
                         ...(r.document_status === "posted" && canReturn ? [{ label: "Create return", href: `/purchases/${r.id}/return` }] : []),
                       ]} />
                   </TableCell>
-                </TableRow>
+                </ClickableRow>
               ))}
             </TableBody>
           </Table>

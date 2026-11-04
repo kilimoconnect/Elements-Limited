@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { can } from "@/lib/context";
 import { formatMoney, formatDate } from "@/lib/format";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ClickableRow } from "@/components/common/clickable-row";
 
 export const metadata: Metadata = { title: "Bank Reconciliation" };
 
@@ -33,13 +34,13 @@ export default async function ReconciliationListPage() {
             <TableHeader><TableRow><TableHead>Account</TableHead><TableHead>Period</TableHead><TableHead className="text-right">Closing</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Open</TableHead></TableRow></TableHeader>
             <TableBody>
               {list.map((r) => (
-                <TableRow key={r.id}>
+                <ClickableRow key={r.id} href={`/cash-and-banks/reconciliation/${r.id}`}>
                   <TableCell className="text-sm font-medium">{r.account?.name}</TableCell>
                   <TableCell className="text-sm">{formatDate(r.statement_start)} → {formatDate(r.statement_end)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatMoney(r.statement_closing)}</TableCell>
                   <TableCell><Badge variant={variant(r.status)}>{r.status.replace("_", " ")}</Badge></TableCell>
                   <TableCell className="text-right"><Link href={`/cash-and-banks/reconciliation/${r.id}`} className="text-sm font-medium text-primary hover:underline">Open</Link></TableCell>
-                </TableRow>
+                </ClickableRow>
               ))}
             </TableBody>
           </Table>

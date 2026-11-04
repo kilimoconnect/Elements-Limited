@@ -12,6 +12,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDate, formatMoney, formatQuantity } from "@/lib/format";
 import { STATUS_VARIANT } from "./status";
+import { ClickableRow } from "@/components/common/clickable-row";
 
 export const metadata: Metadata = { title: "Rebagging" };
 
@@ -50,7 +51,7 @@ export default async function RebaggingPage() {
             </TableRow></TableHeader>
             <TableBody>
               {rows.map((r) => (
-                <TableRow key={r.id}>
+                <ClickableRow key={r.id} href={`/inventory/rebagging/${r.id}`}>
                   <TableCell><Link className="font-mono text-xs underline" href={`/inventory/rebagging/${r.id}`}>{r.document_number ?? "draft"}</Link></TableCell>
                   <TableCell>{formatDate(r.order_date)}</TableCell>
                   <TableCell>{r.branch?.code}</TableCell>
@@ -60,7 +61,7 @@ export default async function RebaggingPage() {
                   <TableCell className="text-xs">{r.outputs.map((o, i) => <span key={i} className="mr-2 whitespace-nowrap">{formatQuantity(Number(o.bags))} × {Number(o.product?.net_weight_kg)} kg</span>)}</TableCell>
                   <TableCell className="text-right tabular-nums">{Number(r.output_value) ? formatMoney(Number(r.output_value)) : "—"}</TableCell>
                   <TableCell><Badge variant={STATUS_VARIANT[r.document_status]}>{r.document_status}</Badge></TableCell>
-                </TableRow>
+                </ClickableRow>
               ))}
             </TableBody>
           </Table>

@@ -13,6 +13,7 @@ import { DocStatusBadge, PayStatusBadge } from "@/components/common/doc-status-b
 import { TxnActions } from "@/components/common/txn-actions";
 import { formatMoney, formatDate } from "@/lib/format";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ClickableRow } from "@/components/common/clickable-row";
 
 export const metadata: Metadata = { title: "Expense History" };
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -46,7 +47,7 @@ export default async function ExpenseHistoryPage(props: { searchParams: SP }) {
             <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Document</TableHead><TableHead>Category</TableHead><TableHead>Payee</TableHead><TableHead className="text-right">Total</TableHead><TableHead className="text-right">Outstanding</TableHead><TableHead>Payment</TableHead><TableHead>Status</TableHead><TableHead className="w-10 text-right">Actions</TableHead></TableRow></TableHeader>
             <TableBody>
               {rows.map((r) => (
-                <TableRow key={r.id}>
+                <ClickableRow key={r.id} href={`/expenses/${r.id}`}>
                   <TableCell className="text-sm">{formatDate(r.document_date)}</TableCell>
                   <TableCell className="font-mono text-xs">{r.document_number ?? <Badge variant="muted">Draft</Badge>}</TableCell>
                   <TableCell className="text-sm">{r.category?.name}</TableCell>
@@ -60,7 +61,7 @@ export default async function ExpenseHistoryPage(props: { searchParams: SP }) {
                       postAction={postExpense} deleteAction={deleteExpenseDraft} voidAction={voidExpense} afterDeletePush="/expenses/history"
                       extraItems={[{ label: "View", href: `/expenses/${r.id}` }, ...(r.document_status === "posted" && Number(r.outstanding) > 0 && can(ctx.user, "purchases.record_payment") ? [{ label: "Record payment", href: `/purchases/supplier-payments/new` }] : [])]} />
                   </TableCell>
-                </TableRow>
+                </ClickableRow>
               ))}
             </TableBody>
           </Table>

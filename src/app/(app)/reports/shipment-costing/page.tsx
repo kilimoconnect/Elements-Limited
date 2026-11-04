@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { PeriodFilter, ParamSelect, PrintButton, ExportCsvButton } from "@/components/reports/report-tools";
 import { Pager, PAGE_SIZE, pageOf, str } from "@/components/reports/pager";
 import { formatDate, formatMoney, formatQuantity } from "@/lib/format";
+import { ClickableRow } from "@/components/common/clickable-row";
 
 export const metadata: Metadata = { title: "Shipment Costing" };
 
@@ -53,7 +54,7 @@ export default async function ShipmentCostingPage(props: { searchParams: Promise
             </TableRow></TableHeader>
             <TableBody>
               {rows.map((r) => (
-                <TableRow key={r.id}>
+                <ClickableRow key={r.id} href={`/imports/${r.id}`}>
                   <TableCell><Link className="font-mono text-xs underline" href={`/imports/${r.id}`}>{r.number}</Link><p className="text-xs text-muted-foreground">{r.supplier}{r.eta && ` · ETA ${formatDate(r.eta)}`}</p>
                     <Badge variant="secondary" className="mr-1">{LOGISTICS_LABEL[r.logistics] ?? r.logistics}</Badge><Badge variant={r.costing === "finalized" ? "success" : "warning"}>{COST_LABEL[r.costing] ?? r.costing}</Badge></TableCell>
                   <TableCell className="text-xs">{r.basis} · {r.currency}</TableCell>
@@ -65,7 +66,7 @@ export default async function ShipmentCostingPage(props: { searchParams: Promise
                   <TableCell className="text-right tabular-nums">{formatMoney(r.accrualVariance)}{r.awaitingInvoice > 0 && <p className="text-xs text-warning">{r.awaitingInvoice} awaiting invoice</p>}</TableCell>
                   <TableCell className="text-right tabular-nums">{money(r.estPerKg)}<p>{money(r.actPerKg)}</p></TableCell>
                   <TableCell className="text-right tabular-nums">{r.actPerKg == null ? "—" : formatMoney(r.actPerKg * 1000)}</TableCell>
-                </TableRow>
+                </ClickableRow>
               ))}
             </TableBody>
           </Table>

@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { PeriodFilter, PrintButton, ExportCsvButton } from "@/components/reports/report-tools";
 import { Pager, PAGE_SIZE, pageOf } from "@/components/reports/pager";
 import { formatDate, formatMoney, formatQuantity } from "@/lib/format";
+import { ClickableRow } from "@/components/common/clickable-row";
 
 export const metadata: Metadata = { title: "Rebagging Costing" };
 
@@ -46,7 +47,7 @@ export default async function RebaggingCostingPage(props: { searchParams: Promis
             </TableRow></TableHeader>
             <TableBody>
               {rows.map((r) => (
-                <TableRow key={r.id} className="align-top">
+                <ClickableRow key={r.id} href={`/inventory/rebagging/${r.id}`} className="align-top">
                   <TableCell><Link className="font-mono text-xs underline" href={`/inventory/rebagging/${r.id}`}>{r.number}</Link><p className="text-xs text-muted-foreground">{r.date && formatDate(r.date)} · {r.branch} · {r.bulk} · {r.costing}</p></TableCell>
                   <TableCell className="text-right tabular-nums">{formatQuantity(r.issuedKg)} / {formatQuantity(r.packedKg)} / {formatQuantity(r.returnedKg)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatQuantity(r.normalLossKg)} / {formatQuantity(r.abnormalLossKg)}{r.abnormalValue > 0 && <p className="text-xs text-muted-foreground">expensed {formatMoney(r.abnormalValue)}</p>}</TableCell>
@@ -54,7 +55,7 @@ export default async function RebaggingCostingPage(props: { searchParams: Promis
                   <TableCell className="text-right tabular-nums">{formatMoney(r.bulkValue)}<p>{formatMoney(r.packagingValue)}</p><p>{formatMoney(r.conversionValue)}</p></TableCell>
                   <TableCell className="text-xs">{r.outputs.map((o, i) => <p key={i}><span className="font-mono">{o.sku}</span> {formatQuantity(o.bags)} bags · <span className="font-semibold tabular-nums">{formatMoney(o.perBag)}</span>/bag · {formatMoney(o.perKg)}/kg</p>)}
                     {r.lateAdjustments !== 0 && <p className="text-muted-foreground">incl. later adjustments {formatMoney(r.lateAdjustments)}</p>}</TableCell>
-                </TableRow>
+                </ClickableRow>
               ))}
             </TableBody>
           </Table>

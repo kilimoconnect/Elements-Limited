@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDate, formatQuantity } from "@/lib/format";
+import { ClickableRow } from "@/components/common/clickable-row";
 
 export const metadata: Metadata = { title: "Import Shipments" };
 
@@ -46,7 +47,7 @@ export default async function ImportsPage() {
             </TableRow></TableHeader>
             <TableBody>
               {rows.map((r) => (
-                <TableRow key={r.id}>
+                <ClickableRow key={r.id} href={`/imports/${r.id}`}>
                   <TableCell><Link className="font-mono text-xs underline" href={`/imports/${r.id}`}>{r.document_number ?? "—"}</Link>
                     {r.eta && <p className="text-xs text-muted-foreground">ETA {formatDate(r.eta)}</p>}</TableCell>
                   <TableCell className="text-sm">{r.supplier}</TableCell>
@@ -61,7 +62,7 @@ export default async function ImportsPage() {
                     {r.awaiting_invoice > 0 && <p className="text-warning">{r.awaiting_invoice} cost(s) awaiting invoice</p>}
                     {r.unallocated > 0 && <p className="text-destructive">{r.unallocated} unallocated</p>}
                   </TableCell>
-                </TableRow>
+                </ClickableRow>
               ))}
             </TableBody>
           </Table>

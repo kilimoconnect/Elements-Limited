@@ -12,6 +12,7 @@ import { DocStatusBadge } from "@/components/common/doc-status-badge";
 import { TxnActions } from "@/components/common/txn-actions";
 import { formatMoney, formatDate } from "@/lib/format";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ClickableRow } from "@/components/common/clickable-row";
 
 export const metadata: Metadata = { title: "Journal Entries" };
 
@@ -37,7 +38,7 @@ export default async function JournalsPage() {
             <TableHeader><TableRow><TableHead>Journal</TableHead><TableHead>Date</TableHead><TableHead>Description</TableHead><TableHead className="text-right">Amount</TableHead><TableHead>Status</TableHead><TableHead className="w-10 text-right">Actions</TableHead></TableRow></TableHeader>
             <TableBody>
               {list.map((r) => (
-                <TableRow key={r.id}>
+                <ClickableRow key={r.id} href={`/accounting/journals/${r.id}`}>
                   <TableCell className="font-mono text-xs">{r.document_number ?? <Badge variant="muted">Draft</Badge>}</TableCell>
                   <TableCell className="text-sm">{formatDate(r.journal_date)}</TableCell>
                   <TableCell className="text-sm">{r.description ?? r.reference ?? "—"}{r.is_control_adjustment && <Badge variant="warning" className="ml-2">control</Badge>}</TableCell>
@@ -49,7 +50,7 @@ export default async function JournalsPage() {
                       postLabel="Post journal" afterDeletePush="/accounting/journals"
                       extraItems={[{ label: "View", href: `/accounting/journals/${r.id}` }]} />
                   </TableCell>
-                </TableRow>
+                </ClickableRow>
               ))}
             </TableBody>
           </Table>
