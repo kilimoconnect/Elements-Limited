@@ -2,8 +2,9 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { Download, Trash2, Upload } from "lucide-react";
-import { listAttachmentsAction, attachmentDownloadAction, deleteAttachmentAction } from "@/lib/attachments/actions";
+import { Download, Eye, ExternalLink, Trash2, Upload } from "lucide-react";
+import { listAttachmentsAction, attachmentDownloadAction, attachmentPreviewAction, deleteAttachmentAction } from "@/lib/attachments/actions";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { uploadAttachmentFile } from "@/lib/attachments/client-upload";
 import { CATEGORY_LABEL, type AttachmentCategory, type OwnerType } from "@/lib/attachments/policy";
@@ -26,6 +27,7 @@ export function AttachmentsPanel({ ownerType, ownerId, categories }: { ownerType
   const [files, setFiles] = React.useState<File[]>([]);
   const [canDelete, setCanDelete] = React.useState(false);
   const [toDelete, setToDelete] = React.useState<Row | null>(null);
+  const [preview, setPreview] = React.useState<null | { id: string; url: string; contentType: string; name: string }>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -65,6 +67,10 @@ export function AttachmentsPanel({ ownerType, ownerId, categories }: { ownerType
     setFiles([]); if (inputRef.current) inputRef.current.value = "";
     void load();
   }
+  async function openPreview(id: string) {
+    const res = await attachmentPreviewAction(id);
+    if (res.ok) setPreview({ id, ...res.data }); else setError(res.error);
+  }
   async function download(id: string) {
     const res = await attachmentDownloadAction(id);
     if (res.ok) window.location.assign(res.data.url); else setError(res.error);
@@ -79,6 +85,7 @@ export function AttachmentsPanel({ ownerType, ownerId, categories }: { ownerType
               <span>{LABEL[r.category] ?? r.category} · {r.download_name} · v{r.version}{superseded.has(r.id) ? " (superseded)" : ""}
                 <span className="text-xs text-muted-foreground"> · {formatDateTime(r.uploaded_at)} · {(r.size_bytes / 1024).toFixed(0)} KB</span></span>
               <span className="flex shrink-0 gap-1">
+                <Button size="sm" variant="outline" onClick={() => openPreview(r.id)} aria-label={`Preview ${r.download_name}`}><Eye className="h-4 w-4" /> Preview</Button>
                 <Button size="sm" variant="outline" onClick={() => download(r.id)} aria-label={`Download ${r.download_name}`}><Download className="h-4 w-4" /> Download</Button>
                 {canDelete && (
                   <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => setToDelete(r)} aria-label={`Delete ${r.download_name}`}>
@@ -103,6 +110,22 @@ export function AttachmentsPanel({ ownerType, ownerId, categories }: { ownerType
       </div>
       <p className="text-xs text-muted-foreground">PDF, JPEG, PNG or WebP, up to 20 MB each. You can select several files at once; they are added side by side. A single document uploaded again in the same category becomes a new version; earlier versions stay available.</p>
       {error && <p className="text-destructive">{error}</p>}
+
+      <Dialog open={preview !== null} onOpenChange={(o) => !o && setPreview(null)}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader><DialogTitle className="truncate pr-8">{preview?.name}</DialogTitle></DialogHeader>
+          {preview && (preview.contentType === "application/pdf"
+            ? <iframe src={preview.url} title={preview.name} className="h-[75vh] w-full rounded-md border border-border" />
+            // eslint-disable-next-line @next/next/no-img-element -- short-lived signed link from private storage
+            : <img src={preview.url} alt={preview.name} className="mx-auto max-h-[75vh] w-auto rounded-md object-contain" />)}
+          {preview && (
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button asChild variant="outline" size="sm"><a href={preview.url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4" /> Open in new tab</a></Button>
+              <Button size="sm" onClick={() => download(preview.id)}><Download className="h-4 w-4" /> Download</Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog
         open={toDelete !== null} onOpenChange={(o) => !o && setToDelete(null)}

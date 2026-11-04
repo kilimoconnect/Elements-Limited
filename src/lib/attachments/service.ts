@@ -187,11 +187,11 @@ export async function listAttachments(ownerType: OwnerType, ownerId: string): Pr
  * Short-lived signed link, served as a download (Content-Disposition:
  * attachment with the sanitised name) so files are never rendered inline.
  */
-export async function attachmentDownloadUrl(attachmentId: string): Promise<Result<{ url: string }>> {
+export async function attachmentDownloadUrl(attachmentId: string, mode: "download" | "preview" = "download"): Promise<Result<{ url: string; contentType: string; name: string }>> {
   const user = await assertActiveUser();
   const admin = createAdminClient();
   const { data: row } = await admin.from("document_attachments")
-    .select("owner_type, owner_id, category, storage_path, download_name, company_id")
+    .select("owner_type, owner_id, category, storage_path, download_name, company_id, content_type")
     .eq("id", attachmentId).maybeSingle();
   if (!row) return { ok: false, error: "Not found." };
   if (!(await canAccessOwner(user.id, row.owner_type as OwnerType, row.owner_id))) return { ok: false, error: "Not authorised." };
@@ -200,11 +200,12 @@ export async function attachmentDownloadUrl(attachmentId: string): Promise<Resul
     return { ok: false, error: "Not authorised." };
   }
   const { data, error } = await admin.storage.from(ATTACHMENT_BUCKET)
-    .createSignedUrl(row.storage_path, SIGNED_URL_TTL_SECONDS, { download: row.download_name });
+    // Preview links open in the page (only PDF and image types are ever stored); downloads save the file.
+    .createSignedUrl(row.storage_path, mode === "preview" ? 300 : SIGNED_URL_TTL_SECONDS, mode === "preview" ? undefined : { download: row.download_name });
   if (error || !data) return { ok: false, error: "Could not create a download link." };
   await writeAuditLog({
-    userId: user.id, companyId: row.company_id, action: "attachment.download", resourceType: row.owner_type,
+    userId: user.id, companyId: row.company_id, action: mode === "preview" ? "attachment.preview" : "attachment.download", resourceType: row.owner_type,
     resourceId: row.owner_id, newValues: { attachment_id: attachmentId },
   });
-  return { ok: true, data: { url: data.signedUrl } };
+  return { ok: true, data: { url: data.signedUrl, contentType: row.content_type as string, name: row.download_name as string } };
 }

@@ -42,6 +42,11 @@ export async function attachmentDownloadAction(attachmentId: string) {
   return attachmentDownloadUrl(attachmentId);
 }
 
+export async function attachmentPreviewAction(attachmentId: string) {
+  if (!(await enabled())) return { ok: false as const, error: "Attachments are not enabled." };
+  return attachmentDownloadUrl(attachmentId, "preview");
+}
+
 export async function prepareUploadAction(input: { ownerType: OwnerType; ownerId: string; category: AttachmentCategory; contentType: string; size: number }) {
   if (!(await enabled())) return { ok: false as const, error: "Attachments are not enabled." };
   return prepareUpload(input);
