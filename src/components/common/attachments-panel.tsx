@@ -13,12 +13,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 interface Row { id: string; category: string; download_name: string; size_bytes: number; version: number; supersedes_id: string | null; uploaded_at: string }
 
 const LABEL: Record<string, string> = CATEGORY_LABEL;
+const MAX_BYTES = 4 * 1024 * 1024;
+/** Categories that normally hold several files (photos, payment proofs): never replace each other. */
+const MULTI: AttachmentCategory[] = ["photo", "loading_photo", "offloading_photo", "proof_of_payment"];
 
 /** Lists, uploads and downloads attachments of one record (private bucket, short-lived links). */
 export function AttachmentsPanel({ ownerType, ownerId, categories }: { ownerType: OwnerType; ownerId: string; categories: AttachmentCategory[] }) {
   const [rows, setRows] = React.useState<Row[] | null>(null);
   const [category, setCategory] = React.useState<AttachmentCategory>(categories[0]);
-  const [file, setFile] = React.useState<File | null>(null);
+  const [files, setFiles] = React.useState<File[]>([]);
   const [error, setError] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -38,16 +41,29 @@ export function AttachmentsPanel({ ownerType, ownerId, categories }: { ownerType
 
   const superseded = new Set((rows ?? []).map((r) => r.supersedes_id).filter(Boolean));
   async function upload() {
-    if (!file) return;
-    setError(null); setPending(true);
-    const fd = new FormData();
-    fd.set("ownerType", ownerType); fd.set("ownerId", ownerId); fd.set("category", category); fd.set("file", file);
-    const latest = (rows ?? []).filter((r) => r.category === category && !superseded.has(r.id)).sort((a, b) => b.version - a.version)[0];
-    if (latest) fd.set("supersedesId", latest.id);
-    const res = await uploadAttachmentAction(fd);
+    if (files.length === 0) return;
+    setError(null);
+    // Each upload travels through the server, which accepts about 4.5 MB per request.
+    const tooBig = files.filter((f) => f.size > MAX_BYTES);
+    if (tooBig.length) { setError(`Too large (over 4 MB): ${tooBig.map((f) => f.name).join(", ")}. Use smaller photos or PDFs.`); return; }
+    setPending(true);
+    // Several files (or photos) are added side by side; one document replaces the current one as a new version.
+    const addAll = files.length > 1 || MULTI.includes(category);
+    const latest = addAll ? undefined : (rows ?? []).filter((r) => r.category === category && !superseded.has(r.id)).sort((a, b) => b.version - a.version)[0];
+    const failed: string[] = [];
+    for (const f of files) {
+      const fd = new FormData();
+      fd.set("ownerType", ownerType); fd.set("ownerId", ownerId); fd.set("category", category); fd.set("file", f);
+      if (latest) fd.set("supersedesId", latest.id);
+      const res = await uploadAttachmentAction(fd);
+      if (!res.ok) failed.push(`${f.name}: ${res.error}`);
+    }
     setPending(false);
-    if (res.ok) { toast.success(latest ? `Uploaded version ${latest.version + 1}.` : "Uploaded."); setFile(null); if (inputRef.current) inputRef.current.value = ""; void load(); }
-    else setError(res.error);
+    const done = files.length - failed.length;
+    if (done > 0) toast.success(latest ? `Uploaded version ${latest.version + 1}.` : done === 1 ? "Uploaded." : `Uploaded ${done} files.`);
+    if (failed.length) setError(failed.join(" "));
+    setFiles([]); if (inputRef.current) inputRef.current.value = "";
+    void load();
   }
   async function download(id: string) {
     const res = await attachmentDownloadAction(id);
@@ -72,11 +88,13 @@ export function AttachmentsPanel({ ownerType, ownerId, categories }: { ownerType
           <SelectTrigger className="h-9 w-48"><SelectValue /></SelectTrigger>
           <SelectContent>{categories.map((c) => <SelectItem key={c} value={c}>{LABEL[c]}</SelectItem>)}</SelectContent>
         </Select>
-        <Input ref={inputRef} className="h-9 max-w-xs" type="file" accept="application/pdf,image/jpeg,image/png,image/webp"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-        <Button size="sm" disabled={!file || pending} onClick={upload}><Upload className="h-4 w-4" /> {pending ? "Uploading..." : "Upload"}</Button>
+        <Input ref={inputRef} className="h-9 max-w-xs" type="file" multiple accept="application/pdf,image/jpeg,image/png,image/webp"
+          onChange={(e) => setFiles(Array.from(e.target.files ?? []))} />
+        <Button size="sm" disabled={files.length === 0 || pending} onClick={upload}>
+          <Upload className="h-4 w-4" /> {pending ? "Uploading..." : files.length > 1 ? `Upload ${files.length} files` : "Upload"}
+        </Button>
       </div>
-      <p className="text-xs text-muted-foreground">PDF, JPEG, PNG or WebP up to 10 MB. A new upload in the same category becomes a new version; earlier versions stay available.</p>
+      <p className="text-xs text-muted-foreground">PDF, JPEG, PNG or WebP, up to 4 MB each. You can select several files at once; they are added side by side. A single document uploaded again in the same category becomes a new version; earlier versions stay available.</p>
       {error && <p className="text-destructive">{error}</p>}
     </div>
   );

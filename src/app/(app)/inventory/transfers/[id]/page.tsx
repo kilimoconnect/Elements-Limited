@@ -48,15 +48,14 @@ export default async function TransferDetailPage(props: { params: Params }) {
   const headOffice = await isHeadOfficeUser(ctx.user, ctx.companyId);
   const grnGroups = headOffice && t.status !== "voided" ? await transferGrnGroups(id) : [];
 
-  const [{ data: lines }, { data: trips }, { data: receipts }, { data: agents }, { data: events }, { data: charges }, { data: categories }, { data: versions }] = await Promise.all([
+  const [{ data: lines }, { data: trips }, { data: receipts }, { data: agents }, { data: events }, { data: charges }, { data: categories }] = await Promise.all([
     admin.from("stock_transfer_lines").select("id, line_no, qty_requested, qty_dispatched, qty_received, qty_quarantined, qty_short_pending, qty_lost_normal, qty_lost_abnormal, unit_cost, transit_value, received_value, lost_value, charges_applied, batch_reference, kg_per_unit, product:products(sku,name)").eq("transfer_id", id).order("line_no"),
     admin.from("stock_transfer_dispatches").select("*, lines:stock_transfer_dispatch_lines(id, transfer_line_id, qty, net_kg, value, transit_value, qty_reported, qty_accepted, qty_quarantined, qty_short, qty_lost_normal, qty_lost_abnormal), changes:stock_transfer_dispatch_changes(old_values, new_values, reason, changed_at)").eq("transfer_id", id).order("trip_no"),
     admin.from("stock_transfer_receipts").select("id, document_number, dispatch_id, arrived_at, received_at, signed_by_name, notes, lines:stock_transfer_receipt_lines(id, transfer_line_id, qty_received, qty_damaged, qty_short, qty_released, qty_resolved_damaged, qty_resolved_short, value, resolutions:stock_transfer_resolutions(kind, resolution, qty, value, created_at))").eq("transfer_id", id).order("received_at"),
     admin.from("stock_transfer_agents").select("id, name, company_name, phone, role").eq("transfer_id", id).order("created_at"),
-    admin.from("stock_transfer_events").select("id, event_type, note, created_at, dispatch_id").eq("transfer_id", id).order("created_at", { ascending: false }).limit(100),
+    admin.from("stock_transfer_events").select("id, event_type, note, created_at, dispatch_id").eq("transfer_id", id).eq("event_type", "update").order("created_at", { ascending: false }).limit(100),
     showCost ? admin.from("cost_sources").select("id, description, status, estimated_amount, accrued_amount, actual_amount, allocation_basis, inventory_treatment, transfer_dispatch_id, category:cost_categories(name)").eq("stock_transfer_id", id).neq("status", "voided").order("created_at") : Promise.resolve({ data: [] }),
     admin.from("cost_categories").select("id, code, name, inventory_treatment").eq("company_id", ctx.companyId).eq("is_active", true).eq("applies_to_transfer", true).order("code"),
-    admin.from("document_versions").select("id, owner_id, version, created_at").eq("owner_type", "stock_transfer_dispatch").eq("kind", "delivery_note").eq("company_id", ctx.companyId).order("version", { ascending: false }),
   ]);
   type L = { id: string; line_no: number; qty_requested: number; qty_dispatched: number; qty_received: number; qty_quarantined: number; qty_short_pending: number;
     qty_lost_normal: number; qty_lost_abnormal: number; unit_cost: number; transit_value: number; received_value: number; lost_value: number; charges_applied: number;
@@ -159,7 +158,6 @@ export default async function TransferDetailPage(props: { params: Params }) {
       )}
 
       {tripsList.map((trip) => {
-        const vers = ((versions ?? []) as { id: string; owner_id: string; version: number; created_at: string }[]).filter((v) => v.owner_id === trip.id);
         const tripReceipts = rcs.filter((r) => r.dispatch_id === trip.id);
         return (
           <Card key={trip.id}><CardContent className="space-y-3 p-5 text-sm">
@@ -172,14 +170,11 @@ export default async function TransferDetailPage(props: { params: Params }) {
                 transport={{ driver_name: trip.driver_name ?? "", driver_phone: trip.driver_phone ?? "", ...(canLicence ? { driver_licence: trip.driver_licence ?? "" } : {}),
                   vehicle_registration: trip.vehicle_registration ?? "", trailer_registration: trip.trailer_registration ?? "", transporter_name: trip.transporter_name ?? "", transporter_contact: trip.transporter_contact ?? "" }} />
             </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div><p className="text-xs text-muted-foreground">Driver</p><p>{trip.driver_name ?? "—"}{trip.driver_phone && <> · <a className="underline" href={`tel:${trip.driver_phone}`}>{trip.driver_phone}</a></>}</p>
                 {canLicence && trip.driver_licence && <p className="text-xs text-muted-foreground">Licence {trip.driver_licence}</p>}</div>
               <div><p className="text-xs text-muted-foreground">Truck / trailer</p><p>{trip.vehicle_registration ?? "—"} / {trip.trailer_registration ?? "—"}</p></div>
               <div><p className="text-xs text-muted-foreground">Transporter</p><p>{trip.transporter_name ?? "—"}{trip.transporter_contact && <> · {trip.transporter_contact}</>}</p></div>
-              <div><p className="text-xs text-muted-foreground">Delivery note{trip.delivery_note_number ? ` ${trip.delivery_note_number}` : ""}</p>{vers.length === 0 ? <p className="text-xs text-muted-foreground">Not issued yet. Use Delivery note (PDF).</p> : vers.map((v) => (
-                <p key={v.id}><a className="underline" href={`/api/transfers/delivery-notes/${v.id}`} target="_blank" rel="noopener">v{v.version}</a> <span className="text-xs text-muted-foreground">{formatDateTime(v.created_at)}</span></p>
-              ))}</div>
             </div>
             <Table>
               <TableHeader><TableRow><TableHead>Cargo</TableHead><TableHead className="text-right">Loaded</TableHead><TableHead className="text-right">Net kg</TableHead>
@@ -243,7 +238,7 @@ export default async function TransferDetailPage(props: { params: Params }) {
           {logistics && t.status !== "voided" && <AddAgentForm transferId={id} />}
         </CardContent></Card>
         <Card><CardContent className="space-y-2 p-5 text-sm">
-          <h3 className="font-semibold">Timeline</h3>
+          <h3 className="font-semibold">Updates</h3>
           {logistics && t.status !== "voided" && <AddUpdateForm transferId={id} trips={tripOpts.filter((x) => !x.label.includes("draft"))} />}
           <div className="max-h-72 space-y-1 overflow-y-auto">
             {((events ?? []) as { id: string; event_type: string; note: string | null; created_at: string }[]).map((e) => (
@@ -271,12 +266,6 @@ export default async function TransferDetailPage(props: { params: Params }) {
         </CardContent></Card>
       )}
 
-      {attachmentsOn && (
-        <Card><CardContent className="p-5">
-          <h3 className="mb-2 text-sm font-semibold">Transfer documents</h3>
-          <AttachmentsPanel ownerType="stock_transfer" ownerId={id} categories={["cargo_papers", "delivery_note", "proof_of_delivery", "photo", "other"]} />
-        </CardContent></Card>
-      )}
     </div>
   );
 }
