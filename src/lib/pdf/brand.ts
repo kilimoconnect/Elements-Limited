@@ -177,3 +177,17 @@ export function fmtDate(iso: string | null): string {
 }
 export const qty = (v: number) => Number(v).toLocaleString("en-US", { maximumFractionDigits: 4 });
 export const money = (v: number) => Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** Splits text into lines that fit `maxWidth` at the given size (breaks at spaces). */
+export function wrapText(text: string, maxWidth: number, size: number, font: "regular" | "bold" = "regular"): string[] {
+  const out: string[] = [];
+  for (const para of text.split(/\r?\n/).map((p) => p.trim()).filter(Boolean)) {
+    let line = "";
+    for (const word of para.split(/\s+/)) {
+      const next = line ? `${line} ${word}` : word;
+      if (line && textWidth(next, size, font) > maxWidth) { out.push(line); line = word; } else line = next;
+    }
+    if (line) out.push(line);
+  }
+  return out;
+}

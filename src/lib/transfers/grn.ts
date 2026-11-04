@@ -2,7 +2,7 @@
  * Goods Received Note for one supplier's goods on a transfer, issued by Head
  * Office to submit to the supplier. Pure rendering; no prices.
  */
-import { brandedPdf, header, panel, kvRows, table, signatures, finish, fmtDate, qty, C, L, R, W, type Col } from "@/lib/pdf/brand";
+import { brandedPdf, header, panel, table, signatures, finish, wrapText, qty, C, L, R, W, type Col } from "@/lib/pdf/brand";
 
 export interface GrnData {
   number: string;
@@ -22,34 +22,23 @@ export interface GrnData {
 export function renderTransferGrn(g: GrnData): Uint8Array {
   const pdf = brandedPdf();
   const title = "GOODS RECEIVED NOTE";
-  const top = () => header(pdf, g.company, title, g.number, `Issued by Head Office  -  ${fmtDate(g.issued_at)}`);
+  const top = () => header(pdf, g.company, title, g.number);
   let y = top();
 
-  // Supplier (left) and document details (right)
-  const bw = W / 2 - 6, h = 112;
-  const si = panel(pdf, L, y, bw, h, "Supplier");
+  // Supplier, full width; long values wrap instead of being cut off.
   const s = g.supplier;
-  if (s) {
-    pdf.textFit(L + 9, si - 15, s.name, bw - 18, 11, "bold", C.green);
-    const rows = [
-      `Supplier code: ${s.code}`,
-      s.address ?? "",
-      [s.contact_person ? `Contact: ${s.contact_person}` : "", s.phone ? `Tel ${s.phone}` : ""].filter(Boolean).join("    "),
-      s.email ? `Email: ${s.email}` : "",
-      [s.tin ? `TIN ${s.tin}` : "", s.vat_number ? `VRN ${s.vat_number}` : ""].filter(Boolean).join("    "),
-      s.payment_terms_days != null ? `Payment terms: ${s.payment_terms_days} days` : "",
-    ].filter(Boolean);
-    rows.forEach((r, i) => pdf.textFit(L + 9, si - 29 - i * 11.5, r, bw - 18, 8.5, "regular", i === 0 ? C.muted : C.text));
-  } else {
-    pdf.textFit(L + 9, si - 15, "Supplier not recorded", bw - 18, 11, "bold", C.green);
-    pdf.textFit(L + 9, si - 29, "No posted purchase or import was found for these products.", bw - 18, 8.5, "regular", C.muted);
-  }
-  const di = panel(pdf, L + bw + 12, y, bw, h, "Receipt details");
-  kvRows(pdf, L + bw + 12, di, bw, [
-    ["GRN date", fmtDate(g.issued_at)], ["Transfer no.", g.transfer.number ?? "Draft"], ["Transfer date", fmtDate(g.transfer.date)],
-    ["Delivery note(s)", g.delivery_notes.join(", ")], ["From", `${g.from.code} - ${g.from.name}`],
-    ["Received at", `${g.to.code} - ${g.to.name}`], ["Reference", g.transfer.reference ?? "-"],
-  ]);
+  const inner = W - 18;
+  const rows: { text: string; muted?: boolean }[] = s ? [
+    { text: `Supplier code: ${s.code}`, muted: true },
+    ...wrapText(s.address ?? "", inner, 8.5).map((t) => ({ text: t })),
+    { text: [s.contact_person ? `Contact: ${s.contact_person}` : "", s.phone ? `Tel ${s.phone}` : ""].filter(Boolean).join("    ") },
+    { text: s.email ? `Email: ${s.email}` : "" },
+    { text: [s.tin ? `TIN ${s.tin}` : "", s.vat_number ? `VRN ${s.vat_number}` : ""].filter(Boolean).join("    ") },
+  ].filter((r) => r.text) : [{ text: "No posted purchase or import was found for these products.", muted: true }];
+  const h = 16 + 22 + rows.length * 11.5 + 8;
+  const si = panel(pdf, L, y, W, h, "Supplier");
+  pdf.textFit(L + 9, si - 15, s ? s.name : "Supplier not recorded", inner, 11, "bold", C.green);
+  rows.forEach((r, i) => pdf.textFit(L + 9, si - 29 - i * 11.5, r.text, inner, 8.5, "regular", r.muted ? C.muted : C.text));
   y -= h + 16;
 
   pdf.text(L, y, "GOODS", 8, "bold", C.green);
@@ -61,14 +50,9 @@ export function renderTransferGrn(g: GrnData): Uint8Array {
   const tSent = g.lines.reduce((a, l) => a + l.sent, 0), tRec = g.lines.reduce((a, l) => a + l.received, 0), tKg = g.lines.reduce((a, l) => a + (l.net_kg ?? 0), 0);
   y = table(pdf, y, cols, g.lines.map((ln, i) => [String(i + 1), ln.sku, ln.name, ln.batch ?? "", ln.unit ?? "", qty(ln.sent), qty(ln.received), ln.net_kg == null ? "-" : qty(ln.net_kg)]),
     top, ["", "", "Total", "", "", qty(tSent), qty(tRec), qty(tKg)]);
-  y -= 12;
-  if (g.transfer.status !== "received") {
-    pdf.fillRect(L, y - 18, W, 18, [255, 248, 230], { color: [230, 196, 120], width: 0.6 });
-    pdf.textFit(L + 9, y - 12, "The transfer is not fully received yet; Received shows what has been recorded so far.", W - 18, 8.5, "regular", [120, 80, 0]);
-    y -= 28;
-  }
+  y -= 16;
 
-  signatures(pdf, y - 4, ["Received by (Elements)", "Checked / approved by", "Supplier representative"], top);
-  finish(pdf, g.company, `${title}  ${g.number}`, `Goods Received Note for submission to the supplier. Quantities only; no prices. Transfer ${g.transfer.number ?? "draft"}.`);
+  signatures(pdf, y, ["Received by (Elements)", "Supplier representative"], top);
+  finish(pdf, g.company, `${title}  ${g.number}`);
   return pdf.toBytes({ title: `GRN ${g.number}` });
 }
