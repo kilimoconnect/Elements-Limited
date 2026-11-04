@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { requirePermissionPage } from "@/lib/auth/guards";
 import { getActiveContext, can } from "@/lib/context";
@@ -79,6 +80,7 @@ export default async function TransferDetailPage(props: { params: Params }) {
 
   return (
     <div className="space-y-4">
+      <Button asChild variant="outline" size="sm"><Link href="/inventory/transfers"><ArrowLeft className="h-4 w-4" /> Back to transfers</Link></Button>
       <PageHeader
         title={t.document_number ?? "Transfer (draft)"}
         description={`${t.source?.code} — ${t.source?.name} → ${t.dest?.code} — ${t.dest?.name}${isSender && isReceiver ? "" : isSender ? " · you are the sending branch" : " · you are the receiving branch"}`}

@@ -4,6 +4,7 @@ import * as React from "react";
 import { Menu, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { SidebarBrand, SidebarNav } from "./sidebar";
 import { Breadcrumbs } from "./breadcrumbs";
+import { NavigationProgress } from "./navigation-progress";
 import { BranchSelector, type BranchOption } from "./branch-selector";
 import { UserMenu } from "./user-menu";
 import { cn } from "@/lib/utils";
@@ -143,6 +144,7 @@ export function AppShell({
         </div>
 
         <main className="flex-1 px-4 pb-10 pt-4">{children}</main>
+        <React.Suspense fallback={null}><NavigationProgress /></React.Suspense>
       </div>
     </div>
   );

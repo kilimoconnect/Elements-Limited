@@ -1,4 +1,7 @@
+"use client";
+
 import * as React from "react";
+import { Loader2 } from "lucide-react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
@@ -36,14 +39,32 @@ export interface ButtonProps
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
-    const Comp = asChild ? Slot : "button";
+  ({ className, variant, size, asChild = false, onClick, disabled, children, ...props }, ref) => {
+    // Any click handler that returns a promise shows a spinner and blocks
+    // double clicks until it finishes, so every action shows it is working.
+    const [busy, setBusy] = React.useState(false);
+    const handle = React.useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+      const r = onClick?.(e) as unknown;
+      if (r && typeof (r as Promise<unknown>).then === "function") {
+        setBusy(true);
+        (r as Promise<unknown>).finally(() => setBusy(false));
+      }
+    }, [onClick]);
+    if (asChild) {
+      return <Slot ref={ref} className={cn(buttonVariants({ variant, size, className }))} onClick={onClick} {...props}>{children}</Slot>;
+    }
     return (
-      <Comp
+      <button
         ref={ref}
         className={cn(buttonVariants({ variant, size, className }))}
+        onClick={onClick ? handle : undefined}
+        disabled={disabled || busy}
+        aria-busy={busy || undefined}
         {...props}
-      />
+      >
+        {busy && <Loader2 className="animate-spin" />}
+        {children}
+      </button>
     );
   },
 );

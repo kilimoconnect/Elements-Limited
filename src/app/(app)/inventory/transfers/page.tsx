@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { DocStatusBadge } from "@/components/common/doc-status-badge";
 import { ExportCsvButton, ParamSelect } from "@/components/reports/report-tools";
+import { ClickableRow } from "@/components/common/clickable-row";
 import { Pager, PAGE_SIZE, pageOf, str } from "@/components/reports/pager";
 
 export const metadata: Metadata = { title: "Stock Transfers" };
@@ -94,10 +95,10 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
                 const lost = r.lines.reduce((a, l) => a + N(l.qty_lost_normal) + N(l.qty_lost_abnormal), 0);
                 const held = r.lines.reduce((a, l) => a + N(l.qty_quarantined) + N(l.qty_short_pending), 0);
                 const live = r.trips.filter((t) => !["voided"].includes(t.status)).sort((a, b) => a.trip_no - b.trip_no);
-                const last = [...r.events].sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0];
+                const last = [...r.events].filter((e) => e.event_type === "update").sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0];
                 const role = myBranches.includes(r.source_branch_id) && myBranches.includes(r.destination_branch_id) ? "" : myBranches.includes(r.source_branch_id) ? "sending" : "receiving";
                 return (
-                  <TableRow key={r.id}>
+                  <ClickableRow key={r.id} href={`/inventory/transfers/${r.id}`}>
                     <TableCell><Link href={`/inventory/transfers/${r.id}`} className="font-mono text-xs underline">{r.document_number ?? "draft"}</Link>
                       <p className="text-xs text-muted-foreground">{formatDate(r.transfer_date)}{role && ` · you are ${role}`}</p></TableCell>
                     <TableCell className="text-sm">{r.source?.code} → {r.dest?.code}</TableCell>
@@ -110,7 +111,7 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
                     <TableCell className="text-right tabular-nums">{formatQuantity(Math.max(disp - recv - lost - held, 0))}{held > 0 && <p className="text-xs text-warning">{formatQuantity(held)} held</p>}</TableCell>
                     <TableCell><DocStatusBadge status={r.status} />{r.has_open_discrepancy && <Badge variant="warning" className="ml-1">discrepancy</Badge>}<p className="text-xs text-muted-foreground">{docCount(r)} document(s)</p></TableCell>
                     <TableCell className="max-w-56 text-xs text-muted-foreground">{last ? <>{formatDateTime(last.created_at)} · {last.note ?? last.event_type}</> : "—"}</TableCell>
-                  </TableRow>
+                  </ClickableRow>
                 );
               })}
             </TableBody>

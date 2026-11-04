@@ -115,6 +115,11 @@
   }
 }
 
+@keyframes nav-progress {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+
 @media print {
   aside, header, .print-hide { display: none !important; }
   main { padding: 0 !important; }

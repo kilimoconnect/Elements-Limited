@@ -34,6 +34,8 @@ const LABELS: Record<string, string> = {
 };
 
 function labelFor(segment: string) {
+  // Record ids (e.g. a transfer or trip) read as "Details", not as a long code.
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(segment)) return "Details";
   return (
     LABELS[segment] ??
     segment.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
