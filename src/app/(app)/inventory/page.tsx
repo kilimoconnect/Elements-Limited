@@ -103,7 +103,7 @@ export default async function InventoryPage(props: { searchParams: SP }) {
                         {[r.product?.category?.name, r.product?.brand?.name].filter(Boolean).join(" · ") || "—"}
                       </div>
                     </TableCell>
-                    <TableCell className="text-sm">{r.branch?.code}</TableCell>
+                    <TableCell className="text-sm">{r.branch?.name ?? r.branch?.code}</TableCell>
                     <TableCell className="text-right tabular-nums">
                       {formatQuantity(r.quantity)} {r.product?.unit?.symbol ?? ""}
                     </TableCell>
