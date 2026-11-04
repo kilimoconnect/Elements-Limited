@@ -33,7 +33,7 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
 
   // Sender and receiver see the same transfer; other branches see nothing (Stage 1 D3).
   let q = admin.from("stock_transfers")
-    .select("id, document_number, transfer_date, status, reference, has_open_discrepancy, source_branch_id, destination_branch_id, source:branches!stock_transfers_source_branch_id_fkey(code), dest:branches!stock_transfers_destination_branch_id_fkey(code), lines:stock_transfer_lines(qty_requested, qty_dispatched, qty_received, qty_quarantined, qty_short_pending, qty_lost_normal, qty_lost_abnormal), trips:stock_transfer_dispatches(id, status, trip_no, document_number, driver_name, driver_phone, vehicle_registration, dispatched_at, expected_arrival_at), agents:stock_transfer_agents(name, phone, role), events:stock_transfer_events(event_type, note, created_at)")
+    .select("id, document_number, transfer_date, status, reference, has_open_discrepancy, source_branch_id, destination_branch_id, source:branches!stock_transfers_source_branch_id_fkey(code, name), dest:branches!stock_transfers_destination_branch_id_fkey(code, name), lines:stock_transfer_lines(qty_requested, qty_dispatched, qty_received, qty_quarantined, qty_short_pending, qty_lost_normal, qty_lost_abnormal), trips:stock_transfer_dispatches(id, status, trip_no, document_number, driver_name, driver_phone, vehicle_registration, dispatched_at, expected_arrival_at), agents:stock_transfer_agents(name, phone, role), events:stock_transfer_events(event_type, note, created_at)")
     .eq("company_id", ctx.companyId)
     .or(`source_branch_id.in.(${(myBranches.length ? myBranches : none).join(",")}),destination_branch_id.in.(${(myBranches.length ? myBranches : none).join(",")})`)
     .order("created_at", { ascending: false }).limit(200);
@@ -41,7 +41,7 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
   const { data: rows } = await q;
   type Row = {
     id: string; document_number: string | null; transfer_date: string; status: string; reference: string | null; has_open_discrepancy: boolean;
-    source_branch_id: string; destination_branch_id: string; source: { code: string } | null; dest: { code: string } | null;
+    source_branch_id: string; destination_branch_id: string; source: { code: string; name: string } | null; dest: { code: string; name: string } | null;
     lines: { qty_requested: number; qty_dispatched: number; qty_received: number; qty_quarantined: number; qty_short_pending: number; qty_lost_normal: number; qty_lost_abnormal: number }[];
     trips: { id: string; status: string; trip_no: number; document_number: string | null; driver_name: string | null; driver_phone: string | null; vehicle_registration: string | null; dispatched_at: string | null; expected_arrival_at: string | null }[];
     events: { event_type: string; note: string | null; created_at: string }[];
@@ -101,7 +101,7 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
                   <ClickableRow key={r.id} href={`/inventory/transfers/${r.id}`}>
                     <TableCell><Link href={`/inventory/transfers/${r.id}`} className="font-mono text-xs underline">{r.document_number ?? "draft"}</Link>
                       <p className="text-xs text-muted-foreground">{formatDate(r.transfer_date)}{role && ` · you are ${role}`}</p></TableCell>
-                    <TableCell className="text-sm">{r.source?.code} → {r.dest?.code}</TableCell>
+                    <TableCell className="min-w-[13rem] text-sm"><p className="font-medium">{r.source?.name ?? r.source?.code}</p><p className="text-muted-foreground">→ {r.dest?.name ?? r.dest?.code}</p></TableCell>
                     <TableCell className="text-xs">{live.length === 0 ? "—" : live.map((t) => (
                       <p key={t.id}>{t.document_number ?? `Trip ${t.trip_no} (draft)`} · {t.driver_name ?? "—"}{t.driver_phone ? ` ${t.driver_phone}` : ""} · {t.vehicle_registration ?? "—"}</p>
                     ))}{r.agents.map((a, i) => <p key={i} className="text-muted-foreground">Agent {a.name}{a.role && ` (${a.role})`}{a.phone && ` ${a.phone}`}</p>)}</TableCell>
