@@ -23,7 +23,7 @@ export interface GrnData {
 export function renderTransferGrn(g: GrnData): Uint8Array {
   const pdf = brandedPdf();
   const title = "GOODS RECEIVED NOTE";
-  const top = () => header(pdf, g.company, title, g.number);
+  const top = () => header(pdf, g.company, title, g.number, fmtLongDate(g.issued_at));
   let y = top();
 
   // Supplier, full width; long values wrap instead of being cut off.
@@ -59,11 +59,6 @@ export function renderTransferGrn(g: GrnData): Uint8Array {
   } else {
     y -= 4;
   }
-
-  // Document date, in the body above the goods.
-  pdf.text(L, y, "Date:", 9, "regular", C.muted);
-  pdf.text(L + 30, y, fmtLongDate(g.issued_at), 9, "bold", C.text);
-  y -= 22;
 
   pdf.text(L, y, "GOODS", 8, "bold", C.green);
   y -= 8;

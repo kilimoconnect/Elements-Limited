@@ -58,7 +58,7 @@ export function header(pdf: SimplePdf, c: Company, title: string, number: string
   const pw = textWidth(label, 10, "bold") + 18;
   pdf.fillRect(R - pw, ty - 26, pw, 18, C.tint, { color: C.leaf, width: 0.8 });
   pdf.textRight(R - 9, ty - 20.5, label, 10, "bold", C.green);
-  if (sub) pdf.textRight(R, ty - 40, sub, 8, "regular", C.muted);
+  if (sub) pdf.textRight(R, ty - 41, sub, 9, "bold", C.text);
 
   const end = Math.min(y, ty - 48) - 4;
   pdf.line(L, end, R, end, 0.8, C.line);

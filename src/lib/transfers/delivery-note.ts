@@ -25,7 +25,7 @@ export function renderDeliveryNote(s: DeliveryNoteSnapshot, v: { version: number
   const pdf = brandedPdf();
   const dn = s.delivery_note_number || s.reference;
   const title = "DELIVERY NOTE";
-  const top = () => header(pdf, s.company, title, dn);
+  const top = () => header(pdf, s.company, title, dn, fmtLongDate(s.dispatch_date));
   let y = top();
 
   y = banner(pdf, y, "GOING TO", `${s.receiver.code} - ${s.receiver.name}${s.receiver.location ? `   (warehouse ${s.receiver.location})` : ""}`);
@@ -47,7 +47,7 @@ export function renderDeliveryNote(s: DeliveryNoteSnapshot, v: { version: number
   const di = panel(pdf, L, y, bw, dh, "Document");
   kvRows(pdf, L, di, bw, [
     ["Delivery note no.", dn], ["Transfer no.", s.transfer_number ?? "Draft"], ["Trip", `${s.trip_no}  (${s.reference})`],
-    ["Date", fmtLongDate(s.dispatch_date)], ["Expected arrival", fmtDate(s.expected_arrival_at)],
+    ["Expected arrival", fmtDate(s.expected_arrival_at)],
   ]);
   const ti = panel(pdf, L + bw + 12, y, bw, dh, "Truck and driver");
   kvRows(pdf, L + bw + 12, ti, bw, [
