@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  dispatchTrip, deleteDraftTrip, voidTrip, changeTripTransport, issueDeliveryNote, addAgent, addTransferUpdate,
+  dispatchTrip, deleteDraftTrip, voidTrip, changeTripTransport, addAgent, addTransferUpdate,
   resolveDiscrepancy, addTransferCharge, accrueTransferCharge, voidTransferChargeEstimate,
 } from "@/lib/transfers/actions";
 import { Button } from "@/components/ui/button";
@@ -40,11 +40,6 @@ export function TripActions({ transferId, tripId, status, isSender, isReceiver, 
   const [form, setForm] = React.useState(transport);
   const [reason, setReason] = React.useState("");
   const [err, setErr] = React.useState<string | null>(null);
-  async function issueAndOpen() {
-    const res = await issueDeliveryNote(tripId);
-    if (!res.ok || !res.id) { toast.error(res.error ?? "Failed."); return; }
-    window.open(`/api/transfers/delivery-notes/${res.id}`, "_blank", "noopener");
-  }
   const fields: [string, string][] = [["driver_name", "Driver name"], ["driver_phone", "Driver phone"], ...(canLicence ? [["driver_licence", "Licence no."] as [string, string]] : []),
     ["vehicle_registration", "Truck reg."], ["trailer_registration", "Trailer reg."], ["transporter_name", "Transporter"], ["transporter_contact", "Transporter contact"]];
   return (
@@ -52,7 +47,7 @@ export function TripActions({ transferId, tripId, status, isSender, isReceiver, 
       {status === "draft" && isSender && <Button size="sm" onClick={() => setOpen("dispatch")} disabled={pending}>Dispatch trip</Button>}
       {status === "draft" && isSender && <Button size="sm" variant="ghost" onClick={() => setOpen("delete")}>Delete draft</Button>}
       {["dispatched", "arrived"].includes(status) && isReceiver && <Button size="sm" asChild><Link href={`/inventory/transfers/${transferId}/trips/${tripId}/receive`}>Record arrival / receive</Link></Button>}
-      {status !== "voided" && <Button size="sm" variant="outline" onClick={issueAndOpen}>Delivery note (PDF)</Button>}
+      {status !== "voided" && <Button size="sm" variant="outline" asChild><a href={`/api/transfers/trips/${tripId}/delivery-note`}>Delivery note (PDF)</a></Button>}
       {["dispatched", "arrived"].includes(status) && (isSender || isReceiver) && <Button size="sm" variant="outline" onClick={() => { setForm(transport); setReason(""); setErr(null); setOpen("change"); }}>Change driver / vehicle</Button>}
       {status === "dispatched" && canVoid && <Button size="sm" variant="ghost" onClick={() => setOpen("void")}>Void trip</Button>}
 
