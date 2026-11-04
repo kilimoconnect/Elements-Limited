@@ -183,9 +183,9 @@ async function main() {
     const pdf = renderDeliveryNote(snap.snapshot, { version: dn.version_no, sha256: snap.content_sha256, issuedAt: snap.created_at });
     if (process.env.LETIQ_SCENARIO_PDF) writeFileSync(process.env.LETIQ_SCENARIO_PDF, pdf);
     const pdfText = Buffer.from(pdf).toString("latin1");
-    check("5c. delivery note v1: reference, 400 bags / 20,000 kg, driver, agent, signature spaces; no licence number or cost",
+    check("5c. delivery note v1: reference, 400 bags / 20,000 kg, driver with licence number, agent, signature spaces; no cost",
       dn.version_no === 1 && pdfText.includes(snap.snapshot.reference) && pdfText.includes("20,000") && pdfText.includes("Juma Ali") && pdfText.includes("Asha K")
-      && !pdfText.includes("DL-5566") && !pdfText.includes("46470") && !JSON.stringify(snap.snapshot).includes("DL-5566"));
+      && pdfText.includes("DL-5566") && !pdfText.includes("46470"));
     const srcTransport = await one(db, "insert into cost_sources(company_id, owner_type, stock_transfer_id, cost_category_id, estimated_amount, description) values ($1,'stock_transfer',$2,$3,800000,'Transport') returning id", [co, tr, await cat("TRANSPORT")]);
     await db.query("select accrue_transfer_cost($1,800000,$2,$3,$4)", [srcTransport, d("06-10"), accountant, key()]);
     check("5d. 400 bags in transit: 18,588,000 + 800,000 accrued transport = 19,388,000 in 1155", (await gl("1155")) === 19388000);

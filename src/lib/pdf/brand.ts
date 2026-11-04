@@ -79,7 +79,12 @@ export function kvRows(pdf: SimplePdf, x: number, y: number, w: number, rows: [s
   rows.forEach(([k, v], i) => {
     const yy = y - 12 - i * step;
     pdf.text(x + 9, yy, k, 8, "regular", C.muted);
-    pdf.textRight(x + w - 9, yy, v || "-", 8.5, "bold", C.text);
+    // Long values (e.g. STR-26-00000001-T1) get a smaller size before anything is cut.
+    const room = w - 18 - textWidth(k, 8) - 10;
+    let size = 8.5;
+    while (size > 6.5 && textWidth(v || "-", size, "bold") > room) size -= 0.5;
+    if (textWidth(v || "-", size, "bold") > room) pdf.textFit(x + w - 9 - room, yy, v || "-", room, size, "bold", C.text);
+    else pdf.textRight(x + w - 9, yy, v || "-", size, "bold", C.text);
   });
 }
 
@@ -158,8 +163,13 @@ export function finish(pdf: SimplePdf, c: Company, docLabel: string, note?: stri
     if (note && page === total) pdf.textFit(L, BOTTOM - 8, note, W, 7.5, "regular", C.muted);
     pdf.line(L, BOTTOM - 18, R, BOTTOM - 18, 0.8, C.leaf);
     const addr = addressLines(c).map((s) => s.replace(/[.,]+$/, "")).join(", ");
-    pdf.textFit(L, BOTTOM - 30, `${c.legal_name || c.name}${addr ? `  -  ${addr}` : ""}`, W - 140, 6.5, "regular", C.muted);
-    pdf.textFit(L, BOTTOM - 40, [c.phone?.trim() ? `Tel ${c.phone.trim()}` : "", c.email?.trim() ?? "", "www.elements.co.tz"].filter(Boolean).join("   |   "), W - 140, 6.5, "regular", C.muted);
+    // Leave room on the right for the document label, however long its number is.
+    const room = W - Math.max(textWidth(docLabel, 7, "bold"), 90) - 16;
+    const line1 = `${c.legal_name || c.name}${addr ? `  -  ${addr}` : ""}`;
+    let fs1 = 6.5;
+    while (fs1 > 5.5 && textWidth(line1, fs1) > room) fs1 -= 0.25;
+    pdf.textFit(L, BOTTOM - 30, line1, room, fs1, "regular", C.muted);
+    pdf.textFit(L, BOTTOM - 40, [c.phone?.trim() ? `Tel ${c.phone.trim()}` : "", c.email?.trim() ?? "", "www.elements.co.tz"].filter(Boolean).join("   |   "), room, 6.5, "regular", C.muted);
     pdf.textRight(R, BOTTOM - 30, docLabel, 7, "bold", C.green);
     pdf.textRight(R, BOTTOM - 40, `Page ${page} of ${total}`, 7, "regular", C.muted);
     pdf.fillRect(0, 0, A4.width, 6, C.green);

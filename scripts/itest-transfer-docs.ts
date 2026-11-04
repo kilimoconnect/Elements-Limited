@@ -64,7 +64,7 @@ async function main() {
     const v1 = (await db.query<{ version_id: string; version_no: number; is_new: boolean }>("select * from issue_delivery_note($1,$2)", [t1, owner])).rows[0];
     const dn1 = await one(db, "select delivery_note_number from stock_transfer_dispatches where id=$1", [t1]);
     const YY = String(new Date().getFullYear()).slice(2);
-    check("the first delivery note gets an auto number (DN-YY-NNNNNN)", new RegExp(`^DN-${YY}-\\d{6}$`).test(dn1 ?? ""), String(dn1));
+    check("the first delivery note gets an auto number (DN-YY-NNNNNNNN)", new RegExp(`^DN-${YY}-\\d{8}$`).test(dn1 ?? ""), String(dn1));
     check("the delivery note shows its number, destination, truck and driver",
       await one(db, "select snapshot->>'delivery_note_number' from document_versions where id=$1", [v1.version_id]) === dn1
       && await one(db, "select snapshot->'receiver'->>'name' from document_versions where id=$1", [v1.version_id]) === "Dodoma"
@@ -82,7 +82,7 @@ async function main() {
     const t2 = await trip(2);
     await db.query("select * from issue_delivery_note($1,$2)", [t2, owner]);
     const dn2 = await one(db, "select delivery_note_number from stock_transfer_dispatches where id=$1", [t2]);
-    check("a second trip gets the next number", !!dn2 && dn2 !== dn1 && Number(dn2.slice(-6)) === Number(dn1.slice(-6)) + 1, `${dn1} ${dn2}`);
+    check("a second trip gets the next number", !!dn2 && dn2 !== dn1 && Number(dn2.slice(-8)) === Number(dn1.slice(-8)) + 1, `${dn1} ${dn2}`);
 
     // ------------------------------------------------------------ suppliers per line and GRN numbers
     const map = new Map((await db.query<{ transfer_line_id: string; supplier_id: string | null }>("select * from transfer_line_suppliers($1)", [t])).rows.map((r) => [r.transfer_line_id, r.supplier_id]));
@@ -93,8 +93,8 @@ async function main() {
     const g1 = await one(db, "select issue_transfer_grn($1,$2,$3)", [t, s1, owner]);
     const g2 = await one(db, "select issue_transfer_grn($1,$2,$3)", [t, s2, owner]);
     const g0 = await one(db, "select issue_transfer_grn($1,null,$2)", [t, owner]);
-    const grnRe = new RegExp(`^GRN-${YY}-\\d{6}$`);
-    check("each supplier gets its own GRN number (GRN-YY-NNNNNN)", grnRe.test(g1) && grnRe.test(g2) && new Set([g1, g2, g0]).size === 3, `${g1} ${g2} ${g0}`);
+    const grnRe = new RegExp(`^GRN-${YY}-\\d{8}$`);
+    check("each supplier gets its own GRN number (GRN-YY-NNNNNNNN)", grnRe.test(g1) && grnRe.test(g2) && new Set([g1, g2, g0]).size === 3, `${g1} ${g2} ${g0}`);
     check("downloading again keeps the same GRN number",
       await one(db, "select issue_transfer_grn($1,$2,$3)", [t, s1, owner]) === g1
       && await one(db, "select issue_transfer_grn($1,null,$2)", [t, owner]) === g0);
@@ -107,13 +107,13 @@ async function main() {
 
     // ------------------------------------------------------------ numbering in general
     const nx = (type: string) => one(db, "select next_document_number($1,$2,$3)", [co, hq, type]);
-    check("every sequence uses six digits and restarts yearly",
-      Number(await one(db, "select count(*) from document_sequences where company_id=$1 and (number_length <> 6 or reset_frequency <> 'yearly')", [co])) === 0);
-    check("transfers number as STR-YY-NNNNNN", new RegExp(`^STR-${YY}-\\d{6}$`).test(await nx("stock_transfer")));
+    check("every sequence uses eight digits and restarts yearly",
+      Number(await one(db, "select count(*) from document_sequences where company_id=$1 and (number_length <> 8 or reset_frequency <> 'yearly')", [co])) === 0);
+    check("transfers number as STR-YY-NNNNNNNN", new RegExp(`^STR-${YY}-\\d{8}$`).test(await nx("stock_transfer")));
     check("import receipts use IGR, not GRN", (await nx("import_receipt")).startsWith(`IGR-${YY}-`));
     await db.query("update document_sequences set period_key='00', current_number=41 where company_id=$1 and document_type='sales_invoice'", [co]);
-    check("a new year starts the count again at 000001", await nx("sales_invoice") === `INV-${YY}-000001`);
-    check("within the year the count continues", await nx("sales_invoice") === `INV-${YY}-000002`);
+    check("a new year starts the count again at 00000001", await nx("sales_invoice") === `INV-${YY}-00000001`);
+    check("within the year the count continues", await nx("sales_invoice") === `INV-${YY}-00000002`);
 
     // ------------------------------------------------------------ access
     check("the new functions are service-role only",

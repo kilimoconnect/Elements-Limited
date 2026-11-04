@@ -249,12 +249,12 @@ async function main() {
       snapRow.snapshot.reference.endsWith("-T1") && snapRow.snapshot.sender.code === "HQ" && snapRow.snapshot.receiver.code === "MWZ6"
       && snapRow.snapshot.driver.name === "Juma Ali" && snapRow.snapshot.vehicle.registration === "T 123 ABC" && snapRow.snapshot.agents.length === 2
       && snapRow.snapshot.lines[0].qty === 1000 && Number(snapRow.snapshot.lines[0].net_kg) === 50000 && snapRow.snapshot.lines[0].batch === "LOT-A", snapText);
-    check("delivery note shows no licence number and no costs", !snapText.includes("DL-778899") && !snapText.includes("46500") && !snapText.includes("48500"));
+    check("delivery note shows the driver's licence number and no costs", snapText.includes("DL-778899") && !snapText.includes("46500") && !snapText.includes("48500"));
     const pdf = Buffer.from(renderDeliveryNote(snapRow.snapshot, { version: 1, sha256: snapRow.content_sha256, issuedAt: snapRow.created_at })).toString("latin1");
     check("PDF is a valid PDF with the reference, company, quantities and signature spaces",
       pdf.startsWith("%PDF-1.4") && pdf.trimEnd().endsWith("%%EOF") && pdf.includes(snapRow.snapshot.reference) && pdf.includes("DELIVERY NOTE")
       && pdf.includes("1,000") && pdf.includes("50,000") && pdf.includes("RECEIVED BY \\(RECEIVER\\)") && pdf.includes("Signature")
-      && !pdf.includes("DL-778899"), pdf.slice(0, 200));
+      && pdf.includes("DL-778899"), pdf.slice(0, 200));
     check("PDF output is deterministic", Buffer.from(renderDeliveryNote(snapRow.snapshot, { version: 1, sha256: snapRow.content_sha256, issuedAt: snapRow.created_at })).toString("latin1") === pdf);
     const tD = await trip(t3, 2, [[l3, 20]]);
     const dD1 = (await db.query<{ version_no: number }>("select * from issue_delivery_note($1,$2)", [tD, sender])).rows[0];

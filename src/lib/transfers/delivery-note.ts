@@ -13,7 +13,7 @@ export interface DeliveryNoteSnapshot {
   transfer_date: string; dispatch_date: string; dispatched_at: string | null; expected_arrival_at: string | null;
   sender: { code: string; name: string; address: string | null; phone: string | null; location: string | null };
   receiver: { code: string; name: string; address: string | null; phone: string | null; location: string | null };
-  driver: { name: string | null; phone: string | null };
+  driver: { name: string | null; phone: string | null; licence?: string | null };
   vehicle: { registration: string | null; trailer: string | null };
   transporter: { name: string | null; contact: string | null };
   agents: { name: string; company: string | null; phone: string | null; role: string | null }[];
@@ -43,7 +43,7 @@ export function renderDeliveryNote(s: DeliveryNoteSnapshot, v: { version: number
   y -= h + 12;
 
   // Document details / transport
-  const dh = 86;
+  const dh = 99;
   const di = panel(pdf, L, y, bw, dh, "Document");
   kvRows(pdf, L, di, bw, [
     ["Delivery note no.", dn], ["Transfer no.", s.transfer_number ?? "Draft"], ["Trip", `${s.trip_no}  (${s.reference})`],
@@ -52,7 +52,7 @@ export function renderDeliveryNote(s: DeliveryNoteSnapshot, v: { version: number
   const ti = panel(pdf, L + bw + 12, y, bw, dh, "Truck and driver");
   kvRows(pdf, L + bw + 12, ti, bw, [
     ["Truck", s.vehicle.registration ?? "-"], ["Trailer", s.vehicle.trailer ?? "-"], ["Driver", s.driver.name ?? "-"],
-    ["Driver phone", s.driver.phone ?? "-"], ["Transporter", [s.transporter.name, s.transporter.contact].filter(Boolean).join("  ") || "-"],
+    ["Driver phone", s.driver.phone ?? "-"], ["Licence no.", s.driver.licence ?? "-"], ["Transporter", [s.transporter.name, s.transporter.contact].filter(Boolean).join("  ") || "-"],
   ]);
   y -= dh + 10;
   for (const a of s.agents) {
