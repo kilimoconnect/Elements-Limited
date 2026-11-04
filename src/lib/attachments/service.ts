@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { assertActiveUser } from "@/lib/auth/guards";
 import { writeAuditLog } from "@/lib/audit";
 import {
-  ATTACHMENT_BUCKET, CATEGORIES, OWNER_TYPES, SIGNED_URL_TTL_SECONDS, categoryPermission,
+  ALLOWED_CONTENT_TYPES, ATTACHMENT_BUCKET, CATEGORIES, MAX_ATTACHMENT_BYTES, OWNER_TYPES, SIGNED_URL_TTL_SECONDS, categoryPermission, extensionFor,
   safeDownloadName, storagePath, validateAttachment,
   type AttachmentCategory, type OwnerType,
 } from "./policy";
@@ -81,6 +81,70 @@ export async function uploadAttachment(input: {
     await admin.storage.from(ATTACHMENT_BUCKET).remove([path]);
     return { ok: false, error: error.message.replace(/^ERROR:\s*/i, "") };
   }
+  await writeAuditLog({
+    userId: user.id, companyId, action: "attachment.upload", resourceType: input.ownerType,
+    resourceId: input.ownerId, newValues: { attachment_id: data, category: input.category, sha256 },
+  });
+  return { ok: true, data: { id: data as string } };
+}
+
+/**
+ * Step 1 of a direct upload: checks the user may attach this file here and
+ * returns a one-time signed link to put the file straight into storage (so
+ * large files never pass through the app server, which caps request size).
+ */
+export async function prepareUpload(input: {
+  ownerType: OwnerType; ownerId: string; category: AttachmentCategory; contentType: string; size: number;
+}): Promise<Result<{ path: string; token: string }>> {
+  const user = await assertActiveUser();
+  if (!OWNER_TYPES.includes(input.ownerType) || !CATEGORIES.includes(input.category)) return { ok: false, error: "Invalid attachment target." };
+  if (!(await canAccessOwner(user.id, input.ownerType, input.ownerId))) return { ok: false, error: "You cannot attach files to this document." };
+  const need = categoryPermission(input.category);
+  if (need && !(user.isOwner || user.permissions.has(need))) return { ok: false, error: "You cannot attach this kind of document." };
+  if (!(user.isOwner || user.permissions.has("documents.upload"))) return { ok: false, error: "You are not allowed to upload documents." };
+  const ext = extensionFor(input.contentType);
+  if (!ext) return { ok: false, error: "Only PDF, JPEG, PNG or WebP files can be attached." };
+  if (!Number.isInteger(input.size) || input.size <= 0) return { ok: false, error: "The file is empty." };
+  if (input.size > MAX_ATTACHMENT_BYTES) return { ok: false, error: "Files can be at most 20 MB." };
+  const companyId = await ownerCompany(input.ownerType, input.ownerId);
+  if (!companyId) return { ok: false, error: "Document not found." };
+  const path = storagePath(companyId, input.ownerType, input.ownerId, randomUUID(), ext);
+  const { data, error } = await createAdminClient().storage.from(ATTACHMENT_BUCKET).createSignedUploadUrl(path);
+  if (error || !data) return { ok: false, error: "Could not start the upload." };
+  return { ok: true, data: { path, token: data.token } };
+}
+
+/**
+ * Step 2 of a direct upload: reads the stored file back, checks its real type,
+ * size and hash, and registers it. Anything that fails is removed from storage.
+ */
+export async function completeUpload(input: {
+  ownerType: OwnerType; ownerId: string; category: AttachmentCategory; path: string; originalName: string; supersedesId?: string | null;
+}): Promise<Result<{ id: string }>> {
+  const user = await assertActiveUser();
+  const admin = createAdminClient();
+  const drop = () => admin.storage.from(ATTACHMENT_BUCKET).remove([input.path]);
+  if (!OWNER_TYPES.includes(input.ownerType) || !CATEGORIES.includes(input.category)) return { ok: false, error: "Invalid attachment target." };
+  if (!(await canAccessOwner(user.id, input.ownerType, input.ownerId))) return { ok: false, error: "You cannot attach files to this document." };
+  const companyId = await ownerCompany(input.ownerType, input.ownerId);
+  if (!companyId || !input.path.startsWith(`${companyId}/${input.ownerType}/${input.ownerId}/`) || input.path.includes("..")) {
+    return { ok: false, error: "Upload does not match the document." };
+  }
+  const { data: blob, error: dlErr } = await admin.storage.from(ATTACHMENT_BUCKET).download(input.path);
+  if (dlErr || !blob) return { ok: false, error: "The upload did not arrive. Please try again." };
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const ext = input.path.split(".").pop() ?? "";
+  const declared = ALLOWED_CONTENT_TYPES.find((t) => extensionFor(t) === ext) ?? "";
+  const v = validateAttachment(declared, bytes.byteLength, bytes.subarray(0, 16));
+  if (!v.ok) { await drop(); return { ok: false, error: v.error }; }
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const { data, error } = await admin.rpc("register_attachment", {
+    p_user: user.id, p_owner_type: input.ownerType, p_owner_id: input.ownerId, p_category: input.category,
+    p_storage_path: input.path, p_original_filename: input.originalName || "document",
+    p_download_name: safeDownloadName(input.originalName, v.ext), p_content_type: v.contentType,
+    p_size: bytes.byteLength, p_sha256: sha256, p_supersedes: input.supersedesId ?? null,
+  });
+  if (error) { await drop(); return { ok: false, error: error.message.replace(/^ERROR:s*/i, "") }; }
   await writeAuditLog({
     userId: user.id, companyId, action: "attachment.upload", resourceType: input.ownerType,
     resourceId: input.ownerId, newValues: { attachment_id: data, category: input.category, sha256 },

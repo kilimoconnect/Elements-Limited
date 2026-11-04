@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Gift, Plus, Trash2 } from "lucide-react";
 import { saveSaleDraft, submitSaleForApproval, approveSale, type SaleDraftInput } from "@/lib/sales/actions";
-import { uploadAttachmentAction } from "@/lib/attachments/actions";
+import { uploadAttachmentFile } from "@/lib/attachments/client-upload";
 import { calcLine, calcTotals, round2 } from "@/lib/sales/calc";
 import { earnedFreeGoods, type PromotionRule } from "@/lib/sales/promotions";
 import { formatMoney, todayISO } from "@/lib/format";
@@ -151,8 +151,7 @@ export function SaleForm({
     if (post && blockers.length) { setError(blockers[0]); return; }
     if (post && outstanding > 0 && !dueDate) { setError("A due date is required when there is an outstanding balance."); return; }
     if (post && paid > 0 && !proof && !initial?.hasProof) { setError("Attach proof of payment for the amount paid."); return; }
-    // Uploads travel through the server, which accepts about 4.5 MB per request.
-    if (proof && proof.size > 4 * 1024 * 1024) { setError("The proof of payment file is larger than 4 MB. Use a smaller photo or PDF."); return; }
+    if (proof && proof.size > 20 * 1024 * 1024) { setError("The proof of payment file is larger than 20 MB."); return; }
 
     const input: SaleDraftInput = {
       saleId: initial?.saleId,
@@ -172,9 +171,7 @@ export function SaleForm({
     if (!res.ok || !res.id) { setError(res.error ?? "Failed."); setPending(false); return; }
     const saleId = res.id;
     if (proof) {
-      const fd = new FormData();
-      fd.set("ownerType", "sale"); fd.set("ownerId", saleId); fd.set("category", "proof_of_payment"); fd.set("file", proof);
-      const up = await uploadAttachmentAction(fd);
+      const up = await uploadAttachmentFile({ ownerType: "sale", ownerId: saleId, category: "proof_of_payment", file: proof });
       if (!up.ok) {
         toast.error(`Order saved, but the proof of payment did not upload: ${up.error}`);
         router.push(`/sales/${saleId}`);
@@ -328,7 +325,7 @@ export function SaleForm({
                 onChange={(e) => setProof(e.target.files?.[0] ?? null)} />
               <p className="text-xs text-muted-foreground">
                 {initial?.hasProof ? "Proof already attached; choose a file only to add another. " : ""}
-                Required when the customer has paid. PDF or photo (JPEG, PNG, WebP), up to 4 MB.
+                Required when the customer has paid. PDF or photo (JPEG, PNG, WebP), up to 20 MB.
               </p>
             </div>
             <div className="space-y-2">

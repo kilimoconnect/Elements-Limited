@@ -3,7 +3,7 @@
 import { getActiveContext } from "@/lib/context";
 import { isFeatureEnabled } from "@/lib/features";
 import { CATEGORIES, OWNER_TYPES, type AttachmentCategory, type OwnerType } from "./policy";
-import { attachmentDownloadUrl, listAttachments, uploadAttachment } from "./service";
+import { attachmentDownloadUrl, completeUpload, listAttachments, prepareUpload, uploadAttachment } from "./service";
 
 async function enabled(): Promise<boolean> {
   const ctx = await getActiveContext();
@@ -32,4 +32,14 @@ export async function listAttachmentsAction(ownerType: OwnerType, ownerId: strin
 export async function attachmentDownloadAction(attachmentId: string) {
   if (!(await enabled())) return { ok: false as const, error: "Attachments are not enabled." };
   return attachmentDownloadUrl(attachmentId);
+}
+
+export async function prepareUploadAction(input: { ownerType: OwnerType; ownerId: string; category: AttachmentCategory; contentType: string; size: number }) {
+  if (!(await enabled())) return { ok: false as const, error: "Attachments are not enabled." };
+  return prepareUpload(input);
+}
+
+export async function completeUploadAction(input: { ownerType: OwnerType; ownerId: string; category: AttachmentCategory; path: string; originalName: string; supersedesId?: string | null }) {
+  if (!(await enabled())) return { ok: false as const, error: "Attachments are not enabled." };
+  return completeUpload(input);
 }

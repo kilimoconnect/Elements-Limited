@@ -353,7 +353,7 @@ async function main() {
     check("attachments cannot be deleted", await fails(db, "delete from document_attachments where id=$1", [att1], "cannot be changed"));
     check("executable / HTML types rejected", await fails(db, "select register_attachment($1,'import_shipment',$2,'other',$3,'x.html','x.html','text/html',10,$4)",
       [director, ship, path("import_shipment", ship), sha]));
-    check("files over 10 MB rejected", await fails(db, "select register_attachment($1,'import_shipment',$2,'other',$3,'x.pdf','x.pdf','application/pdf',10485761,$4)",
+    check("files over 20 MB rejected", await fails(db, "select register_attachment($1,'import_shipment',$2,'other',$3,'x.pdf','x.pdf','application/pdf',20971521,$4)",
       [director, ship, path("import_shipment", ship), sha]));
     check("unsafe download name rejected", await fails(db, "select register_attachment($1,'import_shipment',$2,'other',$3,'x.pdf','../../etc/passwd','application/pdf',10,$4)",
       [director, ship, path("import_shipment", ship), sha]));

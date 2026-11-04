@@ -25,8 +25,8 @@ check("HTML disguised as PDF rejected", !validateAttachment("application/pdf", 1
 check("PNG disguised as PDF rejected", !validateAttachment("application/pdf", 100, PNG).ok);
 check("Windows executable rejected", !validateAttachment("application/octet-stream", 100, bytes(0x4d, 0x5a)).ok);
 check("empty file rejected", !validateAttachment("application/pdf", 0, PDF).ok);
-check("10 MB accepted", validateAttachment("application/pdf", MAX_ATTACHMENT_BYTES, PDF).ok);
-check("10 MB + 1 byte rejected", !validateAttachment("application/pdf", MAX_ATTACHMENT_BYTES + 1, PDF).ok);
+check("20 MB accepted", validateAttachment("application/pdf", MAX_ATTACHMENT_BYTES, PDF).ok);
+check("20 MB + 1 byte rejected", !validateAttachment("application/pdf", MAX_ATTACHMENT_BYTES + 1, PDF).ok);
 
 const dbPattern = /^[A-Za-z0-9._ -]{1,120}$/;
 const names: [string, string][] = [

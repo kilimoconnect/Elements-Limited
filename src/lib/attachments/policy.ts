@@ -5,7 +5,7 @@
  */
 
 export const ATTACHMENT_BUCKET = "documents";
-export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024; // 10 MB
+export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024; // 20 MB
 /** Signed download links expire quickly; a new one is issued per click. */
 export const SIGNED_URL_TTL_SECONDS = 60;
 
@@ -58,6 +58,8 @@ const TYPES: Record<string, { ext: string; magic: (b: Uint8Array) => boolean }> 
   },
 };
 export const ALLOWED_CONTENT_TYPES = Object.keys(TYPES);
+/** File extension for an allowed type, or null when the type is not allowed. */
+export function extensionFor(contentType: string): string | null { return TYPES[contentType]?.ext ?? null; }
 
 function startsWith(b: Uint8Array, sig: number[]): boolean {
   return b.length >= sig.length && sig.every((v, i) => b[i] === v);
@@ -71,7 +73,7 @@ export type ValidationResult = { ok: true; contentType: string; ext: string } | 
  */
 export function validateAttachment(declaredType: string, size: number, head: Uint8Array): ValidationResult {
   if (!Number.isInteger(size) || size <= 0) return { ok: false, error: "The file is empty." };
-  if (size > MAX_ATTACHMENT_BYTES) return { ok: false, error: "Files can be at most 10 MB." };
+  if (size > MAX_ATTACHMENT_BYTES) return { ok: false, error: "Files can be at most 20 MB." };
   const t = TYPES[declaredType];
   if (!t) return { ok: false, error: "Only PDF, JPEG, PNG or WebP files can be attached." };
   if (!t.magic(head)) return { ok: false, error: "The file content does not match its type." };
