@@ -25,7 +25,7 @@ export function renderDeliveryNote(s: DeliveryNoteSnapshot, v: { version: number
   const pdf = brandedPdf();
   const dn = s.delivery_note_number || s.reference;
   const title = "DELIVERY NOTE";
-  const top = () => header(pdf, s.company, title, dn, `Version ${v.version}  -  issued ${fmtDate(v.issuedAt)}`);
+  const top = () => header(pdf, s.company, title, dn);
   let y = top();
 
   y = banner(pdf, y, "GOING TO", `${s.receiver.code} - ${s.receiver.name}${s.receiver.location ? `   (warehouse ${s.receiver.location})` : ""}`);
@@ -76,7 +76,6 @@ export function renderDeliveryNote(s: DeliveryNoteSnapshot, v: { version: number
   if (s.notes) { pdf.textFit(L, y, `Notes: ${s.notes}`, W, 8.5, "regular", C.text); y -= 14; }
 
   signatures(pdf, y - 4, ["Dispatched by (sender)", "Driver", "Received by (receiver)"], top);
-  finish(pdf, s.company, `${title}  ${dn}  v${v.version}`,
-    `Quantities are as dispatched; no prices are shown. Trip ${s.reference} - content ${v.sha256.slice(0, 12)}.`);
+  finish(pdf, s.company, `${title}  ${dn}`);
   return pdf.toBytes({ title: `Delivery note ${dn} v${v.version}` });
 }
