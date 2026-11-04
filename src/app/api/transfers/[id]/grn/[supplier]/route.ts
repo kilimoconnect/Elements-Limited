@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { writeAuditLog } from "@/lib/audit";
 import { isHeadOfficeUser, transferGrnGroups } from "@/lib/transfers/grn-data";
 import { renderTransferGrn, type GrnData } from "@/lib/transfers/grn";
+import { canUseLicenceNumber } from "@/lib/transfers/licence";
 
 const UUID = /^[0-9a-f-]{36}$/i;
 
@@ -42,7 +43,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string; su
       : Promise.resolve({ data: null }),
     admin.from("stock_transfer_lines").select("id, qty_requested, qty_dispatched, qty_received, kg_per_unit, batch_reference, product:products(sku, name, unit:units(code))")
       .in("id", group.lineIds).order("line_no"),
-    admin.from("stock_transfer_dispatches").select("delivery_note_number, status").eq("transfer_id", id).order("trip_no"),
+    admin.from("stock_transfer_dispatches").select("trip_no, delivery_note_number, status, vehicle_registration, trailer_registration, driver_name, driver_phone, driver_licence").eq("transfer_id", id).order("trip_no"),
   ]);
 
   type Line = { qty_requested: number; qty_dispatched: number; qty_received: number; kg_per_unit: number | null; batch_reference: string | null;
@@ -56,6 +57,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string; su
     from: src, to: dst,
     delivery_notes: ((trips ?? []) as { delivery_note_number: string | null; status: string }[])
       .filter((x) => x.status !== "voided" && x.delivery_note_number).map((x) => x.delivery_note_number!),
+    // Truck and driver of every trip (no transporter); the licence number only for users allowed to see it.
+    trucks: ((trips ?? []) as { trip_no: number; status: string; vehicle_registration: string | null; trailer_registration: string | null;
+      driver_name: string | null; driver_phone: string | null; driver_licence: string | null }[])
+      .filter((x) => x.status !== "voided")
+      .map((x) => ({ trip_no: x.trip_no, truck: x.vehicle_registration, trailer: x.trailer_registration, driver: x.driver_name,
+        phone: x.driver_phone, licence: canUseLicenceNumber(user) ? x.driver_licence : null })),
     lines: ((lines ?? []) as unknown as Line[]).map((l) => {
       const sent = Number(l.qty_dispatched) || Number(l.qty_requested);
       return {

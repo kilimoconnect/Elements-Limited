@@ -2,7 +2,7 @@
  * Goods Received Note for one supplier's goods on a transfer, issued by Head
  * Office to submit to the supplier. Pure rendering; no prices.
  */
-import { brandedPdf, header, panel, table, signatures, finish, wrapText, qty, C, L, R, W, type Col } from "@/lib/pdf/brand";
+import { brandedPdf, header, panel, kvRows, table, signatures, finish, wrapText, qty, C, L, R, W, type Col } from "@/lib/pdf/brand";
 
 export interface GrnData {
   number: string;
@@ -16,6 +16,7 @@ export interface GrnData {
   from: { code: string; name: string };
   to: { code: string; name: string; address: string | null };
   delivery_notes: string[];
+  trucks?: { trip_no: number; truck: string | null; trailer: string | null; driver: string | null; phone: string | null; licence: string | null }[];
   lines: { sku: string; name: string; unit: string | null; batch: string | null; sent: number; received: number; net_kg: number | null }[];
 }
 
@@ -39,7 +40,25 @@ export function renderTransferGrn(g: GrnData): Uint8Array {
   const si = panel(pdf, L, y, W, h, "Supplier");
   pdf.textFit(L + 9, si - 15, s ? s.name : "Supplier not recorded", inner, 11, "bold", C.green);
   rows.forEach((r, i) => pdf.textFit(L + 9, si - 29 - i * 11.5, r.text, inner, 8.5, "regular", r.muted ? C.muted : C.text));
-  y -= h + 16;
+  y -= h + 12;
+
+  // Truck and driver, one block per trip (no transporter).
+  const trucks = g.trucks ?? [];
+  if (trucks.length) {
+    const bw = W / 2 - 6, rowH = 13, multi = trucks.length > 1;
+    const th = 16 + 8 + trucks.length * (3 * rowH + (multi ? 14 : 0)) + 4;
+    const ti = panel(pdf, L, y, W, th, multi ? "Trucks and drivers" : "Truck and driver");
+    let ty = ti;
+    for (const t of trucks) {
+      if (multi) { pdf.text(L + 9, ty - 12, `Trip ${t.trip_no}`, 8, "bold", C.green); ty -= 14; }
+      kvRows(pdf, L, ty, bw, [["Truck", t.truck ?? "-"], ["Trailer", t.trailer ?? "-"]]);
+      kvRows(pdf, L + bw + 12, ty, bw, [["Driver", t.driver ?? "-"], ["Driver phone", t.phone ?? "-"], ["Licence no.", t.licence ?? "-"]]);
+      ty -= 3 * rowH;
+    }
+    y -= th + 16;
+  } else {
+    y -= 4;
+  }
 
   pdf.text(L, y, "GOODS", 8, "bold", C.green);
   y -= 8;
