@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { requirePermissionPage } from "@/lib/auth/guards";
-import { getActiveContext, can } from "@/lib/context";
+import { getActiveContext } from "@/lib/context";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
+import { canUseLicenceNumber } from "@/lib/transfers/licence";
 import { TripForm } from "./trip-form";
 
 export const metadata: Metadata = { title: "New Dispatch Trip" };
@@ -33,7 +34,7 @@ export default async function NewTripPage(props: { params: Params }) {
       <PageHeader title={`New trip · ${t.document_number ?? "transfer"}`} description="One truck: its cargo, driver and vehicle. Several trips can carry one transfer." />
       {!t.posts_in_transit || t.status === "voided" ? <EmptyState title="This transfer cannot take new trips" /> :
         open.length === 0 ? <EmptyState title="Everything requested is already on a trip" /> : (
-          <TripForm transferId={id} lines={open} canLicence={can(ctx.user, "documents.view_licence")}
+          <TripForm transferId={id} lines={open} canLicence={canUseLicenceNumber(ctx.user)}
             defaults={{ driverName: t.driver_name ?? "", driverPhone: t.driver_phone ?? "", vehicle: t.vehicle_registration ?? "", trailer: t.trailer_registration ?? "", expected: t.expected_date ?? "" }} />
         )}
     </div>

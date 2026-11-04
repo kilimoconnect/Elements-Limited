@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isFeatureEnabled } from "@/lib/features";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
+import { canUseLicenceNumber } from "@/lib/transfers/licence";
 import { NewTransferForm } from "./new-transfer-form";
 
 export const metadata: Metadata = { title: "New Transfer" };
@@ -42,7 +43,7 @@ export default async function NewTransferPage() {
           allBranches={companyBranches ?? []}
           sourceBranchId={ctx.branchId}
           canDispatch={can(ctx.user, "inventory.transfer_dispatch")}
-          canLicence={can(ctx.user, "documents.view_licence")}
+          canLicence={canUseLicenceNumber(ctx.user)}
           chargesEnabled={logistics}
           categories={(categories ?? []).map((c) => ({ id: c.id, code: c.code, label: c.name }))}
         />

@@ -16,6 +16,7 @@ import { AttachmentsPanel } from "@/components/common/attachments-panel";
 import type { AttachmentCategory } from "@/lib/attachments/policy";
 import { TransferActions, type TLine } from "./transfer-actions";
 import { isHeadOfficeUser, transferGrnGroups } from "@/lib/transfers/grn-data";
+import { canUseLicenceNumber } from "@/lib/transfers/licence";
 import { TripActions, ResolveButton, AddAgentForm, AddUpdateForm, ChargeForm, ChargeRowActions } from "./transfer-file";
 
 export const metadata: Metadata = { title: "Transfer" };
@@ -36,7 +37,9 @@ export default async function TransferDetailPage(props: { params: Params }) {
   if (!isSender && !isReceiver) notFound(); // unrelated branches see nothing
 
   const showCost = can(ctx.user, "inventory.view_cost");
-  const canLicence = can(ctx.user, "documents.view_licence");
+  // Licence numbers: dispatchers and licence viewers; licence photos: licence viewers only.
+  const canLicence = canUseLicenceNumber(ctx.user);
+  const canLicencePhoto = can(ctx.user, "documents.view_licence");
   const canResolve = can(ctx.user, "inventory.transfer_resolve") && isReceiver;
   const canReceive = can(ctx.user, "inventory.transfer_receive") && isReceiver;
   const canDispatch = can(ctx.user, "inventory.transfer_dispatch") && isSender;
@@ -75,7 +78,7 @@ export default async function TransferDetailPage(props: { params: Params }) {
   const tripOpts = tripsList.filter((x) => x.status !== "voided").map((x) => ({ id: x.id, label: x.document_number ?? `Trip ${x.trip_no} (draft)` }));
   const legacy = !t.posts_in_transit;
   const tripCats: AttachmentCategory[] = ["cargo_papers", "loading_photo", "weighbridge_ticket", "signed_delivery_note", "offloading_photo", "other",
-    ...(canLicence ? ["driver_licence" as const] : []), ...(can(ctx.user, "documents.view_financial") ? ["transport_invoice" as const] : [])];
+    ...(canLicencePhoto ? ["driver_licence" as const] : []), ...(can(ctx.user, "documents.view_financial") ? ["transport_invoice" as const] : [])];
 
   return (
     <div className="space-y-4">

@@ -10,6 +10,7 @@ import { callPostingRpc, type RpcResult } from "@/lib/rpc";
 import { round2 } from "@/lib/sales/calc";
 import { todayISO } from "@/lib/format";
 import { createTransferDraft } from "@/lib/inventory/actions";
+import { canUseLicenceNumber } from "@/lib/transfers/licence";
 
 /*
  * Transfer trips, receipts, discrepancies, charges and the shared dispatch file.
@@ -203,7 +204,7 @@ export async function createTransferWithTrip(input: NewTransferInput): Promise<R
     const trip = await createTrip({
       transferId, dispatchDate: input.transferDate, expectedArrivalAt: input.expectedArrivalAt || null,
       driverName: tp.driverName, driverPhone: tp.driverPhone,
-      driverLicence: user.isOwner || user.permissions.has("documents.view_licence") ? tp.driverLicence : undefined,
+      driverLicence: canUseLicenceNumber(user) ? tp.driverLicence : undefined,
       vehicleRegistration: tp.vehicleRegistration, trailerRegistration: tp.trailerRegistration,
       transporterName: tp.transporterName, transporterContact: tp.transporterContact, notes: input.notes, requestId: input.requestId,
       lines: (tl ?? []).map((l) => ({ transfer_line_id: l.id, qty: Number(l.qty_requested) })),
@@ -312,8 +313,8 @@ export async function changeTripTransport(tripId: string, changes: Record<string
     const { t } = await loadTrip(admin, tripId, ctx.companyId, user);
     const clean = Object.fromEntries(Object.entries(changes).filter(([, v]) => v !== undefined));
     if (Object.keys(clean).length === 0) return { ok: false, error: "Nothing changed." };
-    if ("driver_licence" in clean && !(user.isOwner || user.permissions.has("documents.view_licence"))) {
-      return { ok: false, error: "Only users allowed to see licences can change the licence number." };
+    if ("driver_licence" in clean && !canUseLicenceNumber(user)) {
+      return { ok: false, error: "Only users who dispatch transfers can change the licence number." };
     }
     const res = await callPostingRpc("change_transfer_trip_transport", { p_dispatch: tripId, p_user: user.id, p_changes: clean, p_reason: reason });
     if (!res.ok) return res;
