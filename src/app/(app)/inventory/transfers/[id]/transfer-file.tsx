@@ -162,13 +162,13 @@ export function ChargeForm({ transferId, trips, categories }: {
   const [c, setC] = React.useState({ category: categories[0]?.id ?? "", trip: "__all__", description: "", amount: "", basis: "" });
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Select value={c.category} onValueChange={(v) => setC({ ...c, category: v })}><SelectTrigger className="h-8 w-56"><SelectValue placeholder="Category" /></SelectTrigger>
+      <Select value={c.category} onValueChange={(v) => setC({ ...c, category: v })}><SelectTrigger className="h-8 w-full sm:w-56"><SelectValue placeholder="Category" /></SelectTrigger>
         <SelectContent>{categories.map((x) => <SelectItem key={x.id} value={x.id}>{x.label}{x.capitalise ? "" : " (expensed)"}</SelectItem>)}</SelectContent></Select>
-      <Select value={c.trip} onValueChange={(v) => setC({ ...c, trip: v })}><SelectTrigger className="h-8 w-40"><SelectValue /></SelectTrigger>
+      <Select value={c.trip} onValueChange={(v) => setC({ ...c, trip: v })}><SelectTrigger className="h-8 w-full sm:w-40"><SelectValue /></SelectTrigger>
         <SelectContent><SelectItem value="__all__">Whole transfer</SelectItem>{trips.map((t) => <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>)}</SelectContent></Select>
-      <Input className="h-8 w-44" placeholder="Description" value={c.description} onChange={(e) => setC({ ...c, description: e.target.value })} />
-      <Input className="h-8 w-32 text-right" type="number" min="0" step="0.01" placeholder="TZS estimate" value={c.amount} onChange={(e) => setC({ ...c, amount: e.target.value })} />
-      <Select value={c.basis || "__default__"} onValueChange={(v) => setC({ ...c, basis: v === "__default__" ? "" : v })}><SelectTrigger className="h-8 w-40"><SelectValue /></SelectTrigger>
+      <Input className="h-8 w-full sm:w-44" placeholder="Description" value={c.description} onChange={(e) => setC({ ...c, description: e.target.value })} />
+      <Input className="h-8 w-full text-right sm:w-32" type="number" min="0" step="0.01" placeholder="TZS estimate" value={c.amount} onChange={(e) => setC({ ...c, amount: e.target.value })} />
+      <Select value={c.basis || "__default__"} onValueChange={(v) => setC({ ...c, basis: v === "__default__" ? "" : v })}><SelectTrigger className="h-8 w-full sm:w-40"><SelectValue /></SelectTrigger>
         <SelectContent><SelectItem value="__default__">By net kg (default)</SelectItem><SelectItem value="value">By value</SelectItem><SelectItem value="quantity">By units</SelectItem></SelectContent></Select>
       <Button size="sm" variant="outline" disabled={pending || !c.category} onClick={async () => {
         const e = await run(() => addTransferCharge({ transferId, tripId: c.trip === "__all__" ? null : c.trip, categoryId: c.category, description: c.description, amount: Number(c.amount || 0), basis: c.basis || null }), "Charge added (estimate).");

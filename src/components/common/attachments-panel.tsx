@@ -81,10 +81,10 @@ export function AttachmentsPanel({ ownerType, ownerId, categories }: { ownerType
       {rows === null ? <p className="text-muted-foreground">Loading…</p> : rows.length === 0 ? <p className="text-muted-foreground">No attachments.</p> : (
         <ul className="space-y-1">
           {rows.map((r) => (
-            <li key={r.id} className={`flex items-center justify-between gap-2 ${superseded.has(r.id) ? "opacity-60" : ""}`}>
-              <span>{LABEL[r.category] ?? r.category} · {r.download_name} · v{r.version}{superseded.has(r.id) ? " (superseded)" : ""}
+            <li key={r.id} className={`flex flex-col gap-2 border-b border-border pb-2 last:border-0 sm:flex-row sm:items-center sm:justify-between ${superseded.has(r.id) ? "opacity-60" : ""}`}>
+              <span className="min-w-0 break-words">{LABEL[r.category] ?? r.category} · {r.download_name} · v{r.version}{superseded.has(r.id) ? " (superseded)" : ""}
                 <span className="text-xs text-muted-foreground"> · {formatDateTime(r.uploaded_at)} · {(r.size_bytes / 1024).toFixed(0)} KB</span></span>
-              <span className="flex shrink-0 gap-1">
+              <span className="flex shrink-0 flex-wrap gap-1">
                 <Button size="sm" variant="outline" onClick={() => openPreview(r.id)} aria-label={`Preview ${r.download_name}`}><Eye className="h-4 w-4" /> Preview</Button>
                 <Button size="sm" variant="outline" onClick={() => download(r.id)} aria-label={`Download ${r.download_name}`}><Download className="h-4 w-4" /> Download</Button>
                 {canDelete && (
@@ -99,10 +99,10 @@ export function AttachmentsPanel({ ownerType, ownerId, categories }: { ownerType
       )}
       <div className="flex flex-wrap items-center gap-2">
         <Select value={category} onValueChange={(v) => setCategory(v as AttachmentCategory)}>
-          <SelectTrigger className="h-9 w-48"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-9 w-full sm:w-48"><SelectValue /></SelectTrigger>
           <SelectContent>{categories.map((c) => <SelectItem key={c} value={c}>{LABEL[c]}</SelectItem>)}</SelectContent>
         </Select>
-        <Input ref={inputRef} className="h-9 max-w-xs" type="file" multiple accept="application/pdf,image/jpeg,image/png,image/webp"
+        <Input ref={inputRef} className="h-9 w-full sm:max-w-xs" type="file" multiple accept="application/pdf,image/jpeg,image/png,image/webp"
           onChange={(e) => setFiles(Array.from(e.target.files ?? []))} />
         <Button size="sm" disabled={files.length === 0 || pending} onClick={upload}>
           <Upload className="h-4 w-4" /> {pending ? "Uploading..." : files.length > 1 ? `Upload ${files.length} files` : "Upload"}

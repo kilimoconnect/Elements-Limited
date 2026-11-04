@@ -94,7 +94,7 @@ export default async function TransferDetailPage(props: { params: Params }) {
         }
       />
 
-      <Card><CardContent className="flex flex-wrap gap-x-8 gap-y-3 p-5 text-sm">
+      <Card><CardContent className="grid grid-cols-2 gap-x-6 gap-y-3 p-4 text-sm sm:flex sm:flex-wrap sm:gap-x-8 sm:p-5">
         <div><p className="text-xs uppercase text-muted-foreground">Status</p><DocStatusBadge status={t.status} />{t.has_open_discrepancy && <Badge variant="warning" className="ml-1">open discrepancy</Badge>}</div>
         <div><p className="text-xs uppercase text-muted-foreground">Costing</p><p>{t.cost_status}</p></div>
         <div><p className="text-xs uppercase text-muted-foreground">Date</p><p>{formatDate(t.transfer_date)}</p></div>
@@ -104,7 +104,30 @@ export default async function TransferDetailPage(props: { params: Params }) {
         {t.void_reason && <div><p className="text-xs uppercase text-muted-foreground">Void reason</p><p>{t.void_reason}</p></div>}
       </CardContent></Card>
 
-      <Card className="overflow-x-auto">
+      <div className="space-y-2 md:hidden">
+        {ls.map((r) => {
+          const lost = N(r.qty_lost_normal) + N(r.qty_lost_abnormal);
+          const out = N(r.qty_dispatched) - N(r.qty_received) - N(r.qty_quarantined) - N(r.qty_short_pending) - lost;
+          return (
+            <Card key={r.id}><CardContent className="space-y-2 p-4 text-sm">
+              <p className="font-medium leading-snug">{r.product?.name}</p>
+              <p className="font-mono text-xs text-muted-foreground">{r.product?.sku}{r.batch_reference && ` · Batch ${r.batch_reference}`}</p>
+              <Stats rows={[
+                ["Requested", formatQuantity(N(r.qty_requested))], ["Dispatched", formatQuantity(N(r.qty_dispatched))],
+                ["Accepted", formatQuantity(N(r.qty_received))], ["Outstanding", formatQuantity(legacy ? N(r.qty_dispatched) - N(r.qty_received) : Math.max(out, 0)), true],
+                ...(N(r.qty_quarantined) ? [["Quarantined", formatQuantity(N(r.qty_quarantined))] as Stat] : []),
+                ...(N(r.qty_short_pending) ? [["Short (open)", formatQuantity(N(r.qty_short_pending))] as Stat] : []),
+                ...(lost ? [["Lost", formatQuantity(lost)] as Stat] : []),
+                ["Net kg dispatched", r.kg_per_unit ? formatQuantity(N(r.qty_dispatched) * N(r.kg_per_unit)) : "—"],
+                ...(showCost ? [["In transit", formatMoney(legacy ? (N(r.qty_dispatched) - N(r.qty_received)) * N(r.unit_cost) : N(r.transit_value))] as Stat,
+                  ["Received value", formatMoney(N(r.received_value))] as Stat, ["Charges", formatMoney(N(r.charges_applied))] as Stat] : []),
+              ]} />
+            </CardContent></Card>
+          );
+        })}
+      </div>
+
+      <Card className="hidden overflow-x-auto md:block">
         <Table>
           <TableHeader><TableRow>
             <TableHead>Product / batch</TableHead><TableHead className="text-right">Requested</TableHead><TableHead className="text-right">Dispatched</TableHead>
@@ -147,7 +170,7 @@ export default async function TransferDetailPage(props: { params: Params }) {
           </div>
           <div className="flex flex-wrap gap-2">
             {grnGroups.map((g) => (
-              <Button key={g.key} asChild variant="outline" size="sm">
+              <Button key={g.key} asChild variant="outline" size="sm" className="h-auto min-h-8 whitespace-normal py-1.5 text-left">
                 <a href={`/api/transfers/${id}/grn/${g.supplierId ?? "none"}`}>
                   GRN{g.number ? ` ${g.number}` : ""} — {g.supplierName} ({g.lineIds.length} {g.lineIds.length === 1 ? "product" : "products"})
                 </a>
@@ -160,7 +183,7 @@ export default async function TransferDetailPage(props: { params: Params }) {
       {tripsList.map((trip) => {
         const tripReceipts = rcs.filter((r) => r.dispatch_id === trip.id);
         return (
-          <Card key={trip.id}><CardContent className="space-y-3 p-5 text-sm">
+          <Card key={trip.id}><CardContent className="space-y-3 p-4 text-sm sm:p-5">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
                 <h3 className="font-semibold">{trip.document_number ?? `Trip ${trip.trip_no} (draft)`} <Badge variant={trip.status === "received" ? "success" : trip.status === "voided" ? "secondary" : "warning"}>{trip.status}</Badge></h3>
@@ -176,6 +199,22 @@ export default async function TransferDetailPage(props: { params: Params }) {
               <div><p className="text-xs text-muted-foreground">Truck / trailer</p><p>{trip.vehicle_registration ?? "—"} / {trip.trailer_registration ?? "—"}</p></div>
               <div><p className="text-xs text-muted-foreground">Transporter</p><p>{trip.transporter_name ?? "—"}{trip.transporter_contact && <> · {trip.transporter_contact}</>}</p></div>
             </div>
+            <div className="space-y-2 md:hidden">
+              {trip.lines.map((x) => (
+                <div key={x.id} className="rounded-md border border-border p-3">
+                  <p className="mb-2 font-medium leading-snug">{lname(x.transfer_line_id)}</p>
+                  <Stats rows={[
+                    ["Loaded", formatQuantity(N(x.qty))], ["Net kg", x.net_kg == null ? "—" : formatQuantity(N(x.net_kg))],
+                    ["Arrived", formatQuantity(N(x.qty_reported))], ["Accepted", formatQuantity(N(x.qty_accepted))],
+                    ...(N(x.qty_quarantined) ? [["Quarantined", formatQuantity(N(x.qty_quarantined))] as Stat] : []),
+                    ...(N(x.qty_short) ? [["Short", formatQuantity(N(x.qty_short))] as Stat] : []),
+                    ["To arrive", formatQuantity(N(x.qty) - N(x.qty_reported)), true],
+                    ...(showCost ? [["Value in transit", formatMoney(N(x.transit_value))] as Stat] : []),
+                  ]} />
+                </div>
+              ))}
+            </div>
+            <div className="hidden overflow-x-auto md:block">
             <Table>
               <TableHeader><TableRow><TableHead>Cargo</TableHead><TableHead className="text-right">Loaded</TableHead><TableHead className="text-right">Net kg</TableHead>
                 <TableHead className="text-right">Arrived</TableHead><TableHead className="text-right">Accepted</TableHead><TableHead className="text-right">Quarantined</TableHead><TableHead className="text-right">Short</TableHead>
@@ -196,6 +235,7 @@ export default async function TransferDetailPage(props: { params: Params }) {
                 ))}
               </TableBody>
             </Table>
+            </div>
             {tripReceipts.map((r) => (
               <div key={r.id} className="rounded-md border border-border p-3">
                 <p className="text-xs font-medium">{r.document_number} · arrived {r.arrived_at ? formatDateTime(r.arrived_at) : "—"} · recorded {formatDateTime(r.received_at)}{r.signed_by_name && ` · signed by ${r.signed_by_name}`}</p>
@@ -230,7 +270,7 @@ export default async function TransferDetailPage(props: { params: Params }) {
 
 
       {showCost && logistics && !legacy && (
-        <Card><CardContent className="space-y-2 p-5 text-sm">
+        <Card><CardContent className="space-y-2 p-4 text-sm sm:p-5">
           <h3 className="font-semibold">Transfer charges (TZS)</h3>
           <p className="text-xs text-muted-foreground">Loading, transport, offloading and other charges. Estimates post nothing; accruals and supplier invoices (Importation → Cost Invoices) are added to the cargo by net kg unless set otherwise, and follow the goods after receipt.</p>
           {((charges ?? []) as unknown as { id: string; description: string | null; status: string; estimated_amount: number; accrued_amount: number; actual_amount: number; allocation_basis: string | null;
@@ -247,5 +287,20 @@ export default async function TransferDetailPage(props: { params: Params }) {
       )}
 
     </div>
+  );
+}
+
+type Stat = [label: string, value: string, strong?: boolean];
+/** Label / value pairs for the phone layout (two columns). */
+function Stats({ rows }: { rows: Stat[] }) {
+  return (
+    <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+      {rows.map(([k, v, strong]) => (
+        <div key={k} className="flex flex-col">
+          <dt className="text-xs text-muted-foreground">{k}</dt>
+          <dd className={`tabular-nums ${strong ? "font-semibold" : ""}`}>{v}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
