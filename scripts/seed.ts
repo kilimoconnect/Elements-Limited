@@ -224,7 +224,7 @@ async function main() {
       await db.query(
         `insert into document_sequences
            (company_id, document_type, prefix, current_number, number_length, reset_frequency)
-         values ($1,$2,$3,0,5,'yearly')`,
+         values ($1,$2,$3,0,6,'yearly')`,
         [companyId, d.type, d.prefix],
       );
     }

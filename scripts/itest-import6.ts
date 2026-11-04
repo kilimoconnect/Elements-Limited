@@ -253,7 +253,7 @@ async function main() {
     const pdf = Buffer.from(renderDeliveryNote(snapRow.snapshot, { version: 1, sha256: snapRow.content_sha256, issuedAt: snapRow.created_at })).toString("latin1");
     check("PDF is a valid PDF with the reference, company, quantities and signature spaces",
       pdf.startsWith("%PDF-1.4") && pdf.trimEnd().endsWith("%%EOF") && pdf.includes(snapRow.snapshot.reference) && pdf.includes("DELIVERY NOTE")
-      && pdf.includes("1,000") && pdf.includes("50,000") && pdf.includes("Received by \\(receiver\\)") && pdf.includes("Signature")
+      && pdf.includes("1,000") && pdf.includes("50,000") && pdf.includes("RECEIVED BY \\(RECEIVER\\)") && pdf.includes("Signature")
       && !pdf.includes("DL-778899"), pdf.slice(0, 200));
     check("PDF output is deterministic", Buffer.from(renderDeliveryNote(snapRow.snapshot, { version: 1, sha256: snapRow.content_sha256, issuedAt: snapRow.created_at })).toString("latin1") === pdf);
     const tD = await trip(t3, 2, [[l3, 20]]);
