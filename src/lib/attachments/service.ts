@@ -152,6 +152,24 @@ export async function completeUpload(input: {
   return { ok: true, data: { id: data as string } };
 }
 
+/** Owner only: permanently deletes an attachment (record and stored file); the audit log keeps the details. */
+export async function deleteAttachment(attachmentId: string, reason: string): Promise<Result<{ id: string }>> {
+  const user = await assertActiveUser();
+  if (!user.isOwner) return { ok: false, error: "Only the Owner can delete attachments." };
+  if (!reason?.trim()) return { ok: false, error: "A reason is required." };
+  const admin = createAdminClient();
+  const { data: row } = await admin.from("document_attachments").select("owner_type, owner_id, company_id, category, download_name").eq("id", attachmentId).maybeSingle();
+  if (!row) return { ok: false, error: "Not found." };
+  const { data: path, error } = await admin.rpc("delete_attachment", { p_user: user.id, p_attachment: attachmentId, p_reason: reason.trim() });
+  if (error) return { ok: false, error: error.message.replace(/^ERROR:s*/i, "") };
+  if (path) await admin.storage.from(ATTACHMENT_BUCKET).remove([path as string]);
+  await writeAuditLog({
+    userId: user.id, companyId: row.company_id, action: "attachment.delete", resourceType: row.owner_type, resourceId: row.owner_id,
+    oldValues: { attachment_id: attachmentId, category: row.category, file: row.download_name }, reason: reason.trim(),
+  });
+  return { ok: true, data: { id: attachmentId } };
+}
+
 /** Lists the attachments of a record the user can see (financial ones only with permission). */
 export async function listAttachments(ownerType: OwnerType, ownerId: string): Promise<Result<AttachmentRow[]>> {
   const user = await assertActiveUser();

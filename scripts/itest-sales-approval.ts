@@ -96,6 +96,21 @@ async function main() {
       await fails(db, "select register_attachment($1,'sale',$2,'selfie',$3,'p3.pdf','p3.pdf','application/pdf',1000,$4)",
         [cashier, sale, `${co}/sale/${sale}/p3.pdf`, "c".repeat(64)]));
 
+    // ------------------------------------------------------------ deleting attachments (Owner only, permanent)
+    const extra = await one(db, "select register_attachment($1,'sale',$2,'other',$3,'x.pdf','x.pdf','application/pdf',1000,$4)",
+      [cashier, sale, `${co}/sale/${sale}/x.pdf`, "d".repeat(64)]);
+    check("attachment records cannot be edited", await fails(db, "update document_attachments set category='photo' where id=$1", [extra]));
+    check("attachment records cannot be deleted directly", await fails(db, "delete from document_attachments where id=$1", [extra]));
+    check("a non-owner cannot delete an attachment", await fails(db, "select delete_attachment($1,$2,'test')", [cashier, extra]));
+    check("deleting needs a reason", await fails(db, "select delete_attachment($1,$2,' ')", [owner, extra]));
+    const gone = await one(db, "select delete_attachment($1,$2,'uploaded by mistake')", [owner, extra]);
+    check("the Owner deletes it for good and gets the file path to remove",
+      gone === `${co}/sale/${sale}/x.pdf` && Number(await one(db, "select count(*) from document_attachments where id=$1", [extra])) === 0);
+    const v1 = await one(db, "select register_attachment($1,'sale',$2,'other',$3,'y.pdf','y.pdf','application/pdf',1000,$4)", [cashier, sale, `${co}/sale/${sale}/y1.pdf`, "e".repeat(64)]);
+    const v2 = await one(db, "select register_attachment($1,'sale',$2,'other',$3,'y.pdf','y.pdf','application/pdf',1000,$4,$5)", [cashier, sale, `${co}/sale/${sale}/y2.pdf`, "f".repeat(64), v1]);
+    check("an older version cannot be deleted while a newer one exists", await fails(db, "select delete_attachment($1,$2,'x')", [owner, v1]));
+    check("the newest version can be deleted, then the older one", !(await fails(db, "select delete_attachment($1,$2,'x')", [owner, v2])) && !(await fails(db, "select delete_attachment($1,$2,'x')", [owner, v1])));
+
     // ------------------------------------------------------------ approve -> post
     await db.query("update sales set approval_status='pending', submitted_by=$2, submitted_at=now() where id=$1", [sale, cashier]);
     const res = await one<{ ok?: boolean } | string>(db, "select post_sale($1,$2,gen_random_uuid()::text)", [sale, owner]);

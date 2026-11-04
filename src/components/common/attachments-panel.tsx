@@ -2,8 +2,9 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { Download, Upload } from "lucide-react";
-import { listAttachmentsAction, attachmentDownloadAction } from "@/lib/attachments/actions";
+import { Download, Trash2, Upload } from "lucide-react";
+import { listAttachmentsAction, attachmentDownloadAction, deleteAttachmentAction } from "@/lib/attachments/actions";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { uploadAttachmentFile } from "@/lib/attachments/client-upload";
 import { CATEGORY_LABEL, type AttachmentCategory, type OwnerType } from "@/lib/attachments/policy";
 import { formatDateTime } from "@/lib/format";
@@ -23,19 +24,21 @@ export function AttachmentsPanel({ ownerType, ownerId, categories }: { ownerType
   const [rows, setRows] = React.useState<Row[] | null>(null);
   const [category, setCategory] = React.useState<AttachmentCategory>(categories[0]);
   const [files, setFiles] = React.useState<File[]>([]);
+  const [canDelete, setCanDelete] = React.useState(false);
+  const [toDelete, setToDelete] = React.useState<Row | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   const load = React.useCallback(async () => {
     const res = await listAttachmentsAction(ownerType, ownerId);
-    if (res.ok) setRows(res.data as Row[]); else { setRows([]); setError(res.error); }
+    if (res.ok) { setRows(res.data as Row[]); setCanDelete(res.canDelete); } else { setRows([]); setError(res.error); }
   }, [ownerType, ownerId]);
   React.useEffect(() => {
     let live = true;
     listAttachmentsAction(ownerType, ownerId).then((res) => {
       if (!live) return;
-      if (res.ok) setRows(res.data as Row[]); else { setRows([]); setError(res.error); }
+      if (res.ok) { setRows(res.data as Row[]); setCanDelete(res.canDelete); } else { setRows([]); setError(res.error); }
     });
     return () => { live = false; };
   }, [ownerType, ownerId]);
@@ -75,7 +78,14 @@ export function AttachmentsPanel({ ownerType, ownerId, categories }: { ownerType
             <li key={r.id} className={`flex items-center justify-between gap-2 ${superseded.has(r.id) ? "opacity-60" : ""}`}>
               <span>{LABEL[r.category] ?? r.category} · {r.download_name} · v{r.version}{superseded.has(r.id) ? " (superseded)" : ""}
                 <span className="text-xs text-muted-foreground"> · {formatDateTime(r.uploaded_at)} · {(r.size_bytes / 1024).toFixed(0)} KB</span></span>
-              <Button size="sm" variant="outline" className="shrink-0" onClick={() => download(r.id)} aria-label={`Download ${r.download_name}`}><Download className="h-4 w-4" /> Download</Button>
+              <span className="flex shrink-0 gap-1">
+                <Button size="sm" variant="outline" onClick={() => download(r.id)} aria-label={`Download ${r.download_name}`}><Download className="h-4 w-4" /> Download</Button>
+                {canDelete && (
+                  <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => setToDelete(r)} aria-label={`Delete ${r.download_name}`}>
+                    <Trash2 className="h-4 w-4" /> Delete
+                  </Button>
+                )}
+              </span>
             </li>
           ))}
         </ul>
@@ -93,6 +103,21 @@ export function AttachmentsPanel({ ownerType, ownerId, categories }: { ownerType
       </div>
       <p className="text-xs text-muted-foreground">PDF, JPEG, PNG or WebP, up to 20 MB each. You can select several files at once; they are added side by side. A single document uploaded again in the same category becomes a new version; earlier versions stay available.</p>
       {error && <p className="text-destructive">{error}</p>}
+
+      <ConfirmDialog
+        open={toDelete !== null} onOpenChange={(o) => !o && setToDelete(null)}
+        title="Delete this attachment?"
+        description={toDelete ? `${LABEL[toDelete.category] ?? toDelete.category} · ${toDelete.download_name} will be permanently deleted, together with the stored file. This cannot be undone; the audit log keeps who deleted it and why.` : ""}
+        confirmLabel="Delete" destructive requireReason
+        onConfirm={async (reason) => {
+          if (!toDelete) return;
+          const res = await deleteAttachmentAction(toDelete.id, reason);
+          if (!res.ok) return res.error;
+          toast.success("Attachment deleted.");
+          setToDelete(null);
+          void load();
+        }}
+      />
     </div>
   );
 }
