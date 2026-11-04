@@ -45,11 +45,12 @@ export function renderTransferGrn(g: GrnData): Uint8Array {
   y -= 8;
   const cols: Col[] = [
     { h: "#", x: L + 8, w: 16 }, { h: "SKU", x: L + 28, w: 70 }, { h: "Description", x: L + 102, w: 168 }, { h: "Batch", x: L + 274, w: 56 },
-    { h: "Unit", x: L + 334, w: 36 }, { h: "Sent", x: R - 128, w: 50, right: true }, { h: "Received", x: R - 66, w: 55, right: true }, { h: "Net kg", x: R - 8, w: 55, right: true },
+    { h: "Unit", x: L + 334, w: 36 }, { h: "Qty received", x: R - 78, w: 70, right: true }, { h: "Net kg", x: R - 8, w: 55, right: true },
   ];
-  const tSent = g.lines.reduce((a, l) => a + l.sent, 0), tRec = g.lines.reduce((a, l) => a + l.received, 0), tKg = g.lines.reduce((a, l) => a + (l.net_kg ?? 0), 0);
-  y = table(pdf, y, cols, g.lines.map((ln, i) => [String(i + 1), ln.sku, ln.name, ln.batch ?? "", ln.unit ?? "", qty(ln.sent), qty(ln.received), ln.net_kg == null ? "-" : qty(ln.net_kg)]),
-    top, ["", "", "Total", "", "", qty(tSent), qty(tRec), qty(tKg)]);
+  // The goods on the transfer are treated as received from the supplier (one quantity, no "sent" column).
+  const tQty = g.lines.reduce((a, l) => a + l.sent, 0), tKg = g.lines.reduce((a, l) => a + (l.net_kg ?? 0), 0);
+  y = table(pdf, y, cols, g.lines.map((ln, i) => [String(i + 1), ln.sku, ln.name, ln.batch ?? "", ln.unit ?? "", qty(ln.sent), ln.net_kg == null ? "-" : qty(ln.net_kg)]),
+    top, ["", "", "Total", "", "", qty(tQty), qty(tKg)]);
   y -= 16;
 
   signatures(pdf, y, ["Received by (Elements)", "Supplier representative"], top);
