@@ -17,7 +17,7 @@ import type { AttachmentCategory } from "@/lib/attachments/policy";
 import { TransferActions, type TLine } from "./transfer-actions";
 import { isHeadOfficeUser, transferGrnGroups } from "@/lib/transfers/grn-data";
 import { canUseLicenceNumber } from "@/lib/transfers/licence";
-import { TripActions, ResolveButton, AddAgentForm, AddUpdateForm, ChargeForm, ChargeRowActions } from "./transfer-file";
+import { TripActions, ResolveButton, ChargeForm, ChargeRowActions } from "./transfer-file";
 
 export const metadata: Metadata = { title: "Transfer" };
 type Params = Promise<{ id: string }>;
@@ -48,12 +48,10 @@ export default async function TransferDetailPage(props: { params: Params }) {
   const headOffice = await isHeadOfficeUser(ctx.user, ctx.companyId);
   const grnGroups = headOffice && t.status !== "voided" ? await transferGrnGroups(id) : [];
 
-  const [{ data: lines }, { data: trips }, { data: receipts }, { data: agents }, { data: events }, { data: charges }, { data: categories }] = await Promise.all([
+  const [{ data: lines }, { data: trips }, { data: receipts }, { data: charges }, { data: categories }] = await Promise.all([
     admin.from("stock_transfer_lines").select("id, line_no, qty_requested, qty_dispatched, qty_received, qty_quarantined, qty_short_pending, qty_lost_normal, qty_lost_abnormal, unit_cost, transit_value, received_value, lost_value, charges_applied, batch_reference, kg_per_unit, product:products(sku,name)").eq("transfer_id", id).order("line_no"),
     admin.from("stock_transfer_dispatches").select("*, lines:stock_transfer_dispatch_lines(id, transfer_line_id, qty, net_kg, value, transit_value, qty_reported, qty_accepted, qty_quarantined, qty_short, qty_lost_normal, qty_lost_abnormal), changes:stock_transfer_dispatch_changes(old_values, new_values, reason, changed_at)").eq("transfer_id", id).order("trip_no"),
     admin.from("stock_transfer_receipts").select("id, document_number, dispatch_id, arrived_at, received_at, signed_by_name, notes, lines:stock_transfer_receipt_lines(id, transfer_line_id, qty_received, qty_damaged, qty_short, qty_released, qty_resolved_damaged, qty_resolved_short, value, resolutions:stock_transfer_resolutions(kind, resolution, qty, value, created_at))").eq("transfer_id", id).order("received_at"),
-    admin.from("stock_transfer_agents").select("id, name, company_name, phone, role").eq("transfer_id", id).order("created_at"),
-    admin.from("stock_transfer_events").select("id, event_type, note, created_at, dispatch_id").eq("transfer_id", id).eq("event_type", "update").order("created_at", { ascending: false }).limit(100),
     showCost ? admin.from("cost_sources").select("id, description, status, estimated_amount, accrued_amount, actual_amount, allocation_basis, inventory_treatment, transfer_dispatch_id, category:cost_categories(name)").eq("stock_transfer_id", id).neq("status", "voided").order("created_at") : Promise.resolve({ data: [] }),
     admin.from("cost_categories").select("id, code, name, inventory_treatment").eq("company_id", ctx.companyId).eq("is_active", true).eq("applies_to_transfer", true).order("code"),
   ]);
@@ -228,26 +226,6 @@ export default async function TransferDetailPage(props: { params: Params }) {
         );
       })}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card><CardContent className="space-y-2 p-5 text-sm">
-          <h3 className="font-semibold">Agents</h3>
-          {((agents ?? []) as { id: string; name: string; company_name: string | null; phone: string | null; role: string | null }[]).map((a) => (
-            <p key={a.id}>{a.name}{a.role && <span className="text-muted-foreground"> ({a.role})</span>}{a.company_name && `, ${a.company_name}`}{a.phone && <> · <a className="underline" href={`tel:${a.phone}`}>{a.phone}</a></>}</p>
-          ))}
-          {(agents ?? []).length === 0 && <p className="text-muted-foreground">None.</p>}
-          {logistics && t.status !== "voided" && <AddAgentForm transferId={id} />}
-        </CardContent></Card>
-        <Card><CardContent className="space-y-2 p-5 text-sm">
-          <h3 className="font-semibold">Updates</h3>
-          {logistics && t.status !== "voided" && <AddUpdateForm transferId={id} trips={tripOpts.filter((x) => !x.label.includes("draft"))} />}
-          <div className="max-h-72 space-y-1 overflow-y-auto">
-            {((events ?? []) as { id: string; event_type: string; note: string | null; created_at: string }[]).map((e) => (
-              <p key={e.id} className="text-xs"><span className="text-muted-foreground">{formatDateTime(e.created_at)}</span> · {e.note ?? e.event_type.replace(/_/g, " ")}</p>
-            ))}
-            {(events ?? []).length === 0 && <p className="text-xs text-muted-foreground">No updates yet.</p>}
-          </div>
-        </CardContent></Card>
-      </div>
 
       {showCost && logistics && !legacy && (
         <Card><CardContent className="space-y-2 p-5 text-sm">
