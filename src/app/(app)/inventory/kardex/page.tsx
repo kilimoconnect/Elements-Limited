@@ -48,7 +48,7 @@ export default async function KardexPage(props: { searchParams: SP }) {
   }
 
   let query = admin.from("stock_movements")
-    .select("id, created_at, movement_type, source_type, source_id, source_number, qty_in, qty_out, unit_cost, movement_value, balance_qty, avg_cost_after, balance_value, branch:branches(code), product:products(sku, name)", { count: "exact" })
+    .select("id, created_at, movement_type, source_type, source_id, source_number, qty_in, qty_out, unit_cost, movement_value, balance_qty, avg_cost_after, balance_value, branch:branches(code, name), product:products(sku, name)", { count: "exact" })
     .eq("company_id", ctx.companyId)
     .order("created_at", { ascending: false })
     .range(from, to);
@@ -62,7 +62,7 @@ export default async function KardexPage(props: { searchParams: SP }) {
     id: string; created_at: string; movement_type: string; source_type: string; source_id: string | null;
     source_number: string | null; qty_in: number; qty_out: number; unit_cost: number; movement_value: number;
     balance_qty: number; avg_cost_after: number; balance_value: number;
-    branch: { code: string } | null; product: { sku: string; name: string } | null;
+    branch: { code: string; name: string } | null; product: { sku: string; name: string } | null;
   }>;
   const total = count ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE));
@@ -75,7 +75,7 @@ export default async function KardexPage(props: { searchParams: SP }) {
         searchPlaceholder="Search product SKU or name..."
         selects={[
           { name: "branch", placeholder: "All branches", value: branch, width: "w-[170px]",
-            options: ctx.branches.map((b) => ({ value: b.id, label: b.code })) },
+            options: ctx.branches.map((b) => ({ value: b.id, label: b.name })) },
           { name: "type", placeholder: "All types", value: type, width: "w-[160px]",
             options: Object.entries(TYPE_LABEL).map(([v, l]) => ({ value: v, label: l })) },
         ]}
@@ -104,7 +104,7 @@ export default async function KardexPage(props: { searchParams: SP }) {
               {rows.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell className="whitespace-nowrap text-xs tabular-nums">{formatDateTime(r.created_at)}</TableCell>
-                  <TableCell className="text-sm">{r.branch?.code}</TableCell>
+                  <TableCell className="min-w-[8rem] text-sm">{r.branch?.name ?? r.branch?.code}</TableCell>
                   <TableCell>
                     <div className="text-sm font-medium">{r.product?.sku}</div>
                     <div className="text-xs text-muted-foreground">{r.product?.name}</div>
