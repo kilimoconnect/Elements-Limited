@@ -2,7 +2,7 @@
  * Goods Received Note for one supplier's goods on a transfer, issued by Head
  * Office to submit to the supplier. Pure rendering; no prices.
  */
-import { brandedPdf, header, panel, kvRows, table, signatures, finish, wrapText, qty, C, L, R, W, type Col } from "@/lib/pdf/brand";
+import { brandedPdf, header, panel, kvRows, table, signatures, finish, wrapText, fmtLongDate, qty, C, L, R, W, type Col } from "@/lib/pdf/brand";
 
 export interface GrnData {
   number: string;
@@ -59,6 +59,11 @@ export function renderTransferGrn(g: GrnData): Uint8Array {
   } else {
     y -= 4;
   }
+
+  // Document date, in the body above the goods.
+  pdf.text(L, y, "Date:", 9, "regular", C.muted);
+  pdf.text(L + 30, y, fmtLongDate(g.issued_at), 9, "bold", C.text);
+  y -= 22;
 
   pdf.text(L, y, "GOODS", 8, "bold", C.green);
   y -= 8;

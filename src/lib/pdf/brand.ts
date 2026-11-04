@@ -185,6 +185,14 @@ export function fmtDate(iso: string | null): string {
     .formatToParts(new Date(iso)).reduce<Record<string, string>>((a, x) => { a[x.type] = x.value; return a; }, {});
   return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}`;
 }
+/** "Wednesday, 4 November 2026" (Dar es Salaam), for document dates. */
+export function fmtLongDate(iso: string | null): string {
+  if (!iso) return "-";
+  const d = /^d{4}-d{2}-d{2}$/.test(iso) ? new Date(`${iso}T12:00:00+03:00`) : new Date(iso);
+  const p = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, weekday: "long", day: "numeric", month: "long", year: "numeric" })
+    .formatToParts(d).reduce<Record<string, string>>((a, x) => { a[x.type] = x.value; return a; }, {});
+  return `${p.weekday}, ${p.day} ${p.month} ${p.year}`;
+}
 export const qty = (v: number) => Number(v).toLocaleString("en-US", { maximumFractionDigits: 4 });
 export const money = (v: number) => Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 

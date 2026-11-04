@@ -3,7 +3,7 @@
  * snapshot of a delivery-note version (document_versions). Pure: no database,
  * no costs, no licence numbers, no supplier. Producing it posts nothing.
  */
-import { brandedPdf, header, panel, kvRows, banner, table, signatures, finish, fmtDate, qty, C, L, R, W, type Col } from "@/lib/pdf/brand";
+import { brandedPdf, header, panel, kvRows, banner, table, signatures, finish, fmtDate, fmtLongDate, qty, C, L, R, W, type Col } from "@/lib/pdf/brand";
 
 export interface DeliveryNoteSnapshot {
   company: { name: string; legal_name: string | null; address: string | null; phone: string | null; email: string | null };
@@ -47,7 +47,7 @@ export function renderDeliveryNote(s: DeliveryNoteSnapshot, v: { version: number
   const di = panel(pdf, L, y, bw, dh, "Document");
   kvRows(pdf, L, di, bw, [
     ["Delivery note no.", dn], ["Transfer no.", s.transfer_number ?? "Draft"], ["Trip", `${s.trip_no}  (${s.reference})`],
-    ["Dispatch date", fmtDate(s.dispatch_date)], ["Expected arrival", fmtDate(s.expected_arrival_at)],
+    ["Date", fmtLongDate(s.dispatch_date)], ["Expected arrival", fmtDate(s.expected_arrival_at)],
   ]);
   const ti = panel(pdf, L + bw + 12, y, bw, dh, "Truck and driver");
   kvRows(pdf, L + bw + 12, ti, bw, [
