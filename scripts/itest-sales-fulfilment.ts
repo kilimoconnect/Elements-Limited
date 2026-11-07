@@ -431,6 +431,15 @@ async function main() {
     check("truck details are kept like a transfer trip (dispatch date, expected arrival, notes)",
       await one(db, "select planned_dispatch_date::text || '|' || (expected_arrival_at at time zone 'Africa/Dar_es_Salaam')::text || '|' || notes from sales_shipments where id=$1", [tSm])
         === "2026-11-08|2026-11-09 10:00:00|Gate 2");
+    const amSm = await one(db, "select request_sales_amendment($1,$2,'delivery',$3::jsonb,'new consignee')", [soSm, salesMgr, JSON.stringify({ consignee_name: "New Consignee" })]);
+    check("a Sales Manager requests and approves their own amendment",
+      (await err(db, "select approve_sales_amendment($1,$2,'[]'::jsonb)", [amSm, salesMgr])) === ""
+      && await one(db, "select consignee_name from sales_orders where id=$1", [soSm]) === "New Consignee"
+      && await num(db, "select count(*) from sales_events where order_id=$1 and note like 'Change delivery details (approved by the requester)%'", [soSm]) === 1);
+    const amBmOwn = await one(db, "select request_sales_amendment($1,$2,'delivery',$3::jsonb,'other consignee')", [soSm, manager, JSON.stringify({ consignee_name: "X" })]);
+    check("a Branch Manager still cannot approve their own amendment",
+      /Another authorised manager/.test(await err(db, "select approve_sales_amendment($1,$2,'[]'::jsonb)", [amBmOwn, manager])));
+    await db.query("select reject_sales_amendment($1,$2,'not needed')", [amBmOwn, salesMgr]);
     const rqBm = await mkRequest([{ product: prod, qty: 1, price: 1000 }], [{ account: mpesa, amount: 1180, ref: "MP-BM-OWN" }], "collection", manager);
     await db.query("select submit_sales_request($1,$2)", [rqBm, manager]);
     check("a Branch Manager still cannot approve their own request",

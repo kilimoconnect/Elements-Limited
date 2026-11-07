@@ -28,8 +28,8 @@ const KIND: Record<string, string> = {
   change_branch: "Change branch",
 };
 
-export function OrderActions({ orderId, open, isManager, canFulfil, userId, lines, delivery, exceptions, amendments, receipts, otherFunds, accounts, branches = [] }: {
-  orderId: string; open: boolean; isManager: boolean; canFulfil: boolean; userId: string;
+export function OrderActions({ orderId, open, isManager, canFulfil, userId, canApproveOwn = false, lines, delivery, exceptions, amendments, receipts, otherFunds, accounts, branches = [] }: {
+  orderId: string; open: boolean; isManager: boolean; canFulfil: boolean; userId: string; canApproveOwn?: boolean;
   lines: { id: string; description: string; quantity: number; unit_price: number; min: number; charge: boolean }[];
   delivery: { destination: string; consignee_name: string; consignee_phone: string };
   exceptions: Exc[]; amendments: Amd[]; receipts: Fund[]; otherFunds: Fund[]; accounts: { id: string; name: string }[];
@@ -73,7 +73,7 @@ export function OrderActions({ orderId, open, isManager, canFulfil, userId, line
                   {a.value_change !== null && Number(a.value_change) !== 0 && <p className="text-xs">Order value change {formatMoney(a.value_change)}</p>}
                   {a.decision_reason && <p className="text-xs text-muted-foreground">Rejected: {a.decision_reason}</p>}
                 </div>
-                {a.status === "pending" && isManager && a.requested_by !== userId ? (
+                {a.status === "pending" && isManager && (a.requested_by !== userId || canApproveOwn) ? (
                   <div className="flex gap-2">
                     <Button size="sm" onClick={() => setApproveAmd(a)}><CheckCircle2 className="h-4 w-4" /> Approve</Button>
                     <Button size="sm" variant="outline" onClick={() => setReject(a)}><XCircle className="h-4 w-4" /> Reject</Button>

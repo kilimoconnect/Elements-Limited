@@ -5,6 +5,12 @@ import { formatDateTime } from "@/lib/format";
 
 type V = "muted" | "warning" | "destructive" | "success" | "default";
 
+const AMENDMENT: Record<string, string> = {
+  change_lines: "Change quantity / price", delivery: "Change delivery details", cancel_remaining: "Cancel the remaining balance", change_branch: "Change branch",
+};
+/** Timeline notes store amendment codes (e.g. change_branch); show their names instead. */
+const readable = (note: string) => note.replace(/\b(change_lines|cancel_remaining|change_branch|delivery)\b(?=[:,]|$)/g, (k) => AMENDMENT[k] ?? k);
+
 export function StatusBadge({ map, status }: { map: Record<string, { label: string; variant: V }>; status: string }) {
   const s = map[status] ?? { label: status, variant: "muted" as V };
   return <Badge variant={s.variant}>{s.label}</Badge>;
@@ -27,7 +33,7 @@ export function Timeline({ items, label, nameOf, shipmentNo }: {
               <li key={e.id} className="relative text-sm">
                 <span className="absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full bg-primary" />
                 <p className="font-medium">{label[e.event_type] ?? e.event_type}{truck ? <span className="font-normal text-muted-foreground"> · {truck}</span> : null}</p>
-                {e.note && <p className="text-muted-foreground">{e.note}</p>}
+                {e.note && <p className="text-muted-foreground">{readable(e.note)}</p>}
                 <p className="text-xs text-muted-foreground">{nameOf(e.user_id)} · {formatDateTime(e.created_at)}</p>
               </li>
             );

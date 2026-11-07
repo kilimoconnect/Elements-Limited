@@ -149,7 +149,7 @@ export default async function SalesOrderPage(props: { params: Promise<{ id: stri
         </CardContent>
       </Card>
 
-      <OrderActions orderId={o.id} open={open} isManager={isManager} canFulfil={canFulfil} userId={ctx.user.id}
+      <OrderActions orderId={o.id} open={open} isManager={isManager} canFulfil={canFulfil} userId={ctx.user.id} canApproveOwn={can(ctx.user, "sales.approve_own")}
         lines={lines.map((l) => ({ id: l.id, description: l.description ?? l.product?.name ?? "", quantity: Number(l.quantity), unit_price: Number(l.unit_price),
           min: Number(l.qty_dispatched) + Number(l.qty_allocated), charge: !l.track_inventory }))}
         delivery={{ destination: o.destination ?? "", consignee_name: o.consignee_name ?? "", consignee_phone: o.consignee_phone ?? "" }}
