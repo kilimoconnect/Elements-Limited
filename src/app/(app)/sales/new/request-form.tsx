@@ -64,7 +64,13 @@ export function RequestForm({
     : [nl()]);
   const [pays, setPays] = React.useState<Pay[]>((initial?.payments ?? []).map((p) => ({ key: k(), ...p, amount: String(p.amount) })));
   const [useFunds, setUseFunds] = React.useState<Record<string, string>>(Object.fromEntries((initial?.funds ?? []).map((f) => [f.receipt_id, String(f.amount)])));
-  const [proofs, setProofs] = React.useState<File[]>([]);
+  // Files to attach: picked in one or several goes; each is proof of payment or another document.
+  const [files, setFiles] = React.useState<{ key: string; file: File; category: "proof_of_payment" | "other" }[]>([]);
+  const proofs = files.filter((f) => f.category === "proof_of_payment");
+  const addFiles = (list: FileList | null) => {
+    const picked = Array.from(list ?? []).filter((f) => !files.some((x) => x.file.name === f.name && x.file.size === f.size));
+    setFiles([...files, ...picked.map((file) => ({ key: k(), file, category: "proof_of_payment" as const }))]);
+  };
   const [redeem, setRedeem] = React.useState(true);
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -127,7 +133,8 @@ export function RequestForm({
   async function save(submit: boolean) {
     setError(null);
     if (submit && blockers.length) { setError(blockers[0]); return; }
-    if (proofs.some((f) => f.size > 20 * 1024 * 1024)) { setError("A proof of payment file is larger than 20 MB."); return; }
+    const big = files.find((f) => f.file.size > 20 * 1024 * 1024);
+    if (big) { setError(`${big.file.name} is larger than 20 MB.`); return; }
     const input: SalesRequestInput = {
       requestId: initial?.requestId, branchId, customerId, contactName, contactPhone, fulfilmentMode: mode, fulfilmentLocation: location,
       destination, consigneeName, consigneePhone, notes, orderDiscount: disc, redeemRewards: redeem,
@@ -139,8 +146,8 @@ export function RequestForm({
     setPending(true);
     const res = await saveSalesRequest(input);
     if (!res.ok || !res.id) { setError(res.error ?? "Failed."); setPending(false); return; }
-    for (const file of proofs) {
-      const up = await uploadAttachmentFile({ ownerType: "sales_request", ownerId: res.id, category: "proof_of_payment", file });
+    for (const { file, category } of files) {
+      const up = await uploadAttachmentFile({ ownerType: "sales_request", ownerId: res.id, category, file });
       if (!up.ok) { toast.error(`Request saved, but ${file.name} did not upload: ${up.error}`); router.push(`/sales/requests/${res.id}`); return; }
     }
     if (submit) {
@@ -293,9 +300,24 @@ export function RequestForm({
               </div>
             )}
             <div className="space-y-1.5 rounded-md border border-dashed border-border p-3">
-              <Label htmlFor="proof">Proof of payment {pays.length > 0 && !initial?.hasProof && <span className="text-destructive">*</span>}</Label>
-              <Input id="proof" type="file" multiple accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(e) => setProofs(Array.from(e.target.files ?? []))} />
-              <p className="text-xs text-muted-foreground">{initial?.hasProof ? "Proof already attached; add files only if needed. " : ""}PDF or photos, up to 20 MB each.</p>
+              <Label htmlFor="proof">Proof of payment and documents {pays.length > 0 && !initial?.hasProof && <span className="text-destructive">*</span>}</Label>
+              <Input id="proof" type="file" multiple accept="application/pdf,image/jpeg,image/png,image/webp"
+                onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
+              {files.length > 0 && (
+                <ul className="space-y-1.5 pt-1">
+                  {files.map((f) => (
+                    <li key={f.key} className="flex flex-wrap items-center gap-2 text-sm">
+                      <span className="min-w-0 flex-1 truncate">{f.file.name} <span className="text-xs text-muted-foreground">({(f.file.size / 1024 / 1024).toFixed(1)} MB)</span></span>
+                      <Select value={f.category} onValueChange={(v) => setFiles(files.map((x) => (x.key === f.key ? { ...x, category: v as typeof f.category } : x)))}>
+                        <SelectTrigger className="h-8 w-44"><SelectValue /></SelectTrigger>
+                        <SelectContent><SelectItem value="proof_of_payment">Proof of payment</SelectItem><SelectItem value="other">Other document</SelectItem></SelectContent>
+                      </Select>
+                      <button type="button" aria-label={`Remove ${f.file.name}`} onClick={() => setFiles(files.filter((x) => x.key !== f.key))} className="p-1 text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="text-xs text-muted-foreground">{initial?.hasProof ? "Proof already attached; add files only if needed. " : ""}Choose several files at once or add more in several goes. PDF or photos, up to 20 MB each.</p>
             </div>
             <div className="space-y-1.5"><Label>Notes</Label><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} /></div>
           </CardContent>
