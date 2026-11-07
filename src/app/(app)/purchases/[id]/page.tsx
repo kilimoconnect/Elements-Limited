@@ -62,10 +62,11 @@ export default async function PurchaseDetailPage(props: { params: Params }) {
     .map((c) => ({ id: c.id, label: `Credit ${c.return?.document_number ?? ""}`, date: c.credit_date, fc_remaining: Number(c.fc_remaining), remaining: Number(c.remaining) }));
   // Stage 7: landed costs and supplier price corrections (stock purchases, cost permission).
   const corrections = s.document_status === "posted" && (pur as { posting_mode: string }).posting_mode !== "invoice_only" && showCost;
-  const [{ data: landed }, { data: adjustments }, { data: costCats }] = await Promise.all([
-    corrections ? admin.from("cost_sources").select("id, description, status, estimated_amount, accrued_amount, actual_amount, allocation_basis, inventory_treatment, category:cost_categories(name)").eq("purchase_id", id).neq("status", "voided").order("created_at") : Promise.resolve({ data: [] }),
+  const [{ data: landed }, { data: adjustments }, { data: costCats }, { data: costSuppliers }] = await Promise.all([
+    corrections ? admin.from("cost_sources").select("id, description, status, estimated_amount, accrued_amount, actual_amount, allocation_basis, inventory_treatment, category:cost_categories(name), supplier:suppliers(name)").eq("purchase_id", id).neq("status", "voided").order("created_at") : Promise.resolve({ data: [] }),
     corrections ? admin.from("purchase_cost_adjustments").select("id, kind, document_number, document_date, supplier_reference, reason, total, credit_created").eq("purchase_id", id).eq("document_status", "posted").order("created_at") : Promise.resolve({ data: [] }),
     corrections ? admin.from("cost_categories").select("id, code, name, inventory_treatment").eq("company_id", ctx.companyId).eq("is_active", true).eq("is_goods_value", false).or("applies_to_import.eq.true,applies_to_transfer.eq.true").order("code") : Promise.resolve({ data: [] }),
+    corrections ? admin.from("suppliers").select("id, code, name").eq("company_id", ctx.companyId).eq("is_active", true).order("name") : Promise.resolve({ data: [] as { id: string; code: string; name: string }[] }),
   ]);
   const EVENT_LABEL: Record<string, string> = {
     invoice: "Invoice", settlement: "Payment", settlement_void: "Payment voided", return: "Return", return_void: "Return voided",
@@ -176,15 +177,17 @@ export default async function PurchaseDetailPage(props: { params: Params }) {
       {corrections && (
         <Card className="mt-4"><CardContent className="space-y-3 p-5 text-sm">
           <h3 className="font-semibold">Landed costs and price corrections</h3>
-          <p className="text-xs text-muted-foreground">Freight, transport or handling on this purchase, and supplier price corrections. They reach the goods wherever they are now: in stock, sold, at another branch or in transit. Estimates post nothing; a cost&apos;s supplier invoice is posted under Importation → Cost Invoices.</p>
-          {((landed ?? []) as unknown as { id: string; description: string | null; status: string; estimated_amount: number; accrued_amount: number; actual_amount: number; allocation_basis: string | null; inventory_treatment: string; category: { name: string } | null }[]).map((c) => (
+          <p className="text-xs text-muted-foreground">Bags, freight, transport, handling or other costs on this purchase, and supplier price corrections. Posted with its supplier, a cost is owed to that supplier (Accounts Payable) and reaches the goods wherever they are now: in stock, sold (cost of sales), at another branch or in transit. Estimates post nothing.</p>
+          {((landed ?? []) as unknown as { id: string; description: string | null; status: string; estimated_amount: number; accrued_amount: number; actual_amount: number; allocation_basis: string | null; inventory_treatment: string; category: { name: string } | null; supplier: { name: string } | null }[]).map((c) => (
             <div key={c.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-border py-1 last:border-0">
-              <span>{c.category?.name}{c.description && ` — ${c.description}`} <span className="text-xs text-muted-foreground">({c.inventory_treatment === "capitalize" ? `by ${c.allocation_basis === "weight" ? "net kg" : c.allocation_basis}` : "expensed"} · {c.status})</span></span>
+              <span>{c.category?.name}{c.description && ` — ${c.description}`}{c.supplier && ` · ${c.supplier.name}`} <span className="text-xs text-muted-foreground">({c.inventory_treatment === "capitalize" ? `by ${c.allocation_basis === "weight" ? "net kg" : c.allocation_basis}` : "expensed"} · {c.status})</span></span>
               <span className="flex items-center gap-2 tabular-nums">{formatMoney(c.status === "invoiced" ? c.actual_amount : c.status === "accrued" ? c.accrued_amount : c.estimated_amount)}
                 {can(ctx.user, "purchases.post") && <LandedCostRow sourceId={c.id} status={c.status} estimate={Number(c.estimated_amount)} />}</span>
             </div>
           ))}
-          {can(ctx.user, "purchases.post") && <LandedCostForm purchaseId={id} categories={(costCats ?? []).map((c) => ({ id: c.id, label: `${c.code} — ${c.name}`, capitalise: c.inventory_treatment === "capitalize" }))} />}
+          {can(ctx.user, "purchases.post") && <LandedCostForm purchaseId={id} canPostInvoice={can(ctx.user, "cost_invoices.post")}
+            suppliers={(costSuppliers ?? []).map((x) => ({ id: x.id, label: `${x.code} — ${x.name}` }))}
+            categories={(costCats ?? []).map((c) => ({ id: c.id, label: `${c.code} — ${c.name}`, capitalise: c.inventory_treatment === "capitalize" }))} />}
           {((adjustments ?? []) as { id: string; kind: string; document_number: string | null; document_date: string; supplier_reference: string | null; reason: string; total: number; credit_created: number }[]).map((a) => (
             <div key={a.id} className="flex justify-between border-b border-border py-1 last:border-0">
               <span>{a.document_number} · {a.kind === "credit_note" ? "Credit note" : "Debit note"} · {formatDate(a.document_date)}{a.supplier_reference && ` · ${a.supplier_reference}`} <span className="text-xs text-muted-foreground">{a.reason}</span></span>

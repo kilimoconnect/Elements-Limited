@@ -40,6 +40,7 @@ const STEPS: [string, string][] = [
   ["Transfer delivery notes and GRNs", "scripts/itest-transfer-docs.ts"],
   ["Payment-first sales and truck fulfilment", "scripts/itest-sales-fulfilment.ts"],
   ["Transfer route change", "scripts/itest-transfer-route.ts"],
+  ["Purchase landed costs (bags, other)", "scripts/itest-purchase-costs.ts"],
 ];
 
 function run(label: string, script: string, env: NodeJS.ProcessEnv): boolean {

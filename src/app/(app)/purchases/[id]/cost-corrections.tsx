@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { addPurchaseCost, accruePurchaseCost, removePurchaseCostEstimate, postPurchaseAdjustment } from "@/lib/costs/actions";
+import { addPurchaseCost, accruePurchaseCost, removePurchaseCostEstimate, postPurchaseAdjustment, postPurchaseLandedCost } from "@/lib/costs/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,20 +25,53 @@ function useRun() {
   return { pending, run };
 }
 
-export function LandedCostForm({ purchaseId, categories }: { purchaseId: string; categories: { id: string; label: string; capitalise: boolean }[] }) {
+export function LandedCostForm({ purchaseId, categories, suppliers, canPostInvoice }: {
+  purchaseId: string; categories: { id: string; label: string; capitalise: boolean }[];
+  suppliers: { id: string; label: string }[]; canPostInvoice: boolean;
+}) {
   const { pending, run } = useRun();
-  const [c, setC] = React.useState({ category: categories[0]?.id ?? "", description: "", amount: "", basis: "" });
+  const blank = { category: categories[0]?.id ?? "", supplier: "", invoice: "", date: today(), due: "", description: "", amount: "", basis: "" };
+  const [c, setC] = React.useState(blank);
+  const [requestId, setRequestId] = React.useState(rid);
+  const ready = !!c.category && !!c.supplier && !!c.invoice.trim() && Number(c.amount) > 0 && !!c.date;
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Select value={c.category} onValueChange={(v) => setC({ ...c, category: v })}><SelectTrigger className="h-8 w-56"><SelectValue placeholder="Category" /></SelectTrigger>
-        <SelectContent>{categories.map((x) => <SelectItem key={x.id} value={x.id}>{x.label}{x.capitalise ? "" : " (expensed)"}</SelectItem>)}</SelectContent></Select>
-      <Input className="h-8 w-44" placeholder="Description" value={c.description} onChange={(e) => setC({ ...c, description: e.target.value })} />
-      <Input className="h-8 w-32 text-right" type="number" min="0" step="0.01" placeholder="TZS estimate" value={c.amount} onChange={(e) => setC({ ...c, amount: e.target.value })} />
-      <Select value={c.basis || "__default__"} onValueChange={(v) => setC({ ...c, basis: v === "__default__" ? "" : v })}><SelectTrigger className="h-8 w-40"><SelectValue /></SelectTrigger>
-        <SelectContent><SelectItem value="__default__">Category default</SelectItem><SelectItem value="weight">By net kg</SelectItem><SelectItem value="value">By value</SelectItem><SelectItem value="quantity">By units</SelectItem></SelectContent></Select>
-      <Button size="sm" variant="outline" disabled={pending || !c.category} onClick={async () => {
-        if (await run(() => addPurchaseCost({ purchaseId, categoryId: c.category, description: c.description, amount: Number(c.amount || 0), basis: c.basis || null }), "Cost added (estimate).")) setC({ ...c, description: "", amount: "" });
-      }}>Add landed cost</Button>
+    <div className="space-y-2 rounded-md border border-border p-3">
+      <p className="text-xs font-medium">Add landed cost</p>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="space-y-1"><Label className="text-xs">Cost type</Label>
+          <Select value={c.category} onValueChange={(v) => setC({ ...c, category: v })}><SelectTrigger className="h-8"><SelectValue placeholder="Category" /></SelectTrigger>
+            <SelectContent>{categories.map((x) => <SelectItem key={x.id} value={x.id}>{x.label}{x.capitalise ? "" : " (expensed)"}</SelectItem>)}</SelectContent></Select></div>
+        <div className="space-y-1"><Label className="text-xs">Supplier {canPostInvoice && "*"}</Label>
+          <Select value={c.supplier} onValueChange={(v) => setC({ ...c, supplier: v })}><SelectTrigger className="h-8"><SelectValue placeholder="Who is owed this cost" /></SelectTrigger>
+            <SelectContent>{suppliers.map((x) => <SelectItem key={x.id} value={x.id}>{x.label}</SelectItem>)}</SelectContent></Select></div>
+        <div className="space-y-1"><Label className="text-xs">Supplier invoice no. {canPostInvoice && "*"}</Label>
+          <Input className="h-8" value={c.invoice} onChange={(e) => setC({ ...c, invoice: e.target.value })} /></div>
+        <div className="space-y-1"><Label className="text-xs">Invoice date</Label><Input className="h-8" type="date" value={c.date} onChange={(e) => setC({ ...c, date: e.target.value })} /></div>
+        <div className="space-y-1"><Label className="text-xs">Due date</Label><Input className="h-8" type="date" value={c.due} onChange={(e) => setC({ ...c, due: e.target.value })} /></div>
+        <div className="space-y-1"><Label className="text-xs">Amount (TZS) *</Label>
+          <Input className="h-8 text-right" type="number" min="0" step="0.01" value={c.amount} onChange={(e) => setC({ ...c, amount: e.target.value })} /></div>
+        <div className="space-y-1 sm:col-span-2"><Label className="text-xs">Description</Label><Input className="h-8" value={c.description} onChange={(e) => setC({ ...c, description: e.target.value })} /></div>
+        <div className="space-y-1"><Label className="text-xs">Spread over the goods</Label>
+          <Select value={c.basis || "__default__"} onValueChange={(v) => setC({ ...c, basis: v === "__default__" ? "" : v })}><SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="__default__">Category default</SelectItem><SelectItem value="weight">By net kg</SelectItem><SelectItem value="value">By value</SelectItem><SelectItem value="quantity">By units</SelectItem></SelectContent></Select></div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {canPostInvoice && (
+          <Button size="sm" disabled={pending || !ready} onClick={async () => {
+            const ok = await run(() => postPurchaseLandedCost({ purchaseId, categoryId: c.category, supplierId: c.supplier, supplierInvoiceNumber: c.invoice,
+              date: c.date, dueDate: c.due || null, amount: Number(c.amount), description: c.description, basis: c.basis || null, requestId }),
+              "Landed cost posted to the supplier and applied to the goods.");
+            if (ok) { setC(blank); setRequestId(rid()); }
+          }}>Post to supplier</Button>
+        )}
+        <Button size="sm" variant="outline" disabled={pending || !c.category} onClick={async () => {
+          if (await run(() => addPurchaseCost({ purchaseId, categoryId: c.category, description: c.description, amount: Number(c.amount || 0), basis: c.basis || null }), "Cost added (estimate).")) setC(blank);
+        }}>Save as estimate</Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {canPostInvoice ? "Post to supplier records the supplier’s invoice (Accounts Payable to that supplier) and adds the cost to the goods at once. " : ""}
+        An estimate posts nothing until it is accrued or invoiced.
+      </p>
     </div>
   );
 }
