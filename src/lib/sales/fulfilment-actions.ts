@@ -356,7 +356,7 @@ export async function refundAdvance(receiptId: string, accountId: string, amount
     { p_receipt: receiptId, p_account: accountId, p_amount: amount, p_reference: reference, p_reason: reason },
     "customer_advance.refund", "customer_receipt", receiptId, ["/sales/customer-payments"], reason);
 }
-export async function requestAmendment(orderId: string, kind: "change_lines" | "delivery" | "cancel_remaining", changes: Record<string, unknown>, reason: string): Promise<RpcResult> {
+export async function requestAmendment(orderId: string, kind: "change_lines" | "delivery" | "cancel_remaining" | "change_branch", changes: Record<string, unknown>, reason: string): Promise<RpcResult> {
   try {
     // Added products carry the trusted product and tax snapshot.
     if (kind === "change_lines" && Array.isArray(changes.add) && changes.add.length) {

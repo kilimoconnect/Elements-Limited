@@ -37,6 +37,7 @@ export default async function SalesOrderPage(props: { params: Promise<{ id: stri
   const canFulfil = can(ctx.user, "sales.fulfil");
   const isManager = can(ctx.user, "sales.approve");
   const fullyAllocated = goods.every((l) => Number(l.qty_dispatched) + Number(l.qty_allocated) >= Number(l.quantity) - 0.00005);
+  const { data: allBranches } = await admin.from("branches").select("id, name").eq("company_id", ctx.companyId).eq("is_active", true).order("name");
   const otherFunds = isManager && open ? await customerAvailableFunds(admin, ctx.companyId, o.customer_id) : [];
   const { data: accounts } = isManager
     ? await admin.from("payment_accounts").select("id, name, branch_id").eq("company_id", ctx.companyId).eq("is_active", true).order("code")
@@ -157,6 +158,7 @@ export default async function SalesOrderPage(props: { params: Promise<{ id: stri
           requested_at: a.requested_at, value_change: a.value_change, decision_reason: a.decision_reason }))}
         receipts={funds.filter((f) => f.receipt?.document_status === "posted").map((f) => ({ id: f.receipt_id, label: `${f.receipt?.document_number} · ${f.receipt?.reference ?? ""}`, available: available[f.receipt_id] ?? 0 }))}
         otherFunds={otherFunds.map((f) => ({ id: f.id, label: `${f.document_number} · ${f.reference ?? ""}`, available: f.available }))}
+        branches={(allBranches ?? []).filter((b) => b.id !== o.branch_id)}
         accounts={(accounts ?? []).filter((a) => !a.branch_id || a.branch_id === o.branch_id).map((a) => ({ id: a.id, name: a.name }))} />
 
       <Timeline items={events} label={EVENT_LABEL} nameOf={nameOf} shipmentNo={truckNo} />

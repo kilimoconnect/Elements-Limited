@@ -25,13 +25,16 @@ interface Fund { id: string; label: string; available: number }
 const KIND: Record<string, string> = {
   delivery_shortage: "Delivery shortage", delivery_damage: "Damaged on delivery", payment_reversed: "Payment reversed", other: "Exception",
   change_lines: "Change quantity / price", delivery: "Change delivery details", cancel_remaining: "Cancel the remaining balance",
+  change_branch: "Change branch",
 };
 
-export function OrderActions({ orderId, open, isManager, canFulfil, userId, lines, delivery, exceptions, amendments, receipts, otherFunds, accounts }: {
+export function OrderActions({ orderId, open, isManager, canFulfil, userId, lines, delivery, exceptions, amendments, receipts, otherFunds, accounts, branches = [] }: {
   orderId: string; open: boolean; isManager: boolean; canFulfil: boolean; userId: string;
   lines: { id: string; description: string; quantity: number; unit_price: number; min: number; charge: boolean }[];
   delivery: { destination: string; consignee_name: string; consignee_phone: string };
   exceptions: Exc[]; amendments: Amd[]; receipts: Fund[]; otherFunds: Fund[]; accounts: { id: string; name: string }[];
+  /** Other active branches the order can move to. */
+  branches?: { id: string; name: string }[];
 }) {
   const router = useRouter();
   const [resolve, setResolve] = React.useState<Exc | null>(null);
@@ -66,7 +69,7 @@ export function OrderActions({ orderId, open, isManager, canFulfil, userId, line
                 <div className="min-w-0">
                   <p className="font-medium">{KIND[a.kind] ?? a.kind}</p>
                   <p className="text-muted-foreground">{a.reason} · {a.requester}, {formatDateTime(a.requested_at)}</p>
-                  <AmendmentSummary a={a} lines={lines} />
+                  <AmendmentSummary a={a} lines={lines} branches={branches} />
                   {a.value_change !== null && Number(a.value_change) !== 0 && <p className="text-xs">Order value change {formatMoney(a.value_change)}</p>}
                   {a.decision_reason && <p className="text-xs text-muted-foreground">Rejected: {a.decision_reason}</p>}
                 </div>
@@ -103,7 +106,7 @@ export function OrderActions({ orderId, open, isManager, canFulfil, userId, line
         description="Use this when the payment turns out to be invalid (bounced, recalled). Trucks not yet dispatched are blocked, dispatched trucks are flagged and their invoices become unpaid."
         onConfirm={async (r) => { const x = await reverseAdvance(reverse!.id, r); if (!x.ok) return x.error; done("Payment reversed; the order is on hold."); }} />
 
-      <AmendDialog key={amend ? "amend-open" : "amend"} open={amend} onOpenChange={setAmend} lines={lines} delivery={delivery}
+      <AmendDialog key={amend ? "amend-open" : "amend"} open={amend} onOpenChange={setAmend} lines={lines} delivery={delivery} branches={branches}
         onSubmit={async (kind, changes, reason) => { const x = await requestAmendment(orderId, kind, changes, reason); if (!x.ok) return x.error; done("Amendment sent for approval."); }} />
       <FundsDialog key={approveAmd?.id ?? "amd"} open={!!approveAmd} onOpenChange={(o) => !o && setApproveAmd(null)} title="Approve amendment" funds={otherFunds}
         description="If the amendment increases the order value, select verified customer funds to cover the increase."
@@ -117,7 +120,11 @@ export function OrderActions({ orderId, open, isManager, canFulfil, userId, line
   );
 }
 
-function AmendmentSummary({ a, lines }: { a: Amd; lines: { id: string; description: string; quantity: number; unit_price: number }[] }) {
+function AmendmentSummary({ a, lines, branches }: { a: Amd; lines: { id: string; description: string; quantity: number; unit_price: number }[]; branches: { id: string; name: string }[] }) {
+  if (a.kind === "change_branch") {
+    const name = branches.find((b) => b.id === a.changes.branch_id)?.name ?? (a.changes.branch_name as string | undefined) ?? "another branch";
+    return <p className="text-xs">To {name}{a.changes.fulfilment_location ? `, loading at ${a.changes.fulfilment_location}` : ""}</p>;
+  }
   if (a.kind === "change_lines") {
     const ch = (a.changes.lines ?? []) as { order_line_id: string; quantity?: number; unit_price?: number }[];
     return <ul className="text-xs">{ch.map((c) => { const l = lines.find((x) => x.id === c.order_line_id); return <li key={c.order_line_id}>{l?.description}: {c.quantity !== undefined && `qty ${formatQuantity(c.quantity)}`} {c.unit_price !== undefined && `price ${formatMoney(c.unit_price)}`}</li>; })}</ul>;
@@ -126,12 +133,14 @@ function AmendmentSummary({ a, lines }: { a: Amd; lines: { id: string; descripti
   return null;
 }
 
-function AmendDialog({ open, onOpenChange, lines, delivery, onSubmit }: {
+function AmendDialog({ open, onOpenChange, lines, delivery, branches, onSubmit }: {
   open: boolean; onOpenChange: (o: boolean) => void; lines: { id: string; description: string; quantity: number; unit_price: number; min: number; charge: boolean }[];
-  delivery: { destination: string; consignee_name: string; consignee_phone: string };
-  onSubmit: (kind: "change_lines" | "delivery" | "cancel_remaining", changes: Record<string, unknown>, reason: string) => Promise<string | void | undefined>;
+  delivery: { destination: string; consignee_name: string; consignee_phone: string }; branches: { id: string; name: string }[];
+  onSubmit: (kind: "change_lines" | "delivery" | "cancel_remaining" | "change_branch", changes: Record<string, unknown>, reason: string) => Promise<string | void | undefined>;
 }) {
-  const [kind, setKind] = React.useState<"change_lines" | "delivery" | "cancel_remaining">("change_lines");
+  const [kind, setKind] = React.useState<"change_lines" | "delivery" | "cancel_remaining" | "change_branch">("change_lines");
+  const [branch, setBranch] = React.useState("");
+  const [location, setLocation] = React.useState("");
   const [q, setQ] = React.useState<Record<string, { quantity: string; unit_price: string }>>(() => Object.fromEntries(lines.map((l) => [l.id, { quantity: String(l.quantity), unit_price: String(l.unit_price) }])));
   const [d, setD] = React.useState(delivery);
   const [reason, setReason] = React.useState("");
@@ -149,6 +158,10 @@ function AmendDialog({ open, onOpenChange, lines, delivery, onSubmit }: {
       if (low) { setError("A quantity cannot go below what is already dispatched or on trucks."); return; }
       changes = { lines: ch };
     } else if (kind === "delivery") changes = d;
+    else if (kind === "change_branch") {
+      if (!branch) { setError("Choose the new branch."); return; }
+      changes = { branch_id: branch, branch_name: branches.find((b) => b.id === branch)?.name, fulfilment_location: location.trim() || undefined };
+    }
     setPending(true);
     const e = await onSubmit(kind, changes, reason.trim());
     setPending(false);
@@ -165,6 +178,7 @@ function AmendDialog({ open, onOpenChange, lines, delivery, onSubmit }: {
             <SelectItem value="change_lines">Change quantity / price</SelectItem>
             <SelectItem value="delivery">Change delivery details (redirect)</SelectItem>
             <SelectItem value="cancel_remaining">Cancel the remaining balance</SelectItem>
+            {branches.length > 0 && <SelectItem value="change_branch">Change branch</SelectItem>}
           </SelectContent>
         </Select>
         {kind === "change_lines" && lines.map((l) => (
@@ -179,6 +193,17 @@ function AmendDialog({ open, onOpenChange, lines, delivery, onSubmit }: {
             <div className="space-y-1"><Label>Destination</Label><Input value={d.destination} onChange={(e) => setD({ ...d, destination: e.target.value })} /></div>
             <div className="space-y-1"><Label>Consignee</Label><Input value={d.consignee_name} onChange={(e) => setD({ ...d, consignee_name: e.target.value })} /></div>
             <div className="space-y-1"><Label>Consignee phone</Label><Input value={d.consignee_phone} onChange={(e) => setD({ ...d, consignee_phone: e.target.value })} /></div>
+          </div>
+        )}
+        {kind === "change_branch" && (
+          <div className="space-y-2">
+            <div className="space-y-1"><Label>New branch</Label>
+              <Select value={branch} onValueChange={setBranch}>
+                <SelectTrigger><SelectValue placeholder="Choose branch" /></SelectTrigger>
+                <SelectContent>{branches.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
+              </Select></div>
+            <div className="space-y-1"><Label>Loading point at the new branch (optional)</Label><Input value={location} onChange={(e) => setLocation(e.target.value)} /></div>
+            <p className="text-xs text-muted-foreground">What is not yet dispatched is reserved and loaded at the new branch. Trucks already dispatched stay as they are. Cancel any truck not yet dispatched first.</p>
           </div>
         )}
         {kind === "cancel_remaining" && <p className="text-sm text-muted-foreground">Cancel undispatched trucks first. The undelivered balance is removed and its funds go back to the customer’s credit.</p>}

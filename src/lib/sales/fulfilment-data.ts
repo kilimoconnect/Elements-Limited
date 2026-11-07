@@ -34,7 +34,7 @@ export const EVENT_LABEL: Record<string, string> = {
   shipment_created: "Truck planned", loading_order: "Loading order issued", loaded: "Actual loading recorded", dispatched: "Dispatched (stock out, invoiced)",
   shipment_cancelled: "Truck cancelled", delivered: "Delivered", collected: "Collected", completed: "Order completed",
   exception_resolved: "Exception resolved", payment_reversed: "Payment reversed", funds_committed: "Funds committed",
-  amendment_requested: "Amendment requested", amendment_approved: "Amendment approved", amendment_rejected: "Amendment rejected", cancelled: "Order cancelled",
+  amendment_requested: "Amendment requested", amendment_approved: "Amendment approved", amendment_rejected: "Amendment rejected", cancelled: "Order cancelled", branch_changed: "Branch changed",
 };
 export const METHOD_LABEL: Record<string, string> = {
   bank_transfer: "Bank transfer", mobile_money: "Mobile money", cash: "Cash", cheque: "Cheque", card: "Card", other: "Other",

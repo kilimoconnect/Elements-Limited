@@ -387,6 +387,33 @@ async function main() {
     const aruTruckBranch = await one(db, "select count(*) from sales_shipments where branch_id=$1", [aru]);
     check("GRNs are only for sales from Head Office (no other-branch trucks here)", Number(aruTruckBranch) === 0);
 
+    // ------------------------------------------------------------ amendment: change branch
+    const rqCb = await mkRequest([{ product: prod, qty: 2, price: 1000 }], [{ account: mpesa, amount: 2360, ref: "MP-CB" }]);
+    await db.query("select submit_sales_request($1,$2)", [rqCb, officer]);
+    const soCb = await approve(rqCb, manager, await verifyAll(rqCb));
+    const reservedHq = await num(db, "select sales_reserved_qty($1,$2,$3)", [co, hq, prod]);
+    const amCb = await one(db, "select request_sales_amendment($1,$2,'change_branch',$3::jsonb,'customer collects in Arusha')", [soCb, officer, JSON.stringify({ branch_id: aru, fulfilment_location: "Arusha store" })]);
+    check("a manager without access to the new branch cannot approve the branch change",
+      (await err(db, "select approve_sales_amendment($1,$2,'[]'::jsonb)", [amCb, salesMgr])) !== "");
+    check("the branch change is refused when the new branch lacks the stock",
+      /Not enough stock at/.test(await err(db, "select approve_sales_amendment($1,$2,'[]'::jsonb)", [amCb, owner])));
+    await db.query("select record_stock_movement_value($1,$2,$3,'opening','opening',gen_random_uuid(),'OPEN-ARU',$4,$5,$6)", [co, aru, prod, 5, 2500000, owner]);
+    await db.query("select approve_sales_amendment($1,$2,'[]'::jsonb)", [amCb, owner]);
+    check("after approval the order and its reservation move to the new branch",
+      await one(db, "select branch_id from sales_orders where id=$1", [soCb]) === aru
+      && await one(db, "select fulfilment_location from sales_orders where id=$1", [soCb]) === "Arusha store"
+      && await num(db, "select sales_reserved_qty($1,$2,$3)", [co, aru, prod]) === 2
+      && await num(db, "select sales_reserved_qty($1,$2,$3)", [co, hq, prod]) === reservedHq - 2);
+    check("the branch change is on the timeline",
+      await num(db, "select count(*) from sales_events where order_id=$1 and event_type='branch_changed'", [soCb]) === 1);
+    const tCb = await one(db, "select create_sales_shipment($1,$2,'cb-truck',$3::jsonb,$4::jsonb)", [soCb, owner, JSON.stringify({ collector_name: "C" }),
+      JSON.stringify([{ order_line_id: await one(db, "select id from sales_order_lines where order_id=$1", [soCb]), qty: 2 }])]);
+    check("new trucks load at the new branch", await one(db, "select branch_id from sales_shipments where id=$1", [tCb]) === aru);
+    check("the HQ officer can no longer act on the moved order", (await err(db, "select request_sales_amendment($1,$2,'delivery','{}'::jsonb,'x')", [soCb, officer])) !== "");
+    const amCb2 = await one(db, "select request_sales_amendment($1,$2,'change_branch',$3::jsonb,'back to HQ')", [soCb, mgrAru, JSON.stringify({ branch_id: hq })]);
+    check("the branch cannot change while a truck is being loaded",
+      /Cancel the trucks/.test(await err(db, "select approve_sales_amendment($1,$2,'[]'::jsonb)", [amCb2, owner])));
+
     // ------------------------------------------------------------ own approval: Sales Manager only
     check("only the Sales Manager role may approve its own requests",
       await can(db, "SALES_MANAGER", "sales.approve_own") && !(await can(db, "DIRECTOR", "sales.approve_own"))
