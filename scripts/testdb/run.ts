@@ -38,6 +38,7 @@ const STEPS: [string, string][] = [
   ["Sales order approval", "scripts/itest-sales-approval.ts"],
   ["Sales promotions", "scripts/itest-promotions.ts"],
   ["Transfer delivery notes and GRNs", "scripts/itest-transfer-docs.ts"],
+  ["Payment-first sales and truck fulfilment", "scripts/itest-sales-fulfilment.ts"],
 ];
 
 function run(label: string, script: string, env: NodeJS.ProcessEnv): boolean {

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePermissionPage } from "@/lib/auth/guards";
 import { getActiveContext, can } from "@/lib/context";
@@ -77,6 +78,12 @@ export default async function SaleDetailPage(props: { params: Params }) {
         }
       />
 
+      {sale.sales_order_id && (
+        <div className="mb-4 rounded-md border border-border bg-muted/40 px-4 py-3 text-sm">
+          Commercial invoice of one truck. <Link className="font-medium text-primary hover:underline" href={`/sales/shipments/${sale.shipment_id}`}>Open the truck</Link>
+          {" · "}<Link className="font-medium text-primary hover:underline" href={`/sales/orders/${sale.sales_order_id}`}>Open the Sales Order</Link>
+        </div>
+      )}
       {status === "rejected" && s.rejection_reason && (
         <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           <span className="font-semibold">Rejected by {nameOf(s.rejected_by)}:</span> {s.rejection_reason}

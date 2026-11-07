@@ -50,8 +50,8 @@ async function main() {
       await one(db, "select name from roles where code='DIRECTOR'") === "Branch Manager"
       && await one(db, "select name from roles where code='CEO'") === "CEO"
       && await one(db, "select name from roles where code='SALES_MANAGER'") === "Sales Manager");
-    check("Branch Manager approves sales; Sales Manager and Cashier do not",
-      await can(db, "DIRECTOR", "sales.approve") && !(await can(db, "SALES_MANAGER", "sales.approve")) && !(await can(db, "CASHIER", "sales.approve")));
+    check("Branch Manager and Sales Manager approve sales; the Sales Officer does not",
+      await can(db, "DIRECTOR", "sales.approve") && await can(db, "SALES_MANAGER", "sales.approve") && !(await can(db, "CASHIER", "sales.approve")));
     check("CEO has every permission except managing users and roles",
       Number(await one(db, "select count(*) from permissions")) - 2
         === Number(await one(db, "select count(*) from role_permissions rp join roles r on r.id = rp.role_id where r.code='CEO'"))

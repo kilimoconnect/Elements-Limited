@@ -144,8 +144,8 @@ async function main() {
   const newCoa = new Map((JSON.parse(after.coa) as { id: string }[]).map((r) => [r.id, JSON.stringify(r)]));
   check("existing accounts unchanged", oldCoa.every((r) => newCoa.get(r.id) === JSON.stringify(r)));
 
-  // New system accounts from 0024 (9) and 0025 (1145, 1175).
-  const NEW_CODES = ["1145", "1155", "1157", "1175", "2130", "2140", "4400", "4410", "6150", "6400", "6410"];
+  // New system accounts from 0024 (9), 0025 (1145, 1175) and 0044 (2150 Customer Advances).
+  const NEW_CODES = ["1145", "1155", "1157", "1175", "2130", "2140", "2150", "4400", "4410", "6150", "6400", "6410"];
   const added = (await db.query<{ code: string }>(
     `select code from chart_of_accounts where company_id=$1 and code = any($2) order by code`, [co, NEW_CODES])).rows.map((r) => r.code);
   check(`${NEW_CODES.length} new system accounts added`, added.length === NEW_CODES.length, added.join(","));

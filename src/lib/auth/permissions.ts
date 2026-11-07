@@ -103,6 +103,8 @@ export const ACTIONS = [
   "settle",
   "revalue",
   "enter_rate",
+  // Payment-first sales: run approved orders truck by truck
+  "fulfil",
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -140,7 +142,7 @@ export const PERMISSION_DEFS: PermissionDef[] = [
   ...p("dashboard", ["view"]),
   ...p("sales", [
     ...TXN_ACTIONS,
-    "view_cost", "override_price", "sell_below_cost", "receive_payment", "create_return",
+    "view_cost", "override_price", "sell_below_cost", "receive_payment", "create_return", "fulfil",
   ]),
   ...p("purchases", [...TXN_ACTIONS, "view_cost", "record_payment", "create_return"]),
   ...p("other_income", TXN_ACTIONS),
@@ -214,13 +216,13 @@ export const ROLE_DEFS: RoleDef[] = [
   {
     code: "DIRECTOR",
     name: "Branch Manager",
-    description: "Runs a branch and approves its sales orders.",
+    description: "Runs a branch; verifies payment and approves its sales.",
     isSystem: true,
     isProtected: false,
     permissions: [
       "dashboard.view",
       "sales.view", "sales.create", "sales.edit_draft", "sales.post", "sales.approve", "sales.export", "sales.void",
-      "sales.view_cost", "sales.override_price", "sales.receive_payment", "sales.create_return",
+      "sales.view_cost", "sales.override_price", "sales.receive_payment", "sales.create_return", "sales.fulfil",
       "purchases.view", "purchases.create", "purchases.edit_draft", "purchases.post", "purchases.approve", "purchases.export", "purchases.void",
       "purchases.view_cost", "purchases.record_payment", "purchases.create_return",
       "other_income.view", "other_income.create", "other_income.edit_draft", "other_income.post", "other_income.approve", "other_income.export",
@@ -277,12 +279,12 @@ export const ROLE_DEFS: RoleDef[] = [
   {
     code: "SALES_MANAGER",
     name: "Sales Manager",
-    description: "Leads the sales team: orders, customers, payments and sales reports.",
+    description: "Leads the sales team: verifies payment and approves sales, customers and sales reports.",
     isSystem: true,
     isProtected: false,
     permissions: [
       "dashboard.view",
-      "sales.view", "sales.create", "sales.edit_draft", "sales.export",
+      "sales.view", "sales.create", "sales.edit_draft", "sales.export", "sales.approve", "sales.fulfil",
       "sales.override_price", "sales.receive_payment", "sales.create_return",
       "inventory.view", "inventory.view_kardex", "kardex.view",
       "reports.view", "reports.export", "reports.view_receivables",
@@ -291,15 +293,15 @@ export const ROLE_DEFS: RoleDef[] = [
   },
   {
     code: "CASHIER",
-    name: "Sales / Cashier",
-    description: "Creates sales orders with proof of payment and receives payments.",
+    name: "Sales Officer",
+    description: "Submits sales requests with payment evidence and fulfils approved orders truck by truck.",
     isSystem: true,
     isProtected: false,
     permissions: [
       "dashboard.view",
-      "sales.view", "sales.create", "sales.edit_draft", "sales.post", "sales.receive_payment",
+      "sales.view", "sales.create", "sales.edit_draft", "sales.post", "sales.receive_payment", "sales.fulfil",
       "inventory.view", "inventory.view_kardex", "kardex.view",
-      "documents.upload",
+      "documents.upload", "documents.view_licence", "promotions.view",
     ],
   },
   {
