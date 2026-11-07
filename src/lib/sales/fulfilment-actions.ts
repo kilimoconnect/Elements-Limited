@@ -401,3 +401,31 @@ async function rpcAction(permission: string, fn: string, args: Record<string, un
     return res;
   } catch (e) { return fail(e); }
 }
+
+/* ------------------------------------------------------------------ customers */
+
+export interface QuickCustomerInput { branchId: string; name: string; phone: string; email?: string; tin?: string; vat?: string; address?: string; type?: string }
+
+/** Sales Officer adds a customer missing from the list; the database refuses duplicates (name, phone, TIN, email). */
+export async function createCustomerQuick(input: QuickCustomerInput): Promise<RpcResult & { customer?: { id: string; code: string; name: string } }> {
+  try {
+    const user = await assertActiveUser();
+    assertPermission(user, "sales.create");
+    const ctx = await getActiveContext();
+    assertBranchAccess(user, input.branchId);
+    const res = await callPostingRpc("create_customer_quick", {
+      p_company: ctx.companyId, p_branch: input.branchId, p_user: user.id, p_name: input.name, p_phone: input.phone,
+      p_email: input.email ?? null, p_tin: input.tin ?? null, p_vat: input.vat ?? null, p_address: input.address ?? null, p_type: input.type ?? null,
+    });
+    if (!res.ok || !res.id) {
+      // A unique index can also catch a near-simultaneous duplicate.
+      if (/customers_unique_/.test(res.error ?? "")) return { ok: false, error: "This customer already exists. Select it from the list." };
+      return res;
+    }
+    const admin = createAdminClient();
+    const { data: c } = await admin.from("customers").select("id, code, name").eq("id", res.id).single();
+    await writeAuditLog({ userId: user.id, companyId: ctx.companyId, branchId: input.branchId, action: "customer.create", resourceType: "customer", resourceId: res.id });
+    revalidatePath("/sales/new");
+    return { ok: true, id: res.id, customer: c ?? undefined };
+  } catch (e) { return fail(e); }
+}

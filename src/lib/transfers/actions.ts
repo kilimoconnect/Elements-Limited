@@ -420,3 +420,21 @@ export async function issueDeliveryNote(tripId: string): Promise<RpcResult & { v
     return { ok: true, id: row.version_id, version: row.version_no };
   } catch (e) { return fail(e); }
 }
+
+/** Changes only the destination branch of a transfer that has not been received yet. */
+export async function changeTransferRoute(transferId: string, destinationId: string, reason: string): Promise<RpcResult> {
+  try {
+    const { user, ctx, admin } = await ctxFor("inventory.transfer_dispatch");
+    const { data: t } = await admin.from("stock_transfers").select("company_id, source_branch_id, destination_branch_id").eq("id", transferId).maybeSingle();
+    if (!t || t.company_id !== ctx.companyId) return { ok: false, error: "Transfer not found." };
+    if (!reason?.trim()) return { ok: false, error: "A reason is required." };
+    const res = await callPostingRpc("change_transfer_destination", { p_transfer: transferId, p_user: user.id, p_destination: destinationId, p_reason: reason.trim() });
+    if (res.ok) {
+      await writeAuditLog({ userId: user.id, companyId: ctx.companyId, branchId: t.source_branch_id, action: "stock_transfer.change_route",
+        resourceType: "stock_transfer", resourceId: transferId, reason: reason.trim(),
+        oldValues: { destination_branch_id: t.destination_branch_id }, newValues: { destination_branch_id: destinationId } });
+      revalidatePath("/inventory/transfers"); revalidatePath(`/inventory/transfers/${transferId}`);
+    }
+    return { ...res, id: transferId };
+  } catch (e) { return fail(e); }
+}

@@ -16,6 +16,7 @@ import { DocStatusBadge } from "@/components/common/doc-status-badge";
 import { AttachmentsPanel } from "@/components/common/attachments-panel";
 import type { AttachmentCategory } from "@/lib/attachments/policy";
 import { TransferActions, type TLine } from "./transfer-actions";
+import { ChangeRouteButton } from "./change-route";
 import { isHeadOfficeUser, transferGrnGroups } from "@/lib/transfers/grn-data";
 import { canUseLicenceNumber } from "@/lib/transfers/licence";
 import { TripActions, ResolveButton, ChargeForm, ChargeRowActions } from "./transfer-file";
@@ -75,6 +76,13 @@ export default async function TransferDetailPage(props: { params: Params }) {
   const remainingToDispatch = ls.some((l) => N(l.qty_requested) > N(l.qty_dispatched));
   const tripOpts = tripsList.filter((x) => x.status !== "voided").map((x) => ({ id: x.id, label: x.document_number ?? `Trip ${x.trip_no} (draft)` }));
   const legacy = !t.posts_in_transit;
+  // Route (destination) can change until anything arrives or is received.
+  const canChangeRoute = canDispatch && ["draft", "dispatched"].includes(t.status) && rcs.length === 0
+    && !tripsList.some((x) => x.status === "arrived" || x.status === "received");
+  const routeBranches = canChangeRoute
+    ? ((await admin.from("branches").select("id, code, name").eq("company_id", ctx.companyId).eq("is_active", true).order("name")).data ?? [])
+        .filter((b) => b.id !== t.source_branch_id && b.id !== t.destination_branch_id)
+    : [];
   const tripCats: AttachmentCategory[] = ["loading_photo", "cargo_papers", "weighbridge_ticket", "signed_delivery_note", "offloading_photo", "other",
     ...(canLicencePhoto ? ["driver_licence" as const] : []), ...(can(ctx.user, "documents.view_financial") ? ["transport_invoice" as const] : [])];
 
@@ -86,6 +94,9 @@ export default async function TransferDetailPage(props: { params: Params }) {
         description={`${t.source?.code} — ${t.source?.name} → ${t.dest?.code} — ${t.dest?.name}${isSender && isReceiver ? "" : isSender ? " · you are the sending branch" : " · you are the receiving branch"}`}
         actions={
           <div className="flex flex-wrap gap-2">
+            {canChangeRoute && routeBranches.length > 0 && (
+              <ChangeRouteButton transferId={id} current={`${t.dest?.name ?? ""}`} branches={routeBranches} dispatched={t.status === "dispatched"} />
+            )}
             {logistics && !legacy && canDispatch && remainingToDispatch && t.status !== "voided" &&
               <Button asChild variant="outline"><Link href={`/inventory/transfers/${id}/trips/new`}>New dispatch trip</Link></Button>}
             <TransferActions id={id} status={t.status} lines={tLines}

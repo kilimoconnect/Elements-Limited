@@ -371,6 +371,21 @@ async function main() {
       && await num(db, "select customer_receipt_available($1)", [r6]) === 0);
     check("a refunded receipt cannot be refunded again", (await err(db, "select refund_customer_advance($1,$2,$3,1,'x','x')", [r6, manager, bank])) !== "");
 
+    // ------------------------------------------------------------ Sales Officer creates customers, no duplicates
+    const qc = (name: string, phone: string, tin: string | null = null, email: string | null = null, by = officer) =>
+      err(db, "select create_customer_quick($1,$2,$3,$4,$5,$6,$7,null,null,null)", [co, hq, by, name, phone, email, tin]);
+    check("the Sales Officer creates a missing customer with an auto code",
+      (await qc("Mbeya Agro Dealers", "+255 754 123 456", "123-456-789", "info@mbeya-agro.tz")) === ""
+      && /^CUST-\d{4}$/.test(await one(db, "select code from customers where name='Mbeya Agro Dealers'")));
+    check("the same name (other case and spaces) is refused", /already exists.*same name/.test(await qc("  mbeya   AGRO dealers ", "0700 000 001")));
+    check("the same phone in another format is refused", /same phone/.test(await qc("Another Dealer", "0754123456")));
+    check("the same TIN is refused", /same TIN/.test(await qc("Third Dealer", "0700 000 002", "123456789")));
+    check("the same email is refused", /same email/.test(await qc("Fourth Dealer", "0700 000 003", null, "INFO@mbeya-agro.tz")));
+    check("a phone number is required", (await qc("No Phone Ltd", "")) !== "");
+    check("an auditor cannot create customers", (await qc("Auditor Customer", "0700 000 004", null, null, auditor)) !== "");
+    check("the database itself blocks a duplicate inserted another way",
+      (await err(db, "insert into customers(company_id, code, name) values ($1,'DUP-1','MBEYA agro dealers')", [co])) !== "");
+
     // ------------------------------------------------------------ ledger integrity
     check("every journal balances", await num(db, `select count(*) from (select je.id from journal_entries je join journal_lines jl on jl.journal_id = je.id
       where je.company_id=$1 group by je.id having sum(jl.debit) <> sum(jl.credit)) x`, [co]) === 0);

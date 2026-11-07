@@ -18,6 +18,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ProductPicker } from "@/components/common/product-picker";
 import type { ProductOpt, TaxOpt, AccountOpt, CustomerOpt } from "./sale-form";
+import { NewCustomerButton } from "./new-customer";
 
 export interface FundOpt { id: string; customer_id: string; document_number: string; reference: string | null; available: number; document_date: string }
 export interface RequestInitial {
@@ -47,6 +48,8 @@ export function RequestForm({
 }) {
   const router = useRouter();
   const [customerId, setCustomerId] = React.useState(initial?.customerId ?? "");
+  const [added, setAdded] = React.useState<CustomerOpt[]>([]);
+  const allCustomers = [...customers, ...added];
   const [contactName, setContactName] = React.useState(initial?.contactName ?? "");
   const [contactPhone, setContactPhone] = React.useState(initial?.contactPhone ?? "");
   const [mode, setMode] = React.useState<"collection" | "delivery">(initial?.mode ?? "collection");
@@ -95,7 +98,7 @@ export function RequestForm({
   const fundsUsed = round2(custFunds.reduce((s, f) => s + Number(useFunds[f.id] || 0), 0));
   const covered = round2(newPaid + fundsUsed);
 
-  const walkIn = !!customerId && customers.find((c) => c.id === customerId)?.is_protected === true;
+  const walkIn = !!customerId && allCustomers.find((c) => c.id === customerId)?.is_protected === true;
   const bought = new Map<string, number>();
   for (const l of lines) if (l.product_id && Number(l.quantity) > 0) bought.set(l.product_id, (bought.get(l.product_id) ?? 0) + Number(l.quantity));
   const freeNow = earnedFreeGoods(promotions.filter((r) => r.reward_timing === "current_order"), bought, todayISO(), walkIn || !customerId);
@@ -153,10 +156,13 @@ export function RequestForm({
       <div className="min-w-0 space-y-4">
         <Card>
           <CardContent className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 sm:p-5">
-            <div className="space-y-1.5 sm:col-span-2"><Label>Customer</Label>
+            <div className="space-y-1.5 sm:col-span-2">
+              <div className="flex items-center justify-between gap-2"><Label>Customer</Label>
+                <NewCustomerButton branchId={branchId} existing={allCustomers}
+                  onCreated={(c) => { setAdded([...added, { ...c, is_protected: false }]); setCustomerId(c.id); }} /></div>
               <Select value={customerId} onValueChange={setCustomerId}>
                 <SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger>
-                <SelectContent>{customers.filter((c) => !c.is_protected).map((c) => <SelectItem key={c.id} value={c.id}>{c.code} — {c.name}</SelectItem>)}</SelectContent>
+                <SelectContent>{allCustomers.filter((c) => !c.is_protected).map((c) => <SelectItem key={c.id} value={c.id}>{c.code} — {c.name}</SelectItem>)}</SelectContent>
               </Select></div>
             <div className="space-y-1.5"><Label>Contact person</Label><Input value={contactName} onChange={(e) => setContactName(e.target.value)} /></div>
             <div className="space-y-1.5"><Label>Contact phone</Label><Input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} /></div>
