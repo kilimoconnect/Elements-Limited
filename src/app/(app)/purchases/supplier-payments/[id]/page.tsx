@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePermissionPage } from "@/lib/auth/guards";
 import { getActiveContext } from "@/lib/context";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft } from "lucide-react";
 import { AttachmentsPanel } from "@/components/common/attachments-panel";
 import { Card, CardContent } from "@/components/ui/card";
 import { DocStatusBadge } from "@/components/common/doc-status-badge";
@@ -27,7 +30,8 @@ export default async function SupplierPaymentDetail(props: { params: Params }) {
   const p = pay as Record<string, unknown> as { document_number: string | null; document_status: string; document_date: string; amount: number; reference: string | null; void_reason: string | null; supplier: { name: string } | null; branch: { name: string } | null };
 
   return (
-    <div>
+    <div className="space-y-4">
+      <Button asChild variant="outline" size="sm"><Link href="/purchases/supplier-payments"><ArrowLeft className="h-4 w-4" /> Back to supplier payments</Link></Button>
       <PageHeader title={p.document_number ?? "Supplier payment"} description={`${p.supplier?.name} · ${formatDate(p.document_date)}`} />
       <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card><CardContent className="space-y-2 p-5 text-sm">
@@ -43,7 +47,10 @@ export default async function SupplierPaymentDetail(props: { params: Params }) {
           <div className="space-y-1 text-sm">{(allocs ?? []).map((a, i) => { const aa = a as unknown as { amount: number; payable: { purchase: { document_number: string } | null; expense: { document_number: string } | null } | null }; const num = aa.payable?.purchase?.document_number ?? aa.payable?.expense?.document_number ?? "—"; return <div key={i} className="flex justify-between"><span className="text-muted-foreground">{num}</span><span className="tabular-nums">{formatMoney(aa.amount)}</span></div>; })}</div>
         </CardContent></Card>
       </div>
-      <AttachmentsPanel ownerType="supplier_payment" ownerId={id} categories={["proof_of_payment", "other"]} />
+      <div className="space-y-1">
+        <p className="text-sm font-medium">Proof of payment</p>
+        <AttachmentsPanel ownerType="supplier_payment" ownerId={id} categories={["proof_of_payment", "other"]} />
+      </div>
     </div>
   );
 }

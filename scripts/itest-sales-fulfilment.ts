@@ -461,6 +461,25 @@ async function main() {
     check("the database itself blocks a duplicate inserted another way",
       (await err(db, "insert into customers(company_id, code, name) values ($1,'DUP-1','MBEYA agro dealers')", [co])) !== "");
 
+    // ------------------------------------------------------------ customer receipt: proof files and void of an advance
+    const rqV = await mkRequest([{ product: prod, qty: 1, price: 1000 }], [{ account: bank, amount: 1180, ref: "NMB-VOID" }]);
+    await db.query("select submit_sales_request($1,$2)", [rqV, officer]);
+    const soV = await approve(rqV, manager, await verifyAll(rqV));
+    const rV = await one(db, "select id from customer_receipts where reference='NMB-VOID'");
+    await db.query("update feature_flags set is_enabled=true where company_id=$1 and flag_key='attachments'", [co]);
+    for (let i = 1; i <= 2; i++) {
+      await db.query("select register_attachment($1,'customer_receipt',$2,'proof_of_payment',$3,$4,$4,'application/pdf',1000,$5)",
+        [owner, rV, `${co}/customer_receipt/${rV}/p${i}.pdf`, `p${i}.pdf`, String(i + 4).repeat(64)]);
+    }
+    check("a customer receipt holds several proof-of-payment files",
+      await num(db, "select count(*) from document_attachments where owner_type='customer_receipt' and owner_id=$1", [rV]) === 2);
+    const adv0 = await bal("2150"), ar0 = await bal("1140");
+    await db.query("select void_customer_receipt($1,$2,'cheque bounced')", [rV, owner]);
+    check("voiding a customer advance reverses Customer Advances (not receivables) and holds its order",
+      await bal("2150") === adv0 + 1180 && await bal("1140") === ar0
+      && await one<boolean>(db, "select on_hold from sales_orders where id=$1", [soV]) === true
+      && await one(db, "select document_status from customer_receipts where id=$1", [rV]) === "voided");
+
     // ------------------------------------------------------------ ledger integrity
     check("every journal balances", await num(db, `select count(*) from (select je.id from journal_entries je join journal_lines jl on jl.journal_id = je.id
       where je.company_id=$1 group by je.id having sum(jl.debit) <> sum(jl.credit)) x`, [co]) === 0);

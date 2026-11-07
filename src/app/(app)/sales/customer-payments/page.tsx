@@ -12,6 +12,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { ReceiptActions } from "./receipt-actions";
+import { ClickableRow } from "@/components/common/clickable-row";
 
 export const metadata: Metadata = { title: "Customer Payments" };
 
@@ -33,7 +34,7 @@ export default async function CustomerPaymentsPage() {
     <div>
       <PageHeader
         title="Customer Payments"
-        description="Receipts against outstanding invoices."
+        description="Payments received from customers. Open one to see what it paid and its proof of payment."
         actions={can(ctx.user, "sales.receive_payment") && <Button asChild><Link href="/sales/customer-payments/new">Receive Payment</Link></Button>}
       />
       {list.length === 0 ? (
@@ -55,7 +56,7 @@ export default async function CustomerPaymentsPage() {
             </TableHeader>
             <TableBody>
               {list.map((r) => (
-                <TableRow key={r.id}>
+                <ClickableRow key={r.id} href={`/sales/customer-payments/${r.id}`}>
                   <TableCell className="font-mono text-xs">{r.document_number ?? "—"}</TableCell>
                   <TableCell className="text-sm">{formatDate(r.document_date)}</TableCell>
                   <TableCell className="text-sm">{r.customer?.name}</TableCell>
@@ -64,7 +65,7 @@ export default async function CustomerPaymentsPage() {
                   <TableCell className="text-right tabular-nums">{formatMoney(r.amount)}</TableCell>
                   <TableCell><DocStatusBadge status={r.document_status} /></TableCell>
                   <TableCell className="text-right"><ReceiptActions id={r.id} status={r.document_status} canVoid={canVoid} /></TableCell>
-                </TableRow>
+                </ClickableRow>
               ))}
             </TableBody>
           </Table>
