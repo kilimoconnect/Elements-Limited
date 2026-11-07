@@ -10,6 +10,7 @@ import { formatMoney, formatDate, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NewSupplierButton } from "@/components/common/new-supplier";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -40,6 +41,8 @@ export function PurchaseForm({
 }) {
   const router = useRouter();
   const [supplierId, setSupplierId] = React.useState("");
+  const [addedSuppliers, setAddedSuppliers] = React.useState<SupplierOpt[]>([]);
+  const allSuppliers = [...suppliers, ...addedSuppliers];
   const [date, setDate] = React.useState(todayISO());
   const [invDate, setInvDate] = React.useState("");
   const [invNo, setInvNo] = React.useState("");
@@ -117,10 +120,13 @@ export function PurchaseForm({
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
       <div className="space-y-4">
         <Card><CardContent className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
-          <div className="space-y-1.5"><Label>Supplier *</Label>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2"><Label>Supplier *</Label>
+              <NewSupplierButton branchId={branchId} existing={allSuppliers}
+                onCreated={(x) => { setAddedSuppliers([...addedSuppliers, x]); setSupplierId(x.id); setAdvApply({}); }} /></div>
             <Select value={supplierId} onValueChange={(v) => { setSupplierId(v); setAdvApply({}); }}>
               <SelectTrigger><SelectValue placeholder="Select supplier" /></SelectTrigger>
-              <SelectContent>{suppliers.map((s) => <SelectItem key={s.id} value={s.id}>{s.code} — {s.name}</SelectItem>)}</SelectContent>
+              <SelectContent>{allSuppliers.map((s) => <SelectItem key={s.id} value={s.id}>{s.code} — {s.name}</SelectItem>)}</SelectContent>
             </Select></div>
           <div className="space-y-1.5"><Label>Purchase date</Label><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
           <div className="space-y-1.5"><Label>Supplier invoice no.</Label><Input value={invNo} onChange={(e) => setInvNo(e.target.value)} /></div>

@@ -4,6 +4,7 @@ import { requirePermissionPage } from "@/lib/auth/guards";
 import { getActiveContext } from "@/lib/context";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PageHeader } from "@/components/ui/page-header";
+import { AttachmentsPanel } from "@/components/common/attachments-panel";
 import { Card, CardContent } from "@/components/ui/card";
 import { DocStatusBadge } from "@/components/common/doc-status-badge";
 import { formatMoney, formatDate } from "@/lib/format";
@@ -42,6 +43,7 @@ export default async function SupplierPaymentDetail(props: { params: Params }) {
           <div className="space-y-1 text-sm">{(allocs ?? []).map((a, i) => { const aa = a as unknown as { amount: number; payable: { purchase: { document_number: string } | null; expense: { document_number: string } | null } | null }; const num = aa.payable?.purchase?.document_number ?? aa.payable?.expense?.document_number ?? "—"; return <div key={i} className="flex justify-between"><span className="text-muted-foreground">{num}</span><span className="tabular-nums">{formatMoney(aa.amount)}</span></div>; })}</div>
         </CardContent></Card>
       </div>
+      <AttachmentsPanel ownerType="supplier_payment" ownerId={id} categories={["proof_of_payment", "other"]} />
     </div>
   );
 }

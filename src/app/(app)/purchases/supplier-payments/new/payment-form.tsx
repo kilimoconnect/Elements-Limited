@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import { createAndPostSupplierPayment } from "@/lib/purchases/actions";
+import { uploadAttachmentFile } from "@/lib/attachments/client-upload";
+import { FilePickerList, tooBig, type PickedFile } from "@/components/common/file-picker-list";
 import { round2 } from "@/lib/sales/calc";
 import { formatMoney, formatDate, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -40,6 +42,7 @@ export function SupplierPaymentForm({ branchId, suppliers, accounts, initialSupp
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
+  const owed = (x: SupplierWithPayables) => round2(x.payables.reduce((t, p) => t + Number(p.outstanding), 0));
   const isFc = currency !== "TZS";
   const supplier = suppliers.find((s) => s.id === supplierId);
   const payables = (supplier?.payables ?? []).filter((p) => p.currency === currency);
@@ -62,8 +65,12 @@ export function SupplierPaymentForm({ branchId, suppliers, accounts, initialSupp
   }).filter(Boolean) as { id: string; released: number; paid: number; fx: number }[] : [];
   const fxPreview = round2(preview.reduce((s, p) => s + p.fx, 0));
 
+  const [files, setFiles] = React.useState<PickedFile<"proof_of_payment" | "other">[]>([]);
+
   async function submit() {
     setError(null);
+    const big = tooBig(files);
+    if (big) { setError(`${big.file.name} is larger than 20 MB.`); return; }
     if (!supplierId) { setError("Select a supplier."); return; }
     if (allocTotal <= 0 && adv <= 0) { setError("Allocate to at least one invoice or record an advance."); return; }
     if (fundTotal <= 0) { setError("Enter the TZS amount actually paid."); return; }
@@ -79,7 +86,17 @@ export function SupplierPaymentForm({ branchId, suppliers, accounts, initialSupp
       advanceAmount: adv, bankCharges: Number(charges || 0), bankChargesAccountId: Number(charges || 0) > 0 ? chargesAccount : null, requestId,
     });
     setPending(false);
-    if (res.ok) { toast.success("Supplier payment recorded."); setRequestId(newRequestId()); router.push("/purchases/supplier-payments"); }
+    if (res.ok) {
+      // Proof of payment and other documents go onto the posted payment.
+      let failed = 0;
+      for (const f of files) {
+        const up = res.id ? await uploadAttachmentFile({ ownerType: "supplier_payment", ownerId: res.id, category: f.category, file: f.file }) : { ok: false, error: "no id" };
+        if (!up.ok) { failed++; toast.error(`${f.file.name} did not upload: ${up.error}`); }
+      }
+      toast.success(files.length && !failed ? `Supplier payment recorded with ${files.length} file${files.length === 1 ? "" : "s"}.` : "Supplier payment recorded.");
+      setRequestId(newRequestId());
+      router.push(res.id ? `/purchases/supplier-payments/${res.id}` : "/purchases/supplier-payments");
+    }
     else setError(res.error ?? "Failed.");
   }
 
@@ -89,7 +106,7 @@ export function SupplierPaymentForm({ branchId, suppliers, accounts, initialSupp
         <div className="space-y-1.5"><Label>Supplier</Label>
           <Select value={supplierId} onValueChange={(v) => { setSupplierId(v); setAlloc({}); setCurrency("TZS"); }}>
             <SelectTrigger><SelectValue placeholder="Select supplier" /></SelectTrigger>
-            <SelectContent>{suppliers.map((s) => <SelectItem key={s.id} value={s.id}>{s.code} — {s.name}</SelectItem>)}</SelectContent>
+            <SelectContent>{suppliers.map((s) => <SelectItem key={s.id} value={s.id}>{s.code} — {s.name}{owed(s) > 0 ? ` · owed ${formatMoney(owed(s))}` : ""}</SelectItem>)}</SelectContent>
           </Select></div>
         <div className="space-y-1.5"><Label>Invoice currency</Label>
           <Select value={currency} onValueChange={(v) => { setCurrency(v); setAlloc({}); setAdvance(""); }}>
@@ -99,6 +116,23 @@ export function SupplierPaymentForm({ branchId, suppliers, accounts, initialSupp
         <div className="space-y-1.5"><Label>Payment date</Label><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
         <div className="space-y-1.5"><Label>Reference</Label><Input value={reference} onChange={(e) => setReference(e.target.value)} /></div>
       </CardContent></Card>
+
+      {supplier && (() => {
+        const openNow = round2(payables.reduce((t, p) => t + Number(isFc ? p.fc_outstanding : p.outstanding), 0));
+        const after = round2(Math.max(openNow - allocTotal, 0));
+        return (
+          <Card><CardContent className="grid grid-cols-1 gap-3 p-4 text-sm sm:grid-cols-4">
+            <div><p className="text-xs text-muted-foreground">Outstanding with {supplier.name}</p>
+              <p className="text-lg font-semibold tabular-nums">{formatMoney(openNow, isFc ? currency : undefined)}</p>
+              <p className="text-xs text-muted-foreground">{payables.length} open {currency} {payables.length === 1 ? "invoice" : "invoices"}</p></div>
+            <div><p className="text-xs text-muted-foreground">Paying now</p><p className="text-lg font-semibold tabular-nums">{formatMoney(allocTotal, isFc ? currency : undefined)}</p></div>
+            <div><p className="text-xs text-muted-foreground">Outstanding after this payment</p><p className={`text-lg font-semibold tabular-nums ${after > 0 ? "text-destructive" : "text-success"}`}>{formatMoney(after, isFc ? currency : undefined)}</p></div>
+            <div className="flex items-end">{payables.length > 0 && (
+              <Button type="button" variant="outline" size="sm" onClick={() => setAlloc(Object.fromEntries(payables.map((p) => [p.payable_id, String(isFc ? p.fc_outstanding : p.outstanding)])))}>Pay all outstanding</Button>
+            )}</div>
+          </CardContent></Card>
+        );
+      })()}
 
       {supplier ? (payables.length === 0 ? <EmptyState title={`No open ${currency} invoices for this supplier`} description="You can still record an advance (prepayment) below." /> : (
         <Card><CardContent className="p-0">
@@ -157,6 +191,11 @@ export function SupplierPaymentForm({ branchId, suppliers, accounts, initialSupp
             </div>
           ))}
         </div>
+      </CardContent></Card>
+
+      <Card><CardContent className="p-5">
+        <FilePickerList id="supplier-payment-files" label="Proof of payment and documents" value={files} onChange={setFiles}
+          categories={[{ value: "proof_of_payment", label: "Proof of payment" }, { value: "other", label: "Other document" }]} />
       </CardContent></Card>
 
       <div className="flex flex-wrap items-center justify-between gap-2">

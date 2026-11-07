@@ -12,7 +12,7 @@ export const SIGNED_URL_TTL_SECONDS = 60;
 export const OWNER_TYPES = [
   "import_shipment", "import_receipt", "cost_invoice", "purchase",
   "stock_transfer", "stock_transfer_receipt", "rebag_order", "stock_transfer_dispatch",
-  "sale", "sales_request", "sales_shipment",
+  "sale", "sales_request", "sales_shipment", "supplier_payment",
 ] as const;
 export type OwnerType = (typeof OWNER_TYPES)[number];
 

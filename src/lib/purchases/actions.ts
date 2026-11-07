@@ -401,7 +401,7 @@ export async function createAndPostSupplierPayment(input: {
     } else {
       await admin.from("supplier_payments").delete().eq("id", pid);
     }
-    return res;
+    return res.ok ? { ...res, id: pid } : res;
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "Failed." }; }
 }
 

@@ -186,7 +186,7 @@ export default async function PurchaseDetailPage(props: { params: Params }) {
             </div>
           ))}
           {can(ctx.user, "purchases.post") && <LandedCostForm purchaseId={id} canPostInvoice={can(ctx.user, "cost_invoices.post")}
-            suppliers={(costSuppliers ?? []).map((x) => ({ id: x.id, label: `${x.code} — ${x.name}` }))}
+            branchId={(pur as { branch_id: string }).branch_id} suppliers={(costSuppliers ?? []).map((x) => ({ id: x.id, code: x.code, name: x.name }))}
             categories={(costCats ?? []).map((c) => ({ id: c.id, label: `${c.code} — ${c.name}`, capitalise: c.inventory_treatment === "capitalize" }))} />}
           {((adjustments ?? []) as { id: string; kind: string; document_number: string | null; document_date: string; supplier_reference: string | null; reason: string; total: number; credit_created: number }[]).map((a) => (
             <div key={a.id} className="flex justify-between border-b border-border py-1 last:border-0">

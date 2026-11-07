@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { todayISO } from "@/lib/format";
+import { NewSupplierButton } from "@/components/common/new-supplier";
 
 const rid = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}-adj`);
 const today = () => todayISO();
@@ -25,10 +26,12 @@ function useRun() {
   return { pending, run };
 }
 
-export function LandedCostForm({ purchaseId, categories, suppliers, canPostInvoice }: {
-  purchaseId: string; categories: { id: string; label: string; capitalise: boolean }[];
-  suppliers: { id: string; label: string }[]; canPostInvoice: boolean;
+export function LandedCostForm({ purchaseId, branchId, categories, suppliers, canPostInvoice }: {
+  purchaseId: string; branchId: string; categories: { id: string; label: string; capitalise: boolean }[];
+  suppliers: { id: string; code: string; name: string }[]; canPostInvoice: boolean;
 }) {
+  const [added, setAdded] = React.useState<{ id: string; code: string; name: string }[]>([]);
+  const allSuppliers = [...suppliers, ...added];
   const { pending, run } = useRun();
   const blank = { category: categories[0]?.id ?? "", supplier: "", invoice: "", date: today(), due: "", description: "", amount: "", basis: "" };
   const [c, setC] = React.useState(blank);
@@ -41,9 +44,11 @@ export function LandedCostForm({ purchaseId, categories, suppliers, canPostInvoi
         <div className="space-y-1"><Label className="text-xs">Cost type</Label>
           <Select value={c.category} onValueChange={(v) => setC({ ...c, category: v })}><SelectTrigger className="h-8"><SelectValue placeholder="Category" /></SelectTrigger>
             <SelectContent>{categories.map((x) => <SelectItem key={x.id} value={x.id}>{x.label}{x.capitalise ? "" : " (expensed)"}</SelectItem>)}</SelectContent></Select></div>
-        <div className="space-y-1"><Label className="text-xs">Supplier {canPostInvoice && "*"}</Label>
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-2"><Label className="text-xs">Supplier {canPostInvoice && "*"}</Label>
+            <NewSupplierButton branchId={branchId} existing={allSuppliers} onCreated={(x) => { setAdded([...added, x]); setC({ ...c, supplier: x.id }); }} /></div>
           <Select value={c.supplier} onValueChange={(v) => setC({ ...c, supplier: v })}><SelectTrigger className="h-8"><SelectValue placeholder="Who is owed this cost" /></SelectTrigger>
-            <SelectContent>{suppliers.map((x) => <SelectItem key={x.id} value={x.id}>{x.label}</SelectItem>)}</SelectContent></Select></div>
+            <SelectContent>{allSuppliers.map((x) => <SelectItem key={x.id} value={x.id}>{x.code} — {x.name}</SelectItem>)}</SelectContent></Select></div>
         <div className="space-y-1"><Label className="text-xs">Supplier invoice no. {canPostInvoice && "*"}</Label>
           <Input className="h-8" value={c.invoice} onChange={(e) => setC({ ...c, invoice: e.target.value })} /></div>
         <div className="space-y-1"><Label className="text-xs">Invoice date</Label><Input className="h-8" type="date" value={c.date} onChange={(e) => setC({ ...c, date: e.target.value })} /></div>

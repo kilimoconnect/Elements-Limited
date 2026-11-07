@@ -102,6 +102,36 @@ async function main() {
     check("the supplier is owed 40,000",
       n(await one(db, "select coalesce(sum(outstanding),0) from supplier_payables where supplier_id=$1", [haul])) === 40000);
 
+    // ------------------------------------------------------------ quick supplier create, no duplicates
+    const qs = (name: string, phone: string | null, tin: string | null = null, email: string | null = null, by = owner) => (async () => {
+      await db.query("savepoint sp");
+      try { await db.query("select create_supplier_quick($1,$2,$3,$4,$5,$6,$7,null,null,null,0)", [co, hq, by, name, phone, email, tin]); await db.query("release savepoint sp"); return ""; }
+      catch (e) { await db.query("rollback to savepoint sp"); return (e as Error).message; }
+    })();
+    check("a missing supplier is created with an auto code",
+      (await qs("Mwanza Bags Ltd", "+255 765 111 222", "100-200-300", "sales@mwanzabags.tz")) === ""
+      && /^SUP-\d{4}$/.test(await one(db, "select code from suppliers where name='Mwanza Bags Ltd'")));
+    check("the same supplier name (other case and spaces) is refused", /already exists.*same name/.test(await qs("  MWANZA bags  ltd", null)));
+    check("the same phone in another format is refused", /same phone/.test(await qs("Other Bags", "0765111222")));
+    check("the same TIN is refused", /same TIN/.test(await qs("Third Bags", null, "100200300")));
+    check("the same email is refused", /same email/.test(await qs("Fourth Bags", null, null, "SALES@mwanzabags.tz")));
+    const cashier = await one(db, "insert into auth.users(email) values ('pc-cashier@test.local') returning id");
+    await db.query("insert into user_profiles(id, email, full_name, role_id, default_company_id, is_active) values ($1,'pc-cashier@test.local','Cashier',(select id from roles where code='CASHIER'),$2,true)", [cashier, co]);
+    await db.query("insert into user_company_access(user_id, company_id) values ($1,$2)", [cashier, co]);
+    await db.query("insert into user_branch_access(user_id, branch_id) values ($1,$2)", [cashier, hq]);
+    check("a Sales Officer cannot create suppliers", /not allowed/.test(await qs("Cashier Supplier", null, null, null, cashier)));
+
+    // ------------------------------------------------------------ proof of payment on supplier payments (several files)
+    const sp = await one(db, "insert into supplier_payments(company_id, branch_id, supplier_id, amount, reference) values ($1,$2,$3,1000,'PROOF-1') returning id", [co, hq, sup]);
+    for (let i = 1; i <= 3; i++) {
+      await db.query("select register_attachment($1,'supplier_payment',$2,'proof_of_payment',$3,$4,$4,'application/pdf',1000,$5)",
+        [owner, sp, `${co}/supplier_payment/${sp}/proof-${i}.pdf`, `proof-${i}.pdf`, String(i).repeat(64)]);
+    }
+    check("a supplier payment holds several proof-of-payment files",
+      Number(await one(db, "select count(*) from document_attachments where owner_type='supplier_payment' and owner_id=$1 and category='proof_of_payment'", [sp])) === 3);
+    check("a Sales Officer (no purchases access) cannot see them",
+      await one<boolean>(db, "select can_access_document_owner($1,'supplier_payment',$2)", [cashier, sp]) === false);
+
     check("every shilling of both costs is accounted for",
       n(await one(db, "select coalesce(sum(amount),0) from cost_delta_lines where src_id = any($1::uuid[])", [[sBags, sOther]])) === 150000);
     check("the ledger still balances", n(await one(db, `select count(*) from (select j.id from journal_entries j join journal_lines l on l.journal_id=j.id
