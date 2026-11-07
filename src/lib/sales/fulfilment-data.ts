@@ -70,7 +70,7 @@ export async function loadRequest(admin: Admin, user: CurrentUser, companyId: st
 export async function loadOrder(admin: Admin, user: CurrentUser, companyId: string, id: string) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const { data: o } = await admin.from("sales_orders")
-    .select("*, customer:customers(id, code, name, phone), branch:branches(code, name), request:sales_requests(id, document_number, created_by, submitted_by, submitted_at)")
+    .select("*, customer:customers(id, code, name, phone), branch:branches(code, name), request:sales_requests!sales_orders_request_id_fkey(id, document_number, created_by, submitted_by, submitted_at)")
     .eq("id", id).maybeSingle();
   if (!o || o.company_id !== companyId || !canSeeBranch(user, o.branch_id)) notFound();
   const [{ data: lines }, { data: funds }, { data: shipments }, { data: exceptions }, { data: amendments }, { data: events }] = await Promise.all([
