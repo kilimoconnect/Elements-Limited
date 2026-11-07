@@ -75,7 +75,7 @@ export default async function DashboardPage() {
 
   // ---- Phase 3 metrics ----
   const showBal = can(user, "cash_accounts.view_balance");
-  const [{ data: purchases }, { data: expensesData }, { data: incomeData }, { data: supPaysToday }, { data: payables }, { data: accounts }] =
+  const [{ data: purchases }, { data: expensesData }, { data: incomeData }, { data: supPaysToday }, { data: payables }, { data: accounts }, { data: costInvoices }] =
     await Promise.all([
       admin.from("purchases").select("document_date, grand_total").eq("company_id", companyId).eq("document_status", "posted"),
       admin.from("expenses").select("document_date, grand_total").eq("company_id", companyId).eq("document_status", "posted"),
@@ -83,11 +83,15 @@ export default async function DashboardPage() {
       admin.from("supplier_payments").select("amount").eq("company_id", companyId).eq("document_status", "posted").eq("document_date", today),
       admin.from("supplier_payables").select("outstanding").eq("company_id", companyId).in("status", ["open", "partial"]),
       admin.from("payment_accounts").select("id").eq("company_id", companyId).eq("is_active", true),
+      // Landed costs (freight, bags, transport...) posted as supplier cost invoices; credit notes reduce them.
+      admin.from("cost_invoices").select("document_date, grand_total, document_kind").eq("company_id", companyId).eq("document_status", "posted"),
     ]);
   const sum = (rows: { grand_total?: number; amount?: number; outstanding?: number }[] | null, field: "grand_total" | "amount" | "outstanding", filter?: (r: { document_date?: string }) => boolean) =>
     (rows ?? []).filter((r) => !filter || filter(r as { document_date?: string })).reduce((a, r) => a + Number((r as Record<string, number>)[field] ?? 0), 0);
-  const purToday = sum(purchases as never, "grand_total", (r) => r.document_date === today);
-  const purMonth = sum(purchases as never, "grand_total", (r) => (r.document_date ?? "") >= monthStart);
+  const landed = (costInvoices ?? []).map((c) => ({ document_date: c.document_date as string, grand_total: Number(c.grand_total) * (c.document_kind === "credit_note" ? -1 : 1) }));
+  const allPurchases = [...((purchases ?? []) as { document_date: string; grand_total: number }[]), ...landed];
+  const purToday = sum(allPurchases as never, "grand_total", (r) => r.document_date === today);
+  const purMonth = sum(allPurchases as never, "grand_total", (r) => (r.document_date ?? "") >= monthStart);
   const expToday = sum(expensesData as never, "grand_total", (r) => r.document_date === today);
   const expMonth = sum(expensesData as never, "grand_total", (r) => (r.document_date ?? "") >= monthStart);
   const incToday = sum(incomeData as never, "grand_total", (r) => r.document_date === today);
