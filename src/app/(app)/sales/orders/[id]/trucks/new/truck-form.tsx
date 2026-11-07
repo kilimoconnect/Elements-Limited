@@ -4,107 +4,107 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createShipment, type ShipmentHeaderInput } from "@/lib/sales/fulfilment-actions";
-import { formatQuantity } from "@/lib/format";
+import { formatQuantity, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
-interface L { id: string; description: string; sku: string; unit: string; remaining: number; approved: number; dispatched: number; allocated: number }
+interface L { id: string; description: string; sku: string; unit: string; remaining: number; kgPerUnit: number | null }
 
-export function TruckForm({ orderId, mode, defaults, lines }: {
-  orderId: string; mode: string; defaults: ShipmentHeaderInput; lines: L[];
+/** Truck details entered the same way as a transfer trip, plus the collector or consignee of the sale. */
+export function TruckForm({ orderId, mode, canLicence, defaults, lines }: {
+  orderId: string; mode: string; canLicence: boolean;
+  defaults: { destination: string; consignee_name: string; consignee_phone: string; dispatch_location: string }; lines: L[];
 }) {
   const router = useRouter();
-  const [h, setH] = React.useState<ShipmentHeaderInput>(defaults);
-  const [qty, setQty] = React.useState<Record<string, string>>({});
-  const [error, setError] = React.useState<string | null>(null);
+  const [qty, setQty] = React.useState<Record<string, string>>(Object.fromEntries(lines.map((l) => [l.id, l.remaining > 0 ? String(l.remaining) : "0"])));
+  const [f, setF] = React.useState({
+    dispatchDate: todayISO(), expected: "", driverName: "", driverPhone: "", driverLicence: "", vehicle: "", trailer: "",
+    transporter: "", transporterContact: "", notes: "",
+    collectorName: "", collectorPhone: "", collectorId: "",
+    destination: defaults.destination, consigneeName: defaults.consignee_name, consigneePhone: defaults.consignee_phone,
+  });
+  const [key] = React.useState(() => `truck:${orderId}:${crypto.randomUUID()}`);
   const [pending, setPending] = React.useState(false);
-  const [key] = React.useState(() => ({ current: `truck:${orderId}:${crypto.randomUUID()}` }));
-  const f = (k: keyof ShipmentHeaderInput) => ({ value: h[k] ?? "", onChange: (e: React.ChangeEvent<HTMLInputElement>) => setH({ ...h, [k]: e.target.value }) });
+  const [error, setError] = React.useState<string | null>(null);
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF({ ...f, [k]: e.target.value });
 
   const over = lines.filter((l) => Number(qty[l.id] || 0) > l.remaining + 0.00005);
   const total = lines.reduce((s, l) => s + Number(qty[l.id] || 0), 0);
+  const totalKg = lines.reduce((a, l) => a + Number(qty[l.id] || 0) * (l.kgPerUnit ?? 0), 0);
   const blockers: string[] = [];
-  if (total <= 0) blockers.push("Enter the quantity to load on this truck.");
+  if (total <= 0) blockers.push("Enter the quantity on this truck.");
   if (over.length) blockers.push(`More than the remaining balance for ${over.map((l) => l.sku).join(", ")}.`);
-  if (mode === "delivery" && !h.vehicle_registration?.trim()) blockers.push("Enter the vehicle registration.");
-  if (mode === "collection" && !h.collector_name?.trim() && !h.vehicle_registration?.trim()) blockers.push("Enter the collector or the vehicle.");
+  if (mode === "delivery" && !f.vehicle.trim()) blockers.push("Enter the truck registration.");
+  if (mode === "collection" && !f.collectorName.trim() && !f.vehicle.trim()) blockers.push("Enter the collector or the truck.");
 
   async function save() {
     setError(null); setPending(true);
-    const r = await createShipment(orderId, key.current, h, lines.map((l) => ({ order_line_id: l.id, qty: Number(qty[l.id] || 0) })));
+    const header: ShipmentHeaderInput = {
+      dispatch_location: defaults.dispatch_location, planned_dispatch_date: f.dispatchDate,
+      expected_arrival_at: f.expected ? new Date(f.expected).toISOString() : "",
+      driver_name: f.driverName, driver_phone: f.driverPhone, driver_licence: canLicence ? f.driverLicence : "",
+      vehicle_registration: f.vehicle, trailer_registration: f.trailer, transporter_name: f.transporter, transporter_contact: f.transporterContact,
+      notes: f.notes, collector_name: f.collectorName, collector_phone: f.collectorPhone, collector_id_number: f.collectorId,
+      destination: f.destination, consignee_name: f.consigneeName, consignee_phone: f.consigneePhone,
+    };
+    const r = await createShipment(orderId, key, header, lines.map((l) => ({ order_line_id: l.id, qty: Number(qty[l.id] || 0) })));
     if (!r.ok || !r.id) { setError(r.error ?? "Failed."); setPending(false); return; }
-    toast.success("Truck planned. Issue the loading order next.");
+    toast.success("Truck saved. Issue the loading order next.");
     router.push(`/sales/shipments/${r.id}`);
   }
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
-                <tr><th className="px-3 py-2 text-left">Product</th><th className="px-3 py-2 text-right">Approved</th><th className="px-3 py-2 text-right">Dispatched</th>
-                  <th className="px-3 py-2 text-right">On other trucks</th><th className="px-3 py-2 text-right">Remaining</th><th className="px-3 py-2 text-right">This truck</th></tr>
-              </thead>
-              <tbody>{lines.map((l) => (
-                <tr key={l.id} className="border-t border-border">
-                  <td className="px-3 py-2">{l.description}<span className="block text-xs text-muted-foreground">{l.sku}</span></td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatQuantity(l.approved)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatQuantity(l.dispatched)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatQuantity(l.allocated)}</td>
-                  <td className="px-3 py-2 text-right font-medium tabular-nums">{formatQuantity(l.remaining)} {l.unit}</td>
-                  <td className="px-3 py-2 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Input className={`h-8 w-24 text-right tabular-nums ${over.includes(l) ? "border-destructive" : ""}`} type="number" min="0" step="0.0001"
-                        value={qty[l.id] ?? ""} onChange={(e) => setQty({ ...qty, [l.id]: e.target.value })} disabled={l.remaining <= 0} />
-                      {l.remaining > 0 && <button type="button" className="text-xs text-primary hover:underline" onClick={() => setQty({ ...qty, [l.id]: String(l.remaining) })}>All</button>}
-                    </div>
-                  </td>
-                </tr>
-              ))}</tbody>
-            </table>
+      <Card><CardContent className="space-y-2 p-5">
+        <h3 className="font-semibold">Cargo on this truck</h3>
+        {lines.map((l) => (
+          <div key={l.id} className="flex flex-wrap items-center gap-3 text-sm">
+            <span className="w-72 truncate">{l.sku} — {l.description}</span>
+            <Input className={`h-8 w-32 text-right tabular-nums ${over.includes(l) ? "border-destructive" : ""}`} type="number" min="0" max={l.remaining} step="0.0001"
+              value={qty[l.id]} onChange={(e) => setQty({ ...qty, [l.id]: e.target.value })} disabled={l.remaining <= 0} />
+            <span className="text-xs text-muted-foreground">of {formatQuantity(l.remaining)} {l.unit} left{l.kgPerUnit ? ` · ${formatQuantity(Number(qty[l.id] || 0) * l.kgPerUnit)} kg` : ""}</span>
           </div>
-        </CardContent>
-      </Card>
+        ))}
+        <p className="text-xs text-muted-foreground">Total net kg {formatQuantity(totalKg)}</p>
+      </CardContent></Card>
 
-      <Card>
-        <CardContent className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 sm:p-5">
-          <p className="text-sm font-medium sm:col-span-2">Truck and transport</p>
-          <div className="space-y-1"><Label>Vehicle registration</Label><Input {...f("vehicle_registration")} /></div>
-          <div className="space-y-1"><Label>Trailer registration</Label><Input {...f("trailer_registration")} /></div>
-          <div className="space-y-1"><Label>Transporter</Label><Input {...f("transporter_name")} /></div>
-          <div className="space-y-1"><Label>Transporter contact</Label><Input {...f("transporter_contact")} /></div>
-          <div className="space-y-1"><Label>Driver</Label><Input {...f("driver_name")} /></div>
-          <div className="space-y-1"><Label>Driver phone</Label><Input {...f("driver_phone")} /></div>
-          <div className="space-y-1"><Label>Driver licence number</Label><Input {...f("driver_licence")} /></div>
-          <div className="space-y-1"><Label>Loading point</Label><Input {...f("dispatch_location")} /></div>
-          <div className="space-y-1"><Label>Planned loading date</Label><Input type="date" {...f("planned_loading_date")} /></div>
-          <div className="space-y-1"><Label>Planned dispatch date</Label><Input type="date" {...f("planned_dispatch_date")} /></div>
-          {mode === "collection" ? (
-            <>
-              <p className="pt-2 text-sm font-medium sm:col-span-2">Collector (authorised by the customer)</p>
-              <div className="space-y-1"><Label>Collector name</Label><Input {...f("collector_name")} /></div>
-              <div className="space-y-1"><Label>Collector phone</Label><Input {...f("collector_phone")} /></div>
-              <div className="space-y-1"><Label>Collector ID number</Label><Input {...f("collector_id_number")} /></div>
-            </>
-          ) : (
-            <>
-              <p className="pt-2 text-sm font-medium sm:col-span-2">Delivery</p>
-              <div className="space-y-1 sm:col-span-2"><Label>Destination</Label><Input {...f("destination")} /></div>
-              <div className="space-y-1"><Label>Consignee</Label><Input {...f("consignee_name")} /></div>
-              <div className="space-y-1"><Label>Consignee phone</Label><Input {...f("consignee_phone")} /></div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+      <Card><CardContent className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-3">
+        <div className="space-y-1.5"><Label>Dispatch date</Label><Input type="date" value={f.dispatchDate} onChange={set("dispatchDate")} /></div>
+        <div className="space-y-1.5"><Label>Expected arrival</Label><Input type="datetime-local" value={f.expected} onChange={set("expected")} /></div>
+        <div />
+        <div className="space-y-1.5"><Label>Driver name</Label><Input value={f.driverName} onChange={set("driverName")} /></div>
+        <div className="space-y-1.5"><Label>Driver phone</Label><Input value={f.driverPhone} onChange={set("driverPhone")} /></div>
+        {canLicence ? <div className="space-y-1.5"><Label>Licence number</Label><Input value={f.driverLicence} onChange={set("driverLicence")} /></div>
+          : <p className="text-xs text-muted-foreground sm:pt-7">Licence details are recorded by users allowed to see them.</p>}
+        <div className="space-y-1.5"><Label>Truck registration</Label><Input value={f.vehicle} onChange={set("vehicle")} /></div>
+        <div className="space-y-1.5"><Label>Trailer registration</Label><Input value={f.trailer} onChange={set("trailer")} /></div>
+        <div />
+        <div className="space-y-1.5"><Label>Transporter company</Label><Input value={f.transporter} onChange={set("transporter")} /></div>
+        <div className="space-y-1.5"><Label>Transporter contact</Label><Input value={f.transporterContact} onChange={set("transporterContact")} /></div>
+        <div />
+        {mode === "collection" ? (
+          <>
+            <div className="space-y-1.5"><Label>Collector name</Label><Input value={f.collectorName} onChange={set("collectorName")} /></div>
+            <div className="space-y-1.5"><Label>Collector phone</Label><Input value={f.collectorPhone} onChange={set("collectorPhone")} /></div>
+            <div className="space-y-1.5"><Label>Collector ID number</Label><Input value={f.collectorId} onChange={set("collectorId")} /></div>
+          </>
+        ) : (
+          <>
+            <div className="space-y-1.5"><Label>Destination</Label><Input value={f.destination} onChange={set("destination")} /></div>
+            <div className="space-y-1.5"><Label>Consignee</Label><Input value={f.consigneeName} onChange={set("consigneeName")} /></div>
+            <div className="space-y-1.5"><Label>Consignee phone</Label><Input value={f.consigneePhone} onChange={set("consigneePhone")} /></div>
+          </>
+        )}
+        <div className="space-y-1.5 sm:col-span-3"><Label>Notes</Label><Textarea value={f.notes} onChange={set("notes")} /></div>
+      </CardContent></Card>
 
-      {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
-      <div className="flex flex-wrap items-center gap-3">
-        <Button onClick={save} disabled={pending || blockers.length > 0}>{pending ? "Working..." : "Plan truck"}</Button>
+      <div className="flex flex-wrap items-center justify-end gap-2">
         {blockers.length > 0 && <span className="text-xs text-muted-foreground">{blockers.join(" ")}</span>}
+        {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+        <Button onClick={save} disabled={pending || blockers.length > 0}>{pending ? "Saving..." : "Save truck"}</Button>
       </div>
     </div>
   );

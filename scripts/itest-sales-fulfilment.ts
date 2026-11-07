@@ -371,6 +371,22 @@ async function main() {
       && await num(db, "select customer_receipt_available($1)", [r6]) === 0);
     check("a refunded receipt cannot be refunded again", (await err(db, "select refund_customer_advance($1,$2,$3,1,'x','x')", [r6, manager, bank])) !== "");
 
+    // ------------------------------------------------------------ GRNs for trucks sold from Head Office
+    const sup = await one(db, "insert into suppliers(company_id, code, name) values ($1,'SF-SUP','Urea Imports Ltd') returning id", [co]);
+    const pu = await one(db, "insert into purchases(company_id, branch_id, supplier_id, document_date, due_date, supplier_invoice_number, created_by) values ($1,$2,$3,current_date,current_date,'SF-INV-1',$4) returning id", [co, hq, sup, owner]);
+    await db.query("insert into purchase_lines(purchase_id, product_id, quantity, unit_cost, tax_rate, is_recoverable, track_inventory, line_no) values ($1,$2,1,500000,0,true,true,1)", [pu, prod]);
+    await db.query("select post_purchase($1,$2,null)", [pu, owner]);
+    check("a Head Office truck's goods are grouped by their supplier",
+      await one(db, "select supplier_id from sales_shipment_line_suppliers($1) limit 1", [t1]) === sup);
+    const grn1 = await one(db, "select issue_sales_shipment_grn($1,$2,$3)", [t1, sup, officer]);
+    check("the GRN gets a GRN-YY-######## number", /^GRN-\d{2}-\d{8}$/.test(grn1), grn1);
+    check("downloading again keeps the same GRN number", await one(db, "select issue_sales_shipment_grn($1,$2,$3)", [t1, sup, owner]) === grn1);
+    check("each truck gets its own GRN", (await one(db, "select issue_sales_shipment_grn($1,$2,$3)", [t2, sup, owner])) !== grn1);
+    check("users outside Head Office cannot issue GRNs", /Head Office/.test(await err(db, "select issue_sales_shipment_grn($1,$2,$3)", [t3, sup, mgrAru])));
+    check("no GRN before the truck is dispatched", /dispatched/.test(await err(db, "select issue_sales_shipment_grn($1,$2,$3)", [tx, sup, owner])));
+    const aruTruckBranch = await one(db, "select count(*) from sales_shipments where branch_id=$1", [aru]);
+    check("GRNs are only for sales from Head Office (no other-branch trucks here)", Number(aruTruckBranch) === 0);
+
     // ------------------------------------------------------------ own approval: Sales Manager only
     check("only the Sales Manager role may approve its own requests",
       await can(db, "SALES_MANAGER", "sales.approve_own") && !(await can(db, "DIRECTOR", "sales.approve_own"))
@@ -381,6 +397,13 @@ async function main() {
     check("a Sales Manager creates, submits and approves their own request",
       !!soSm && await one(db, "select approved_by from sales_orders where id=$1", [soSm]) === salesMgr
       && await num(db, "select count(*) from sales_events where order_id=$1 and note like '%approved by the person who prepared it%'", [soSm]) === 1);
+    const olSm = await one(db, "select id from sales_order_lines where order_id=$1", [soSm]);
+    const tSm = await one(db, "select create_sales_shipment($1,$2,'sm-truck',$3::jsonb,$4::jsonb)", [soSm, officer,
+      JSON.stringify({ vehicle_registration: "T 9 ZZZ", planned_dispatch_date: "2026-11-08", expected_arrival_at: "2026-11-09T10:00:00+03:00", notes: "Gate 2" }),
+      JSON.stringify([{ order_line_id: olSm, qty: 1 }])]);
+    check("truck details are kept like a transfer trip (dispatch date, expected arrival, notes)",
+      await one(db, "select planned_dispatch_date::text || '|' || (expected_arrival_at at time zone 'Africa/Dar_es_Salaam')::text || '|' || notes from sales_shipments where id=$1", [tSm])
+        === "2026-11-08|2026-11-09 10:00:00|Gate 2");
     const rqBm = await mkRequest([{ product: prod, qty: 1, price: 1000 }], [{ account: mpesa, amount: 1180, ref: "MP-BM-OWN" }], "collection", manager);
     await db.query("select submit_sales_request($1,$2)", [rqBm, manager]);
     check("a Branch Manager still cannot approve their own request",

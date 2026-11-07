@@ -13,6 +13,7 @@ import { StatusBadge, Timeline, Field } from "@/components/sales/sales-ui";
 import { loadShipment, userNames, SHIPMENT_STATUS, EVENT_LABEL } from "@/lib/sales/fulfilment-data";
 import { formatMoney, formatQuantity, formatDate, formatDateTime } from "@/lib/format";
 import { ShipmentActions } from "./shipment-actions";
+import { isHeadOfficeUser, salesShipmentGrnGroups } from "@/lib/transfers/grn-data";
 
 export const metadata: Metadata = { title: "Truck" };
 
@@ -30,6 +31,10 @@ export default async function ShipmentPage(props: { params: Promise<{ id: string
     order_line: { description: string | null; quantity: number; qty_dispatched: number; qty_allocated: number; is_free: boolean; product: { sku: string; name: string; unit: { code: string } | null } | null } | null };
   const ll = lines as unknown as Line[];
   const collection = s.order?.fulfilment_mode === "collection";
+  // Sales dispatched from Head Office get GRNs per supplier, like transfers (Head Office users only).
+  const { data: hqBranch } = await admin.from("branches").select("id").eq("company_id", ctx.companyId).eq("is_head_office", true).maybeSingle();
+  const grnGroups = hqBranch?.id === s.branch_id && ["dispatched", "in_transit", "delivered", "collected"].includes(s.status)
+    && (await isHeadOfficeUser(ctx.user, ctx.companyId)) ? await salesShipmentGrnGroups(s.id) : [];
 
   return (
     <div className="space-y-4">
@@ -50,13 +55,15 @@ export default async function ShipmentPage(props: { params: Promise<{ id: string
           {collection
             ? <Field label="Collector">{[s.collector_name, s.collector_phone, s.collector_id_number && `ID ${s.collector_id_number}`].filter(Boolean).join(", ")}</Field>
             : <Field label="Destination">{s.destination}{s.consignee_name && <span className="block text-xs text-muted-foreground">{s.consignee_name} {s.consignee_phone ?? ""}</span>}</Field>}
-          <Field label="Planned">{s.planned_loading_date ? `Load ${formatDate(s.planned_loading_date)}` : "—"}{s.planned_dispatch_date ? `, dispatch ${formatDate(s.planned_dispatch_date)}` : ""}</Field>
+          <Field label="Dispatch date">{s.planned_dispatch_date ? formatDate(s.planned_dispatch_date) : "—"}</Field>
+          {s.expected_arrival_at && <Field label="Expected arrival">{formatDateTime(s.expected_arrival_at)}</Field>}
           <Field label="Loading order">{s.loading_order_number ?? "—"}</Field>
           <Field label="Delivery note">{s.delivery_note_number ?? "—"}</Field>
           {s.invoice && <Field label="Commercial invoice"><Link className="text-primary hover:underline" href={`/sales/${s.invoice.id}`}>{s.invoice.document_number}</Link> · {formatMoney(s.invoice.grand_total)}
             <span className="block text-xs text-muted-foreground">Paid {formatMoney(s.invoice.amount_paid)} · Balance {formatMoney(s.invoice.outstanding)}</span></Field>}
           {s.dispatched_at && <Field label="Dispatched">{nameOf(s.dispatched_by)}, {formatDateTime(s.dispatched_at)}</Field>}
           {s.delivered_at && <Field label={collection ? "Collected" : "Delivered"}>{s.recipient_name} {s.recipient_phone ?? ""}, {formatDateTime(s.delivered_at)}</Field>}
+          {s.notes && <div className="col-span-2 sm:col-span-4"><Field label="Notes">{s.notes}</Field></div>}
           {s.cancel_reason && <Field label="Cancelled">{nameOf(s.cancelled_by)}: {s.cancel_reason}</Field>}
         </CardContent>
       </Card>
@@ -91,6 +98,24 @@ export default async function ShipmentPage(props: { params: Promise<{ id: string
             <Button key={k} asChild variant="outline"><a href={`/api/sales/shipments/${s.id}/${k}`}><FileDown className="h-4 w-4" /> {DOC_LABEL[k]} (PDF)</a></Button>
           ))}
         </div>
+      )}
+
+      {grnGroups.length > 0 && (
+        <Card><CardContent className="space-y-3 p-4 text-sm sm:p-5">
+          <div>
+            <h3 className="font-semibold">Goods Received Notes (Head Office)</h3>
+            <p className="text-xs text-muted-foreground">One GRN per supplier of the goods on this truck, to submit to the supplier. The GRN number is given on the first download and kept.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {grnGroups.map((g) => (
+              <Button key={g.key} asChild variant="outline" size="sm" className="h-auto min-h-8 whitespace-normal py-1.5 text-left">
+                <a href={`/api/sales/shipments/${s.id}/grn/${g.supplierId ?? "none"}`}>
+                  GRN{g.number ? ` ${g.number}` : ""} — {g.supplierName} ({g.lineIds.length} {g.lineIds.length === 1 ? "product" : "products"})
+                </a>
+              </Button>
+            ))}
+          </div>
+        </CardContent></Card>
       )}
 
       <ShipmentActions id={s.id} status={s.status} collection={collection} onHold={!!s.order?.on_hold} canFulfil={can(ctx.user, "sales.fulfil")}

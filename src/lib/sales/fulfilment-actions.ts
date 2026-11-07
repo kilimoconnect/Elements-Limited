@@ -310,7 +310,7 @@ export interface ShipmentHeaderInput {
   transporter_name?: string; transporter_contact?: string; driver_name?: string; driver_phone?: string; driver_licence?: string;
   vehicle_registration?: string; trailer_registration?: string;
   collector_name?: string; collector_phone?: string; collector_id_number?: string;
-  planned_loading_date?: string; planned_dispatch_date?: string;
+  planned_loading_date?: string; planned_dispatch_date?: string; expected_arrival_at?: string; notes?: string;
 }
 
 export async function createShipment(orderId: string, requestKey: string, header: ShipmentHeaderInput, lines: { order_line_id: string; qty: number }[]): Promise<RpcResult> {

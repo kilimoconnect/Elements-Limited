@@ -43,3 +43,30 @@ export async function transferGrnGroups(transferId: string): Promise<GrnGroup[]>
   }
   return [...groups.values()].sort((a, b) => (a.supplierId ? 0 : 1) - (b.supplierId ? 0 : 1) || a.supplierName.localeCompare(b.supplierName));
 }
+
+/** A Head Office truck's goods grouped by supplier (one GRN each), with any GRN number already issued. */
+export async function salesShipmentGrnGroups(shipmentId: string): Promise<GrnGroup[]> {
+  const admin = createAdminClient();
+  const [{ data: map }, { data: issued }] = await Promise.all([
+    admin.rpc("sales_shipment_line_suppliers", { p_shipment: shipmentId }),
+    admin.from("sales_shipment_grns").select("supplier_id, document_number").eq("shipment_id", shipmentId),
+  ]);
+  const rows = (map ?? []) as { shipment_line_id: string; supplier_id: string | null }[];
+  const ids = [...new Set(rows.map((r) => r.supplier_id).filter(Boolean))] as string[];
+  const { data: sups } = ids.length
+    ? await admin.from("suppliers").select("id, code, name").in("id", ids)
+    : { data: [] as { id: string; code: string; name: string }[] };
+  const groups = new Map<string, GrnGroup>();
+  for (const r of rows) {
+    const key = r.supplier_id ?? NONE;
+    if (!groups.has(key)) {
+      const s = (sups ?? []).find((x) => x.id === r.supplier_id);
+      groups.set(key, {
+        key, supplierId: r.supplier_id, supplierName: s ? `${s.code} - ${s.name}` : "Supplier not recorded", lineIds: [],
+        number: ((issued ?? []) as { supplier_id: string | null; document_number: string }[]).find((i) => (i.supplier_id ?? NONE) === key)?.document_number ?? null,
+      });
+    }
+    groups.get(key)!.lineIds.push(r.shipment_line_id);
+  }
+  return [...groups.values()].sort((a, b) => (a.supplierId ? 0 : 1) - (b.supplierId ? 0 : 1) || a.supplierName.localeCompare(b.supplierName));
+}
