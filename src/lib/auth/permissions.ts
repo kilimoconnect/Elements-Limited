@@ -105,6 +105,7 @@ export const ACTIONS = [
   "enter_rate",
   // Payment-first sales: run approved orders truck by truck
   "fulfil",
+  "approve_own",
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -142,7 +143,7 @@ export const PERMISSION_DEFS: PermissionDef[] = [
   ...p("dashboard", ["view"]),
   ...p("sales", [
     ...TXN_ACTIONS,
-    "view_cost", "override_price", "sell_below_cost", "receive_payment", "create_return", "fulfil",
+    "view_cost", "override_price", "sell_below_cost", "receive_payment", "create_return", "fulfil", "approve_own",
   ]),
   ...p("purchases", [...TXN_ACTIONS, "view_cost", "record_payment", "create_return"]),
   ...p("other_income", TXN_ACTIONS),
@@ -211,7 +212,7 @@ export const ROLE_DEFS: RoleDef[] = [
     description: "Full access like the Owner, except managing users and roles.",
     isSystem: true,
     isProtected: false,
-    permissions: PERMISSION_DEFS.map((d) => d.code).filter((c) => c !== "users.manage" && c !== "roles.manage"),
+    permissions: PERMISSION_DEFS.map((d) => d.code).filter((c) => c !== "users.manage" && c !== "roles.manage" && c !== "sales.approve_own"),
   },
   {
     code: "DIRECTOR",
@@ -284,7 +285,7 @@ export const ROLE_DEFS: RoleDef[] = [
     isProtected: false,
     permissions: [
       "dashboard.view",
-      "sales.view", "sales.create", "sales.edit_draft", "sales.export", "sales.approve", "sales.fulfil",
+      "sales.view", "sales.create", "sales.edit_draft", "sales.export", "sales.approve", "sales.approve_own", "sales.fulfil",
       "sales.override_price", "sales.receive_payment", "sales.create_return",
       "inventory.view", "inventory.view_kardex", "kardex.view",
       "reports.view", "reports.export", "reports.view_receivables",

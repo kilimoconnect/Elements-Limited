@@ -371,6 +371,22 @@ async function main() {
       && await num(db, "select customer_receipt_available($1)", [r6]) === 0);
     check("a refunded receipt cannot be refunded again", (await err(db, "select refund_customer_advance($1,$2,$3,1,'x','x')", [r6, manager, bank])) !== "");
 
+    // ------------------------------------------------------------ own approval: Sales Manager only
+    check("only the Sales Manager role may approve its own requests",
+      await can(db, "SALES_MANAGER", "sales.approve_own") && !(await can(db, "DIRECTOR", "sales.approve_own"))
+      && !(await can(db, "CASHIER", "sales.approve_own")) && !(await can(db, "CEO", "sales.approve_own")));
+    const rqSm = await mkRequest([{ product: prod, qty: 1, price: 1000 }], [{ account: mpesa, amount: 1180, ref: "MP-SM-OWN" }], "collection", salesMgr);
+    await db.query("select submit_sales_request($1,$2)", [rqSm, salesMgr]);
+    const soSm = await approve(rqSm, salesMgr, await verifyAll(rqSm));
+    check("a Sales Manager creates, submits and approves their own request",
+      !!soSm && await one(db, "select approved_by from sales_orders where id=$1", [soSm]) === salesMgr
+      && await num(db, "select count(*) from sales_events where order_id=$1 and note like '%approved by the person who prepared it%'", [soSm]) === 1);
+    const rqBm = await mkRequest([{ product: prod, qty: 1, price: 1000 }], [{ account: mpesa, amount: 1180, ref: "MP-BM-OWN" }], "collection", manager);
+    await db.query("select submit_sales_request($1,$2)", [rqBm, manager]);
+    check("a Branch Manager still cannot approve their own request",
+      /cannot approve/.test(await err(db, "select approve_sales_request($1,$2,'bm-own',$3::jsonb,null)", [rqBm, manager, await verifyAll(rqBm)])));
+    check("another manager can approve the Branch Manager's request", !!(await approve(rqBm, salesMgr, await verifyAll(rqBm))));
+
     // ------------------------------------------------------------ Sales Officer creates customers, no duplicates
     const qc = (name: string, phone: string, tin: string | null = null, email: string | null = null, by = officer) =>
       err(db, "select create_customer_quick($1,$2,$3,$4,$5,$6,$7,null,null,null)", [co, hq, by, name, phone, email, tin]);

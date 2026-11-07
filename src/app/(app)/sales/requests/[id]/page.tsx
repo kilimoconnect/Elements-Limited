@@ -39,7 +39,8 @@ export default async function SalesRequestPage(props: { params: Promise<{ id: st
   const paid = payments.reduce((s, p) => s + Number(p.amount), 0);
   const fundTotal = funds.reduce((s, f) => s + Number(f.amount), 0);
   const isApprover = can(ctx.user, "sales.approve");
-  const selfPrepared = ctx.user.id === rq.created_by || ctx.user.id === rq.submitted_by;
+  // Sales Managers (sales.approve_own) may approve their own requests; others need a second manager.
+  const selfPrepared = (ctx.user.id === rq.created_by || ctx.user.id === rq.submitted_by) && !can(ctx.user, "sales.approve_own");
   const editable = ["draft", "returned"].includes(rq.status);
 
   return (
