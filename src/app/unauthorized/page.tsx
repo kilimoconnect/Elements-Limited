@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ShieldAlert } from "lucide-react";
-import { signOut } from "@/lib/auth/actions";
+import { SignOutButton } from "@/components/layout/sign-out-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -26,11 +26,7 @@ export default function UnauthorizedPage() {
             <Button asChild variant="outline">
               <Link href="/dashboard">Go to dashboard</Link>
             </Button>
-            <form action={signOut}>
-              <Button type="submit" variant="ghost" className="w-full">
-                Sign out
-              </Button>
-            </form>
+            <SignOutButton />
           </div>
         </CardContent>
       </Card>
