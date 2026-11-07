@@ -74,6 +74,19 @@ async function main() {
     await db.query("select receive_transfer_trip($1,$2,$3::jsonb,now(),null,'Store',gen_random_uuid()::text,gen_random_uuid()::text)",
       [d, owner, JSON.stringify([{ dispatch_line_id: await one(db, "select id from stock_transfer_dispatch_lines where dispatch_id=$1", [d]), accepted: 20, quarantined: 0, short: 0 }])]);
     check("goods arrive at the new destination", Number(await one(db, "select quantity from stock_balances where branch_id=$1 and product_id=$2", [dod, p])) === 20);
+    // A transport charge posted with its supplier: owed to the supplier, added to the received goods.
+    const haul = await one(db, "insert into suppliers(company_id, code, name) values ($1,'RT-HAUL','Route Haulage') returning id", [co]);
+    const src = await one(db, `insert into cost_sources(company_id, owner_type, stock_transfer_id, cost_category_id, estimated_amount, supplier_id, allocation_basis)
+      values ($1,'stock_transfer',$2,(select id from cost_categories where company_id=$1 and code='TRANSPORT'),20000,$3,'quantity') returning id`, [co, t, haul]);
+    const ci = await one(db, `insert into cost_invoices(company_id, branch_id, supplier_id, document_date, supplier_invoice_number, document_kind)
+      values ($1,$2,$3,current_date,'RT-77','invoice') returning id`, [co, hq, haul]);
+    await db.query(`insert into cost_invoice_lines(company_id, cost_invoice_id, cost_category_id, cost_source_id, net_amount)
+      values ($1,$2,(select id from cost_categories where company_id=$1 and code='TRANSPORT'),$3,20000)`, [co, ci, src]);
+    const before = Number(await one(db, "select stock_value from stock_balances where branch_id=$1 and product_id=$2", [dod, p]));
+    await db.query("select post_cost_invoice($1,$2,gen_random_uuid()::text)", [ci, owner]);
+    check("a transfer charge posted with its supplier is owed to the supplier and added to the received goods",
+      Number(await one(db, "select coalesce(sum(outstanding),0) from supplier_payables where supplier_id=$1", [haul])) === 20000
+      && Number(await one(db, "select stock_value from stock_balances where branch_id=$1 and product_id=$2", [dod, p])) === before + 20000);
     check("a received transfer cannot change route", (await err(db, "select change_transfer_destination($1,$2,$3,'late')", [t, owner, mwz])) !== "");
 
     console.log(`\nTransfer route change: ${passed} checks passed.`);

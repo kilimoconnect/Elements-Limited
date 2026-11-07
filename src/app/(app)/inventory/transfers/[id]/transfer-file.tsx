@@ -6,8 +6,9 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   dispatchTrip, deleteDraftTrip, voidTrip, changeTripTransport, addAgent, addTransferUpdate,
-  resolveDiscrepancy, addTransferCharge, accrueTransferCharge, voidTransferChargeEstimate,
+  resolveDiscrepancy, addTransferCharge, accrueTransferCharge, voidTransferChargeEstimate, postTransferCharge,
 } from "@/lib/transfers/actions";
+import { NewSupplierButton } from "@/components/common/new-supplier";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -155,25 +156,61 @@ export function AddUpdateForm({ transferId, trips }: { transferId: string; trips
   );
 }
 
-export function ChargeForm({ transferId, trips, categories }: {
-  transferId: string; trips: { id: string; label: string }[]; categories: { id: string; label: string; capitalise: boolean }[];
+export function ChargeForm({ transferId, branchId, trips, categories, suppliers = [], canPostInvoice = false }: {
+  transferId: string; branchId: string; trips: { id: string; label: string }[]; categories: { id: string; label: string; capitalise: boolean }[];
+  suppliers?: { id: string; code: string; name: string }[]; canPostInvoice?: boolean;
 }) {
   const { pending, run } = useRun();
-  const [c, setC] = React.useState({ category: categories[0]?.id ?? "", trip: "__all__", description: "", amount: "", basis: "" });
+  const blank = { category: categories[0]?.id ?? "", trip: "__all__", supplier: "", invoice: "", date: todayISO(), due: "", description: "", amount: "", basis: "" };
+  const [c, setC] = React.useState(blank);
+  const [added, setAdded] = React.useState<{ id: string; code: string; name: string }[]>([]);
+  const [requestId, setRequestId] = React.useState(() => crypto.randomUUID());
+  const allSuppliers = [...suppliers, ...added];
+  const ready = !!c.category && !!c.supplier && !!c.invoice.trim() && Number(c.amount) > 0 && !!c.date;
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Select value={c.category} onValueChange={(v) => setC({ ...c, category: v })}><SelectTrigger className="h-8 w-full sm:w-56"><SelectValue placeholder="Category" /></SelectTrigger>
-        <SelectContent>{categories.map((x) => <SelectItem key={x.id} value={x.id}>{x.label}{x.capitalise ? "" : " (expensed)"}</SelectItem>)}</SelectContent></Select>
-      <Select value={c.trip} onValueChange={(v) => setC({ ...c, trip: v })}><SelectTrigger className="h-8 w-full sm:w-40"><SelectValue /></SelectTrigger>
-        <SelectContent><SelectItem value="__all__">Whole transfer</SelectItem>{trips.map((t) => <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>)}</SelectContent></Select>
-      <Input className="h-8 w-full sm:w-44" placeholder="Description" value={c.description} onChange={(e) => setC({ ...c, description: e.target.value })} />
-      <Input className="h-8 w-full text-right sm:w-32" type="number" min="0" step="0.01" placeholder="TZS estimate" value={c.amount} onChange={(e) => setC({ ...c, amount: e.target.value })} />
-      <Select value={c.basis || "__default__"} onValueChange={(v) => setC({ ...c, basis: v === "__default__" ? "" : v })}><SelectTrigger className="h-8 w-full sm:w-40"><SelectValue /></SelectTrigger>
-        <SelectContent><SelectItem value="__default__">By net kg (default)</SelectItem><SelectItem value="value">By value</SelectItem><SelectItem value="quantity">By units</SelectItem></SelectContent></Select>
-      <Button size="sm" variant="outline" disabled={pending || !c.category} onClick={async () => {
-        const e = await run(() => addTransferCharge({ transferId, tripId: c.trip === "__all__" ? null : c.trip, categoryId: c.category, description: c.description, amount: Number(c.amount || 0), basis: c.basis || null }), "Charge added (estimate).");
-        if (!e) setC({ ...c, description: "", amount: "" });
-      }}>Add charge</Button>
+    <div className="space-y-2 rounded-md border border-border p-3">
+      <p className="text-xs font-medium">Add charge</p>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="space-y-1"><Label className="text-xs">Charge type</Label>
+          <Select value={c.category} onValueChange={(v) => setC({ ...c, category: v })}><SelectTrigger className="h-8"><SelectValue placeholder="Category" /></SelectTrigger>
+            <SelectContent>{categories.map((x) => <SelectItem key={x.id} value={x.id}>{x.label}{x.capitalise ? "" : " (expensed)"}</SelectItem>)}</SelectContent></Select></div>
+        <div className="space-y-1"><Label className="text-xs">Trip</Label>
+          <Select value={c.trip} onValueChange={(v) => setC({ ...c, trip: v })}><SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="__all__">Whole transfer</SelectItem>{trips.map((t) => <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>)}</SelectContent></Select></div>
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-2"><Label className="text-xs">Supplier {canPostInvoice && "*"}</Label>
+            <NewSupplierButton branchId={branchId} existing={allSuppliers} onCreated={(x) => { setAdded([...added, x]); setC({ ...c, supplier: x.id }); }} /></div>
+          <Select value={c.supplier} onValueChange={(v) => setC({ ...c, supplier: v })}><SelectTrigger className="h-8"><SelectValue placeholder="Who is owed this charge" /></SelectTrigger>
+            <SelectContent>{allSuppliers.map((x) => <SelectItem key={x.id} value={x.id}>{x.code} — {x.name}</SelectItem>)}</SelectContent></Select></div>
+        <div className="space-y-1"><Label className="text-xs">Supplier invoice no. {canPostInvoice && "*"}</Label><Input className="h-8" value={c.invoice} onChange={(e) => setC({ ...c, invoice: e.target.value })} /></div>
+        <div className="space-y-1"><Label className="text-xs">Invoice date</Label><Input className="h-8" type="date" value={c.date} onChange={(e) => setC({ ...c, date: e.target.value })} /></div>
+        <div className="space-y-1"><Label className="text-xs">Due date</Label><Input className="h-8" type="date" value={c.due} onChange={(e) => setC({ ...c, due: e.target.value })} /></div>
+        <div className="space-y-1"><Label className="text-xs">Amount (TZS) *</Label>
+          <Input className="h-8 text-right" type="number" min="0" step="0.01" value={c.amount} onChange={(e) => setC({ ...c, amount: e.target.value })} /></div>
+        <div className="space-y-1"><Label className="text-xs">Description</Label><Input className="h-8" value={c.description} onChange={(e) => setC({ ...c, description: e.target.value })} /></div>
+        <div className="space-y-1"><Label className="text-xs">Spread over the cargo</Label>
+          <Select value={c.basis || "__default__"} onValueChange={(v) => setC({ ...c, basis: v === "__default__" ? "" : v })}><SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="__default__">By net kg (default)</SelectItem><SelectItem value="value">By value</SelectItem><SelectItem value="quantity">By units</SelectItem></SelectContent></Select></div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {canPostInvoice && (
+          <Button size="sm" disabled={pending || !ready} onClick={async () => {
+            const e = await run(() => postTransferCharge({ transferId, tripId: c.trip === "__all__" ? null : c.trip, categoryId: c.category, supplierId: c.supplier,
+              supplierInvoiceNumber: c.invoice, date: c.date, dueDate: c.due || null, amount: Number(c.amount), description: c.description, basis: c.basis || null, requestId }),
+              "Charge posted to the supplier and added to the cargo.");
+            if (!e) { setC(blank); setRequestId(crypto.randomUUID()); }
+          }}>Post to supplier</Button>
+        )}
+        <Button size="sm" variant="outline" disabled={pending || !c.category} onClick={async () => {
+          const e = await run(() => addTransferCharge({ transferId, tripId: c.trip === "__all__" ? null : c.trip, categoryId: c.category, description: c.description,
+            amount: Number(c.amount || 0), basis: c.basis || null, supplierId: c.supplier || null }), "Charge added (estimate).");
+          if (!e) setC(blank);
+        }}>Save as estimate</Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {canPostInvoice ? "Post to supplier records the supplier\u2019s invoice (Accounts Payable to that supplier) and adds the charge to the cargo at once. " : ""}
+        An estimate posts nothing until it is accrued or invoiced.
+      </p>
     </div>
   );
 }

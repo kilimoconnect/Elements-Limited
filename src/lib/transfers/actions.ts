@@ -438,3 +438,57 @@ export async function changeTransferRoute(transferId: string, destinationId: str
     return { ...res, id: transferId };
   } catch (e) { return fail(e); }
 }
+
+/**
+ * A transfer charge with its supplier, posted in one step: the supplier's
+ * invoice is recorded (Cr Accounts Payable to that supplier) and the charge
+ * is added to the cargo (in transit, received stock, or cost of sales if sold).
+ */
+export async function postTransferCharge(input: {
+  transferId: string; tripId?: string | null; categoryId: string; supplierId: string; supplierInvoiceNumber: string;
+  date: string; dueDate?: string | null; amount: number; description?: string; basis?: string | null; requestId: string;
+}): Promise<RpcResult> {
+  try {
+    const { user, ctx, admin } = await ctxFor("cost_invoices.post");
+    const t = await loadTransfer(admin, input.transferId, ctx.companyId, user);
+    if (!(await isFeatureEnabled(ctx.companyId, "transfer_logistics"))) return { ok: false, error: "Transfer logistics is not enabled." };
+    if (!input.supplierId) return { ok: false, error: "Choose the supplier of this charge." };
+    if (!input.supplierInvoiceNumber?.trim()) return { ok: false, error: "Enter the supplier's invoice number." };
+    if (!(input.amount > 0)) return { ok: false, error: "Enter the amount." };
+    if (!input.requestId || input.requestId.length < 16) return { ok: false, error: "Missing request id; reload the page." };
+    const { data: sup } = await admin.from("suppliers").select("company_id").eq("id", input.supplierId).maybeSingle();
+    if (!sup || sup.company_id !== ctx.companyId) return { ok: false, error: "Supplier not found." };
+    const { data: prior } = await admin.from("cost_invoices").select("id, document_status").eq("company_id", ctx.companyId).eq("client_request_id", input.requestId).maybeSingle();
+    if (prior?.document_status === "posted") return { ok: true, id: prior.id };
+    if (prior) await admin.from("cost_invoices").delete().eq("id", prior.id).eq("document_status", "draft");
+
+    const amount = round2(input.amount);
+    const { data: src, error: sErr } = await admin.from("cost_sources").insert({
+      company_id: ctx.companyId, owner_type: "stock_transfer", stock_transfer_id: t.id, transfer_dispatch_id: input.tripId || null,
+      cost_category_id: input.categoryId, supplier_id: input.supplierId, description: input.description || null, estimated_amount: amount,
+      allocation_basis: input.basis || null, created_by: user.id, updated_by: user.id,
+    }).select("id").single();
+    if (sErr) return { ok: false, error: sErr.message };
+    const undo = async (ciId?: string) => {
+      if (ciId) await admin.from("cost_invoices").delete().eq("id", ciId).eq("document_status", "draft");
+      await admin.from("cost_sources").update({ status: "voided", updated_by: user.id }).eq("id", src.id).eq("status", "estimated");
+    };
+    const { data: ci, error: cErr } = await admin.from("cost_invoices").insert({
+      company_id: ctx.companyId, branch_id: t.source_branch_id, supplier_id: input.supplierId, document_date: input.date,
+      supplier_invoice_number: input.supplierInvoiceNumber.trim(), due_date: input.dueDate || null, document_kind: "invoice",
+      notes: `Transfer charge on ${t.document_number ?? "transfer"}`, client_request_id: input.requestId, created_by: user.id, updated_by: user.id,
+    }).select("id").single();
+    if (cErr) { await undo(); return { ok: false, error: cErr.message.includes("unique") ? "This supplier invoice number is already recorded." : cErr.message }; }
+    const { error: lErr } = await admin.from("cost_invoice_lines").insert({
+      company_id: ctx.companyId, cost_invoice_id: ci.id, cost_category_id: input.categoryId, cost_source_id: src.id,
+      description: input.description || null, net_amount: amount, tax_rate: 0, tax_amount: 0, is_recoverable: true, line_no: 1,
+    });
+    if (lErr) { await undo(ci.id); return { ok: false, error: lErr.message }; }
+    const res = await callPostingRpc("post_cost_invoice", { p_id: ci.id, p_user: user.id, p_idem: `post_cost_invoice:${ci.id}` });
+    if (!res.ok) { await undo(ci.id); return res; }
+    await writeAuditLog({ userId: user.id, companyId: ctx.companyId, branchId: t.source_branch_id, action: "transfer.charge_post", resourceType: "cost_invoice", resourceId: ci.id,
+      newValues: { transfer_id: t.id, supplier_id: input.supplierId, amount } });
+    refresh(t.id);
+    return { ok: true, id: ci.id };
+  } catch (e) { return fail(e); }
+}

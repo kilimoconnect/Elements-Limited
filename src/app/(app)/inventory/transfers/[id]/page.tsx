@@ -283,7 +283,7 @@ export default async function TransferDetailPage(props: { params: Params }) {
       {showCost && logistics && !legacy && (
         <Card><CardContent className="space-y-2 p-4 text-sm sm:p-5">
           <h3 className="font-semibold">Transfer charges (TZS)</h3>
-          <p className="text-xs text-muted-foreground">Loading, transport, offloading and other charges. Estimates post nothing; accruals and supplier invoices (Importation → Cost Invoices) are added to the cargo by net kg unless set otherwise, and follow the goods after receipt.</p>
+          <p className="text-xs text-muted-foreground">Loading, transport, offloading and other charges. Posted with its supplier, a charge is owed to that supplier (Accounts Payable) and is added to the cargo by net kg unless set otherwise; it follows the goods after receipt. Estimates post nothing.</p>
           {((charges ?? []) as unknown as { id: string; description: string | null; status: string; estimated_amount: number; accrued_amount: number; actual_amount: number; allocation_basis: string | null;
             inventory_treatment: string; transfer_dispatch_id: string | null; category: { name: string } | null }[]).map((c) => (
             <div key={c.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-border py-1 last:border-0">
@@ -292,7 +292,9 @@ export default async function TransferDetailPage(props: { params: Params }) {
                 <ChargeRowActions sourceId={c.id} status={c.status} estimate={N(c.estimated_amount)} canAccrue={can(ctx.user, "inventory.transfer_cost")} /></span>
             </div>
           ))}
-          {t.status !== "voided" && <ChargeForm transferId={id} trips={tripOpts.filter((x) => !x.label.includes("draft"))}
+          {t.status !== "voided" && <ChargeForm transferId={id} branchId={t.source_branch_id} trips={tripOpts.filter((x) => !x.label.includes("draft"))}
+            canPostInvoice={can(ctx.user, "cost_invoices.post")}
+            suppliers={((await admin.from("suppliers").select("id, code, name").eq("company_id", ctx.companyId).eq("is_active", true).order("name")).data ?? [])}
             categories={(categories ?? []).map((c) => ({ id: c.id, label: `${c.code} — ${c.name}`, capitalise: c.inventory_treatment === "capitalize" }))} />}
         </CardContent></Card>
       )}
