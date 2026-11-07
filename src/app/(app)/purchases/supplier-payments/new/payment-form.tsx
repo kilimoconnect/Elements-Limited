@@ -30,7 +30,11 @@ export function SupplierPaymentForm({ branchId, suppliers, accounts, initialSupp
 }) {
   const router = useRouter();
   const [supplierId, setSupplierId] = React.useState(initialSupplierId ?? "");
-  const [currency, setCurrency] = React.useState("TZS");
+  // Start in the currency the preselected supplier is owed in (TZS first when owed both).
+  const [currency, setCurrency] = React.useState(() => {
+    const cs = (suppliers.find((x) => x.id === initialSupplierId)?.payables ?? []).map((p) => p.currency);
+    return cs.includes("TZS") || cs.length === 0 ? "TZS" : cs.sort()[0];
+  });
   const [date, setDate] = React.useState(todayISO());
   const [reference, setReference] = React.useState("");
   const [alloc, setAlloc] = React.useState<Record<string, string>>({});
@@ -42,7 +46,18 @@ export function SupplierPaymentForm({ branchId, suppliers, accounts, initialSupp
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  const owed = (x: SupplierWithPayables) => round2(x.payables.reduce((t, p) => t + Number(p.outstanding), 0));
+  /** What is owed to a supplier in each currency (foreign invoices in their own currency). */
+  const owedBy = (x: SupplierWithPayables) => {
+    const m = new Map<string, number>();
+    for (const p of x.payables) m.set(p.currency, round2((m.get(p.currency) ?? 0) + Number(p.currency === "TZS" ? p.outstanding : p.fc_outstanding)));
+    return [...m.entries()].sort(([a], [b]) => (a === "TZS" ? -1 : b === "TZS" ? 1 : a.localeCompare(b)));
+  };
+  const owedText = (x: SupplierWithPayables) => owedBy(x).map(([c, v]) => formatMoney(v, c)).join(" + ");
+  const pickSupplier = (id: string) => {
+    const x = suppliers.find((y) => y.id === id);
+    const first = x ? owedBy(x)[0]?.[0] : undefined;
+    setSupplierId(id); setAlloc({}); setAdvance(""); setCurrency(first ?? "TZS");
+  };
   const isFc = currency !== "TZS";
   const supplier = suppliers.find((s) => s.id === supplierId);
   const payables = (supplier?.payables ?? []).filter((p) => p.currency === currency);
@@ -104,9 +119,9 @@ export function SupplierPaymentForm({ branchId, suppliers, accounts, initialSupp
     <div className="space-y-4">
       <Card><CardContent className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-4">
         <div className="space-y-1.5"><Label>Supplier</Label>
-          <Select value={supplierId} onValueChange={(v) => { setSupplierId(v); setAlloc({}); setCurrency("TZS"); }}>
+          <Select value={supplierId} onValueChange={pickSupplier}>
             <SelectTrigger><SelectValue placeholder="Select supplier" /></SelectTrigger>
-            <SelectContent>{suppliers.map((s) => <SelectItem key={s.id} value={s.id}>{s.code} — {s.name}{owed(s) > 0 ? ` · owed ${formatMoney(owed(s))}` : ""}</SelectItem>)}</SelectContent>
+            <SelectContent>{suppliers.map((s) => <SelectItem key={s.id} value={s.id}>{s.code} — {s.name}{s.payables.length > 0 ? ` · owed ${owedText(s)}` : ""}</SelectItem>)}</SelectContent>
           </Select></div>
         <div className="space-y-1.5"><Label>Invoice currency</Label>
           <Select value={currency} onValueChange={(v) => { setCurrency(v); setAlloc({}); setAdvance(""); }}>
@@ -124,7 +139,12 @@ export function SupplierPaymentForm({ branchId, suppliers, accounts, initialSupp
           <Card><CardContent className="grid grid-cols-1 gap-3 p-4 text-sm sm:grid-cols-4">
             <div><p className="text-xs text-muted-foreground">Outstanding with {supplier.name}</p>
               <p className="text-lg font-semibold tabular-nums">{formatMoney(openNow, isFc ? currency : undefined)}</p>
-              <p className="text-xs text-muted-foreground">{payables.length} open {currency} {payables.length === 1 ? "invoice" : "invoices"}</p></div>
+              <p className="text-xs text-muted-foreground">{payables.length} open {currency} {payables.length === 1 ? "invoice" : "invoices"}</p>
+              {owedBy(supplier).filter(([c]) => c !== currency).map(([c, v]) => (
+                <button key={c} type="button" className="text-xs font-medium text-primary hover:underline" onClick={() => { setCurrency(c); setAlloc({}); setAdvance(""); }}>
+                  Also owed {formatMoney(v, c)}: switch to {c}
+                </button>
+              ))}</div>
             <div><p className="text-xs text-muted-foreground">Paying now</p><p className="text-lg font-semibold tabular-nums">{formatMoney(allocTotal, isFc ? currency : undefined)}</p></div>
             <div><p className="text-xs text-muted-foreground">Outstanding after this payment</p><p className={`text-lg font-semibold tabular-nums ${after > 0 ? "text-destructive" : "text-success"}`}>{formatMoney(after, isFc ? currency : undefined)}</p></div>
             <div className="flex items-end">{payables.length > 0 && (

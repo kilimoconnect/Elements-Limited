@@ -22,7 +22,7 @@ export default async function NewSupplierPaymentPage(props: { searchParams: SP }
 
   const [{ data: payables }, { data: suppliers }, { data: currencies }] = await Promise.all([
     admin.from("supplier_payables")
-      .select("id, outstanding, fc_outstanding, currency_code, source_type, purchase_id, expense_id, supplier:suppliers(id, code, name), purchase:purchases(document_number, document_date), expense:expenses(document_number, document_date)")
+      .select("id, outstanding, fc_outstanding, currency_code, source_type, purchase_id, expense_id, supplier:suppliers(id, code, name), purchase:purchases(document_number, document_date), expense:expenses(document_number, document_date), cost_invoice:cost_invoices(document_number, supplier_invoice_number, document_date)")
       .eq("company_id", ctx.companyId).in("status", ["open", "partial"]),
     admin.from("suppliers").select("id, code, name").eq("company_id", ctx.companyId).eq("is_active", true).order("code"),
     fxAllowed ? admin.from("currencies").select("code").eq("is_active", true).eq("is_functional", false).order("code") : Promise.resolve({ data: [] }),
@@ -39,6 +39,7 @@ export default async function NewSupplierPaymentPage(props: { searchParams: SP }
       supplier: { id: string; code: string; name: string } | null;
       purchase: { document_number: string | null; document_date: string } | null;
       expense: { document_number: string | null; document_date: string } | null;
+      cost_invoice: { document_number: string | null; supplier_invoice_number: string | null; document_date: string } | null;
     };
     const s = row.supplier;
     if (!s) continue;
@@ -46,9 +47,12 @@ export default async function NewSupplierPaymentPage(props: { searchParams: SP }
     const open = row.currency_code === "TZS" ? Number(row.outstanding) > 0 : Number(row.fc_outstanding) > 0;
     if (!open) continue;
     if (!map.has(s.id)) map.set(s.id, { id: s.id, code: s.code, name: s.name, payables: [] });
-    const doc = row.source_type === "purchase" ? row.purchase : row.expense;
+    const doc = row.source_type === "purchase" ? row.purchase : row.source_type === "cost_invoice" ? row.cost_invoice : row.expense;
+    const label = row.source_type === "cost_invoice" && row.cost_invoice
+      ? `${row.cost_invoice.document_number ?? "Cost invoice"}${row.cost_invoice.supplier_invoice_number ? ` (supplier inv. ${row.cost_invoice.supplier_invoice_number})` : ""}`
+      : doc?.document_number ?? "—";
     map.get(s.id)!.payables.push({
-      payable_id: row.id, label: doc?.document_number ?? "—", date: doc?.document_date ?? "", currency: row.currency_code,
+      payable_id: row.id, label, date: doc?.document_date ?? "", currency: row.currency_code,
       outstanding: Number(row.outstanding), fc_outstanding: Number(row.fc_outstanding),
     });
     if (purchaseId && row.purchase_id === purchaseId) initialSupplierId = s.id;
