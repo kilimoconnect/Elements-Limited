@@ -106,6 +106,8 @@ export const ACTIONS = [
   // Payment-first sales: run approved orders truck by truck
   "fulfil",
   "approve_own",
+  // Correct quantities on stock transfers (requested / on trips)
+  "transfer_quantity",
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -181,7 +183,7 @@ export const PERMISSION_DEFS: PermissionDef[] = [
   ...p("rebagging", ["view", "create", "post", "approve", "void"]),
   ...p("documents", ["view_financial", "view_licence", "upload"]),
   ...p("fx", ["settle", "revalue", "enter_rate"]),
-  ...p("inventory", ["transfer_view", "transfer_resolve", "transfer_cost"]),
+  ...p("inventory", ["transfer_view", "transfer_resolve", "transfer_cost", "transfer_quantity"]),
   ...p("promotions", ["view", "manage"]),
 ];
 
@@ -233,7 +235,7 @@ export const ROLE_DEFS: RoleDef[] = [
       "inventory.view", "inventory.create", "inventory.edit_draft", "inventory.post", "inventory.manage", "inventory.export",
       "inventory.view_cost", "inventory.view_kardex",
       "inventory.adjustment_create", "inventory.adjustment_post",
-      "inventory.transfer_create", "inventory.transfer_dispatch", "inventory.transfer_receive",
+      "inventory.transfer_create", "inventory.transfer_dispatch", "inventory.transfer_receive", "inventory.transfer_quantity",
       "kardex.view", "kardex.export",
       "reports.view", "reports.export",
       "reports.view_profit_loss", "reports.view_receivables", "reports.view_payables", "reports.view_inventory_valuation",
@@ -286,6 +288,7 @@ export const ROLE_DEFS: RoleDef[] = [
     permissions: [
       "dashboard.view",
       "sales.view", "sales.create", "sales.edit_draft", "sales.export", "sales.approve", "sales.approve_own", "sales.fulfil",
+      "inventory.transfer_view", "inventory.transfer_quantity",
       "sales.override_price", "sales.receive_payment", "sales.create_return",
       "inventory.view", "inventory.view_kardex", "kardex.view",
       "reports.view", "reports.export", "reports.view_receivables",
@@ -315,7 +318,7 @@ export const ROLE_DEFS: RoleDef[] = [
       "dashboard.view",
       "inventory.view", "inventory.create", "inventory.edit_draft", "inventory.post", "inventory.manage",
       "inventory.view_kardex", "inventory.adjustment_create",
-      "inventory.transfer_create", "inventory.transfer_dispatch", "inventory.transfer_receive",
+      "inventory.transfer_create", "inventory.transfer_dispatch", "inventory.transfer_receive", "inventory.transfer_quantity",
       "kardex.view", "kardex.export",
       "purchases.view", "purchases.create", "purchases.edit_draft", "purchases.post",
       "imports.view", "imports.receive", "rebagging.view", "rebagging.create", "rebagging.post",

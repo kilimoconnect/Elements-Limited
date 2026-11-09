@@ -77,9 +77,10 @@ export default async function TransferDetailPage(props: { params: Params }) {
   const tripOpts = tripsList.filter((x) => x.status !== "voided").map((x) => ({ id: x.id, label: x.document_number ?? `Trip ${x.trip_no} (draft)` }));
   const legacy = !t.posts_in_transit;
   // Quantities can change until goods arrive (sending branch, dispatch permission).
-  const canChangeQty = canDispatch && t.status !== "voided" && (!legacy || t.status === "draft");
+  const canQty = isSender && (can(ctx.user, "inventory.transfer_dispatch") || can(ctx.user, "inventory.transfer_quantity"));
+  const canChangeQty = canQty && t.status !== "voided" && (!legacy || t.status === "draft");
   const canChangeTrip = (trip: { status: string }, x: { qty_reported: number }) =>
-    canDispatch && !legacy && (trip.status === "draft" || (trip.status === "dispatched" && N(x.qty_reported) === 0));
+    canQty && !legacy && (trip.status === "draft" || (trip.status === "dispatched" && N(x.qty_reported) === 0));
   // Route (destination) can change until anything arrives or is received.
   const canChangeRoute = canDispatch && ["draft", "dispatched"].includes(t.status) && rcs.length === 0
     && !tripsList.some((x) => x.status === "arrived" || x.status === "received");

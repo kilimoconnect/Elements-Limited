@@ -97,6 +97,18 @@ async function main() {
     const l2 = await one(db, "insert into stock_transfer_lines(transfer_id, product_id, qty_requested) values ($1,$2,30) returning id", [t2, p]);
     check("requested quantity can be changed before dispatch", (await err(db, "select change_transfer_line_quantity($1,$2,25,'customer wants less')", [l2, owner])) === ""
       && Number(await one(db, "select qty_requested from stock_transfer_lines where id=$1", [l2])) === 25);
+    const mkUser = async (email: string, role: string) => {
+      const id = await one(db, "insert into auth.users(email) values ($1) returning id", [email]);
+      await db.query("insert into user_profiles(id, email, full_name, role_id, default_company_id, is_active) values ($1,$2,$2,(select id from roles where code=$3),$4,true)", [id, email, role, co]);
+      await db.query("insert into user_company_access(user_id, company_id) values ($1,$2)", [id, co]);
+      await db.query("insert into user_branch_access(user_id, branch_id) values ($1,$2)", [id, hq]);
+      return id;
+    };
+    const sm = await mkUser("rt-sm@test.local", "SALES_MANAGER"), so = await mkUser("rt-so@test.local", "CASHIER");
+    check("a Sales Manager of the sending branch can change a transfer quantity",
+      (await err(db, "select change_transfer_line_quantity($1,$2,26,'customer added 1')", [l2, sm])) === "");
+    check("a Sales Officer cannot", /not allowed|permission|authoris/i.test(await err(db, "select change_transfer_line_quantity($1,$2,27,'x')", [l2, so])));
+    await db.query("select change_transfer_line_quantity($1,$2,25,'back to 25')", [l2, owner]);
     check("a reason is required to change a quantity", (await err(db, "select change_transfer_line_quantity($1,$2,24,' ')", [l2, owner])) !== "");
     const d2 = await one(db, `insert into stock_transfer_dispatches(company_id, transfer_id, trip_no, dispatch_date, driver_name, vehicle_registration)
       values ($1,$2,1,current_date,'Ali','T 2 BBB') returning id`, [co, t2]);
