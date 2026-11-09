@@ -2,7 +2,7 @@
  * Goods Received Note for one supplier's goods on a transfer, issued by Head
  * Office to submit to the supplier. Pure rendering; no prices.
  */
-import { brandedPdf, header, panel, kvRows, table, signatures, finish, wrapText, fmtLongDate, qty, C, L, R, W, type Col } from "@/lib/pdf/brand";
+import { brandedPdf, header, panel, kvRows, table, signatures, finish, wrapText, fmtLongDate, qty, amendedBlock, C, L, R, W, type Col, type Amendment } from "@/lib/pdf/brand";
 
 export interface GrnData {
   number: string;
@@ -18,6 +18,8 @@ export interface GrnData {
   delivery_notes: string[];
   trucks?: { trip_no: number; truck: string | null; trailer: string | null; driver: string | null; phone: string | null; licence: string | null }[];
   lines: { sku: string; name: string; unit: string | null; batch: string | null; sent: number; received: number; net_kg: number | null }[];
+  /** Changes to the truck or driver after dispatch. */
+  amendments?: Amendment[];
 }
 
 export function renderTransferGrn(g: GrnData): Uint8Array {
@@ -25,6 +27,7 @@ export function renderTransferGrn(g: GrnData): Uint8Array {
   const title = "GOODS RECEIVED NOTE";
   const top = () => header(pdf, g.company, title, g.number, fmtLongDate(g.issued_at));
   let y = top();
+  y = amendedBlock(pdf, y, g.amendments ?? [], "GRN");
 
   // Supplier, full width; long values wrap instead of being cut off.
   const s = g.supplier;

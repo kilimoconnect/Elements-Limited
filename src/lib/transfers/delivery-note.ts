@@ -3,7 +3,7 @@
  * snapshot of a delivery-note version (document_versions). Pure: no database,
  * no costs, no licence numbers, no supplier. Producing it posts nothing.
  */
-import { brandedPdf, header, panel, kvRows, banner, table, signatures, finish, fmtDate, fmtLongDate, qty, C, L, R, W, type Col } from "@/lib/pdf/brand";
+import { brandedPdf, header, panel, kvRows, banner, table, signatures, finish, fmtDate, fmtLongDate, qty, amendedBlock, C, L, R, W, type Col, type Amendment } from "@/lib/pdf/brand";
 
 export interface DeliveryNoteSnapshot {
   company: { name: string; legal_name: string | null; address: string | null; phone: string | null; email: string | null };
@@ -21,12 +21,13 @@ export interface DeliveryNoteSnapshot {
   notes: string | null;
 }
 
-export function renderDeliveryNote(s: DeliveryNoteSnapshot, v: { version: number; sha256: string; issuedAt: string }): Uint8Array {
+export function renderDeliveryNote(s: DeliveryNoteSnapshot, v: { version: number; sha256: string; issuedAt: string }, amendments: Amendment[] = []): Uint8Array {
   const pdf = brandedPdf();
   const dn = s.delivery_note_number || s.reference;
   const title = "DELIVERY NOTE";
   const top = () => header(pdf, s.company, title, dn, fmtLongDate(s.dispatch_date));
   let y = top();
+  y = amendedBlock(pdf, y, amendments, "delivery note");
 
   y = banner(pdf, y, "GOING TO", `${s.receiver.code} - ${s.receiver.name}${s.receiver.location ? `   (warehouse ${s.receiver.location})` : ""}`);
 

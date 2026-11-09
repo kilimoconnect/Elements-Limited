@@ -2,6 +2,8 @@ import { assertActiveUser } from "@/lib/auth/guards";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { writeAuditLog } from "@/lib/audit";
 import { renderDeliveryNote, type DeliveryNoteSnapshot } from "@/lib/transfers/delivery-note";
+import { toAmendments } from "@/lib/pdf/brand";
+import { canUseLicenceNumber } from "@/lib/transfers/licence";
 
 /**
  * GET a delivery-note version as PDF. Rendered from the stored snapshot, so a
@@ -19,8 +21,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ versionId: str
   if (!v || v.owner_type !== "stock_transfer_dispatch" || v.kind !== "delivery_note") return new Response("Not found.", { status: 404 });
   const { data: allowed } = await admin.rpc("can_access_document_owner", { p_user: user.id, p_owner_type: v.owner_type, p_owner_id: v.owner_id });
   if (allowed !== true) return new Response("Not found.", { status: 404 });
+
+  // Truck / driver changes made before this version was issued.
+  const { data: changeRows } = await admin.from("stock_transfer_dispatch_changes").select("old_values, new_values, reason, changed_at")
+    .eq("dispatch_id", v.owner_id).lte("changed_at", v.created_at).order("changed_at");
+  const amendments = toAmendments((changeRows ?? []) as never, canUseLicenceNumber(user));
+
   const snap = v.snapshot as DeliveryNoteSnapshot;
-  const pdf = renderDeliveryNote(snap, { version: v.version, sha256: v.content_sha256, issuedAt: v.created_at });
+  const pdf = renderDeliveryNote(snap, { version: v.version, sha256: v.content_sha256, issuedAt: v.created_at }, amendments);
   await writeAuditLog({ userId: user.id, companyId: v.company_id, action: "transfer.delivery_note_download", resourceType: "document_version", resourceId: v.id });
   const name = `${snap.delivery_note_number || snap.reference}-v${v.version}.pdf`.replace(/[^A-Za-z0-9._-]/g, "_");
   return new Response(new Blob([pdf as BlobPart], { type: "application/pdf" }), {

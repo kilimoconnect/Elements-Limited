@@ -209,3 +209,37 @@ export function wrapText(text: string, maxWidth: number, size: number, font: "re
   }
   return out;
 }
+
+export interface Amendment { at: string; reason: string; trip?: number | null; changes: { field: string; from: string; to: string }[] }
+
+const AMEND_FIELD: Record<string, string> = {
+  vehicle_registration: "Truck", trailer_registration: "Trailer", driver_name: "Driver", driver_phone: "Driver phone",
+  driver_licence: "Licence no.", transporter_name: "Transporter", transporter_contact: "Transporter contact",
+};
+/** Turns stock_transfer_dispatch_changes rows into amendments (licence numbers only when allowed). */
+export function toAmendments(rows: { old_values: Record<string, unknown>; new_values: Record<string, unknown>; reason: string; changed_at: string; trip?: number | null }[], showLicence: boolean): Amendment[] {
+  return rows.map((r) => ({
+    at: r.changed_at, reason: r.reason, trip: r.trip ?? null,
+    changes: Object.keys(r.new_values ?? {}).filter((k) => showLicence || k !== "driver_licence").map((k) => ({
+      field: AMEND_FIELD[k] ?? k.replace(/_/g, " "), from: String(r.old_values?.[k] ?? "") || "-", to: String(r.new_values?.[k] ?? "") || "-",
+    })),
+  })).filter((a) => a.changes.length);
+}
+
+const RED: Rgb = [176, 32, 32];
+/** "AMENDED" block at the top of a document: every change to the truck or driver, oldest first. */
+export function amendedBlock(pdf: SimplePdf, y: number, amendments: Amendment[], noun: string): number {
+  if (!amendments.length) return y;
+  const lines: string[] = [];
+  for (const a of [...amendments].sort((x, z) => (x.at < z.at ? -1 : 1))) {
+    const what = a.changes.map((c) => `${c.field}: ${c.from} -> ${c.to}`).join(";  ");
+    lines.push(...wrapText(`${fmtDate(a.at)}${a.trip ? `  (trip ${a.trip})` : ""}  -  ${what}.  Reason: ${a.reason}`, W - 24, 8));
+  }
+  const h = 22 + lines.length * 10.5 + 6;
+  pdf.fillRect(L, y - h, W, h, [253, 236, 236], { color: RED, width: 1 });
+  pdf.fillRect(L, y - h, 5, h, RED);
+  pdf.text(L + 14, y - 14, `AMENDED ${noun.toUpperCase()}`, 9.5, "bold", RED);
+  pdf.textRight(R - 10, y - 14, `${amendments.length} change${amendments.length === 1 ? "" : "s"} to truck / driver details`, 7.5, "regular", RED);
+  lines.forEach((t, i) => pdf.text(L + 14, y - 27 - i * 10.5, t, 8, "regular", C.text));
+  return y - h - 10;
+}

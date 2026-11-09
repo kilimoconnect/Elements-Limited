@@ -8,6 +8,7 @@ import { formatQuantity, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RecentTruckWarning } from "@/components/transfers/recent-truck-warning";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -67,6 +68,7 @@ export function TripForm({ transferId, lines, canLicence, defaults }: {
         <div className="space-y-1.5"><Label>Truck registration</Label><Input value={f.vehicle} onChange={set("vehicle")} /></div>
         <div className="space-y-1.5"><Label>Trailer registration</Label><Input value={f.trailer} onChange={set("trailer")} /></div>
         <div />
+        <RecentTruckWarning vehicle={f.vehicle} trailer={f.trailer} excludeTransferId={transferId} />
         <div className="space-y-1.5"><Label>Transporter company</Label><Input value={f.transporter} onChange={set("transporter")} /></div>
         <div className="space-y-1.5"><Label>Transporter contact</Label><Input value={f.transporterContact} onChange={set("transporterContact")} /></div>
         <div className="space-y-1.5 sm:col-span-3"><Label>Notes</Label><Textarea value={f.notes} onChange={set("notes")} /></div>

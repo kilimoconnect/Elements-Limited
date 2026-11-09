@@ -11,6 +11,7 @@ import { round2 } from "@/lib/sales/calc";
 import { todayISO } from "@/lib/format";
 import { createTransferDraft } from "@/lib/inventory/actions";
 import { canUseLicenceNumber } from "@/lib/transfers/licence";
+import { normaliseRegistration, matchRecentTrucks, type RecentMatch, type TripRecord } from "@/lib/transfers/registration";
 
 /*
  * Transfer trips, receipts, discrepancies, charges and the shared dispatch file.
@@ -491,4 +492,41 @@ export async function postTransferCharge(input: {
     refresh(t.id);
     return { ok: true, id: ci.id };
   } catch (e) { return fail(e); }
+}
+
+/**
+ * Advisory: stock-transfer trips in the last three days that used the same
+ * truck or trailer, compared without formatting (see registration.ts).
+ * Existing records are normalised when read, so older entries match too.
+ */
+export async function checkRecentTruckUse(input: { vehicle?: string | null; trailer?: string | null; excludeTransferId?: string | null; excludeTripId?: string | null }):
+  Promise<{ ok: true; matches: RecentMatch[] } | { ok: false; error: string }> {
+  try {
+    const user = await assertActiveUser();
+    if (!user.isOwner && !user.permissions.has("inventory.transfer_view") && !user.permissions.has("inventory.transfer_create")) return { ok: true, matches: [] };
+    const ctx = await getActiveContext();
+    if (!normaliseRegistration(input.vehicle) && !normaliseRegistration(input.trailer)) return { ok: true, matches: [] };
+    const admin = createAdminClient();
+    const since = new Date(Date.now() - 3 * 24 * 3600 * 1000);
+    const sinceDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Dar_es_Salaam" }).format(since);
+    const [{ data: trips }, { data: headers }] = await Promise.all([
+      admin.from("stock_transfer_dispatches").select("id, trip_no, dispatch_date, created_at, vehicle_registration, trailer_registration, status, transfer_id, transfer:stock_transfers!inner(document_number, status)")
+        .eq("company_id", ctx.companyId).neq("status", "voided").or(`dispatch_date.gte.${sinceDate},created_at.gte.${since.toISOString()}`).limit(500),
+      // Transfers with truck details but no trip yet (drafts).
+      admin.from("stock_transfers").select("id, document_number, transfer_date, created_at, vehicle_registration, trailer_registration, status")
+        .eq("company_id", ctx.companyId).neq("status", "voided").gte("created_at", since.toISOString()).limit(500),
+    ]);
+    type T = { id: string; trip_no: number; dispatch_date: string; vehicle_registration: string | null; trailer_registration: string | null; status: string; transfer_id: string;
+      transfer: { document_number: string | null; status: string } | null };
+    const tripRows = ((trips ?? []) as unknown as T[]).filter((t) => t.id !== input.excludeTripId && t.transfer_id !== input.excludeTransferId && t.transfer?.status !== "voided");
+    const withTrips = new Set(tripRows.map((t) => t.transfer_id));
+    const records: TripRecord[] = [
+      ...tripRows.map((t) => ({ transferNumber: t.transfer?.document_number ?? null, tripNo: t.trip_no, date: t.dispatch_date, vehicle: t.vehicle_registration, trailer: t.trailer_registration,
+        transferId: t.transfer_id, status: t.status })),
+      ...((headers ?? []) as { id: string; document_number: string | null; transfer_date: string; vehicle_registration: string | null; trailer_registration: string | null; status: string }[])
+        .filter((h) => h.id !== input.excludeTransferId && !withTrips.has(h.id))
+        .map((h) => ({ transferNumber: h.document_number, tripNo: null, date: h.transfer_date, vehicle: h.vehicle_registration, trailer: h.trailer_registration, transferId: h.id, status: h.status })),
+    ];
+    return { ok: true, matches: matchRecentTrucks(input, records).sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 10) };
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "Failed." }; }
 }

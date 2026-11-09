@@ -3,6 +3,8 @@ import { userHasPermission } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { writeAuditLog } from "@/lib/audit";
 import { renderDeliveryNote, type DeliveryNoteSnapshot } from "@/lib/transfers/delivery-note";
+import { toAmendments } from "@/lib/pdf/brand";
+import { canUseLicenceNumber } from "@/lib/transfers/licence";
 
 /**
  * GET a trip's delivery note as a PDF download, the same way GRNs download:
@@ -33,8 +35,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ tripId: string
   }
   await writeAuditLog({ userId: user.id, companyId: trip.company_id, action: "transfer.delivery_note_download", resourceType: "document_version", resourceId: v.id });
 
+
+  // Truck / driver changes made before this version was issued.
+  const { data: changeRows } = await admin.from("stock_transfer_dispatch_changes").select("old_values, new_values, reason, changed_at")
+    .eq("dispatch_id", tripId).lte("changed_at", v.created_at).order("changed_at");
+  const amendments = toAmendments((changeRows ?? []) as never, canUseLicenceNumber(user));
+
   const snap = v.snapshot as DeliveryNoteSnapshot;
-  const pdf = renderDeliveryNote(snap, { version: v.version, sha256: v.content_sha256, issuedAt: v.created_at });
+  const pdf = renderDeliveryNote(snap, { version: v.version, sha256: v.content_sha256, issuedAt: v.created_at }, amendments);
   const name = `${snap.delivery_note_number || snap.reference}.pdf`.replace(/[^A-Za-z0-9._-]/g, "_");
   return new Response(new Blob([pdf as BlobPart], { type: "application/pdf" }), {
     headers: {
