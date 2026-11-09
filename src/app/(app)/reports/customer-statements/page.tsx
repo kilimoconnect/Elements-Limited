@@ -31,6 +31,7 @@ export default async function CustomerStatementsPage(props: { searchParams: Prom
         <ParamSelect param="customer" value={customerId} placeholder="Select customer" options={(customers ?? []).map((c) => ({ id: c.id, label: `${c.code} — ${c.name}` }))} />
         <PeriodFilter start={start} end={end} />
       </div>
+      {cust && <p className="mb-2 text-xs text-muted-foreground">Invoices are debits; payments, returns and advances received are credits. A negative balance is money the customer has paid in advance.</p>}
       {!cust ? <EmptyState title="Choose a customer" /> : (
         <div className="report-card rounded-lg border border-border bg-card">
           <Table>
@@ -47,7 +48,7 @@ export default async function CustomerStatementsPage(props: { searchParams: Prom
                   <TableCell className="text-right tabular-nums">{formatMoney(r.running)}</TableCell>
                 </TableRow>
               ))}
-              <TableRow className="font-semibold"><TableCell colSpan={5}>Closing balance</TableCell><TableCell className="text-right tabular-nums">{formatMoney(st!.closing)}</TableCell></TableRow>
+              <TableRow className="font-semibold"><TableCell colSpan={5}>Closing balance{st!.closing < 0 ? " (customer credit: paid in advance)" : ""}</TableCell><TableCell className="text-right tabular-nums">{formatMoney(st!.closing)}</TableCell></TableRow>
             </TableBody>
           </Table>
         </div>

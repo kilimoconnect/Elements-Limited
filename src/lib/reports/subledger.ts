@@ -258,22 +258,33 @@ export async function goodsInTransit(companyId: string, asOf: string) {
 }
 
 /* --------------------------- Statements --------------------------------- */
-export interface StatementRow { date: string; doc: string; type: string; debit: number; credit: number; running: number }
+export interface StatementRow { date: string; doc: string; type: string; debit: number; credit: number; running: number; tzs?: number; tzsRunning?: number; }
 
 export async function customerStatement(companyId: string, customerId: string, start: string, end: string) {
   const admin = createAdminClient();
-  const [sales, allocs, rets, openings] = await Promise.all([
+  const [sales, allocs, rets, openings, advances, refunds] = await Promise.all([
     admin.from("sales").select("document_number, document_date, grand_total").eq("company_id", companyId).eq("customer_id", customerId).eq("document_status", "posted"),
-    admin.from("customer_receipt_allocations").select("amount, sale:sales!inner(customer_id), receipt:customer_receipts!inner(document_number, document_date, document_status, customer_id)").eq("receipt.customer_id", customerId).eq("receipt.document_status", "posted"),
+    // Receipts against invoices; advances are shown once, when received (below), not again when applied to an invoice.
+    admin.from("customer_receipt_allocations").select("amount, sale:sales!inner(customer_id), receipt:customer_receipts!inner(document_number, document_date, document_status, customer_id, receipt_kind)").eq("receipt.customer_id", customerId).eq("receipt.document_status", "posted").neq("receipt.receipt_kind", "advance"),
     admin.from("sales_returns").select("document_number, document_date, total").eq("company_id", companyId).eq("customer_id", customerId).eq("document_status", "posted"),
     admin.from("customer_opening_balances").select("document_number, invoice_date, amount").eq("company_id", companyId).eq("customer_id", customerId).eq("document_status", "posted"),
+    // Money received before invoicing (Sales Requests): credit when received; a reversal puts it back.
+    admin.from("customer_receipts").select("document_number, document_date, amount, reference, document_status, voided_at").eq("company_id", companyId).eq("customer_id", customerId).eq("receipt_kind", "advance").neq("document_status", "draft"),
+    admin.from("customer_advance_refunds").select("document_number, refunded_at, amount, receipt:customer_receipts!inner(customer_id)").eq("company_id", companyId).eq("receipt.customer_id", customerId),
   ]);
+  const darDate = (ts: string) => new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Dar_es_Salaam" }).format(new Date(ts));
   type Ev = { date: string; doc: string; type: string; debit: number; credit: number };
   const evs: Ev[] = [];
   for (const s of (sales.data ?? []) as Record<string, unknown>[]) evs.push({ date: s.document_date as string, doc: (s.document_number as string) ?? "—", type: "Invoice", debit: N(s.grand_total), credit: 0 });
   for (const o of (openings.data ?? []) as Record<string, unknown>[]) evs.push({ date: o.invoice_date as string, doc: (o.document_number as string) ?? "Opening", type: "Opening", debit: N(o.amount), credit: 0 });
   for (const a of (allocs.data ?? []) as Record<string, unknown>[]) { const r = a.receipt as { document_number: string; document_date: string }; evs.push({ date: r.document_date, doc: r.document_number ?? "Receipt", type: "Receipt", debit: 0, credit: N(a.amount) }); }
   for (const r of (rets.data ?? []) as Record<string, unknown>[]) evs.push({ date: r.document_date as string, doc: (r.document_number as string) ?? "Return", type: "Return", debit: 0, credit: N(r.total) });
+  for (const a of (advances.data ?? []) as Record<string, unknown>[]) {
+    const doc = (a.document_number as string) ?? "Advance";
+    evs.push({ date: a.document_date as string, doc, type: `Payment received (advance)${a.reference ? ` · ${a.reference}` : ""}`, debit: 0, credit: N(a.amount) });
+    if (a.document_status === "voided" && a.voided_at) evs.push({ date: darDate(a.voided_at as string), doc, type: "Payment reversed", debit: N(a.amount), credit: 0 });
+  }
+  for (const f of (refunds.data ?? []) as Record<string, unknown>[]) evs.push({ date: darDate(f.refunded_at as string), doc: (f.document_number as string) ?? "Refund", type: "Refund of advance", debit: N(f.amount), credit: 0 });
   return buildStatement(evs, start, end);
 }
 
@@ -287,37 +298,47 @@ export async function customerStatement(companyId: string, customerId: string, s
  */
 export async function supplierStatement(companyId: string, supplierId: string, start: string, end: string) {
   const admin = createAdminClient();
-  const [purchases, expenses, allocs, rets, openings, advances, events] = await Promise.all([
+  const [purchases, expenses, allocs, rets, openings, advances, events, costInvoices] = await Promise.all([
     admin.from("purchases").select("id, document_number, document_date, grand_total, currency_code, fc_grand_total").eq("company_id", companyId).eq("supplier_id", supplierId).eq("document_status", "posted"),
     admin.from("expenses").select("document_number, document_date, grand_total").eq("company_id", companyId).eq("supplier_id", supplierId).eq("document_status", "posted"),
     admin.from("supplier_payment_allocations").select("amount, fc_amount, payment:supplier_payments!inner(document_number, document_date, document_status, supplier_id, currency_code)").eq("payment.supplier_id", supplierId).eq("payment.document_status", "posted"),
     admin.from("purchase_returns").select("document_number, document_date, total, currency_code, fc_total").eq("company_id", companyId).eq("supplier_id", supplierId).eq("document_status", "posted"),
     admin.from("supplier_opening_balances").select("document_number, document_date, amount").eq("company_id", companyId).eq("supplier_id", supplierId).eq("document_status", "posted"),
-    admin.from("supplier_advances").select("currency_code, advance_date, fc_amount, status, payment:supplier_payments(document_number)").eq("company_id", companyId).eq("supplier_id", supplierId).neq("status", "voided"),
+    admin.from("supplier_advances").select("currency_code, advance_date, fc_amount, tzs_amount, status, payment:supplier_payments(document_number)").eq("company_id", companyId).eq("supplier_id", supplierId).neq("status", "voided"),
     admin.from("supplier_payable_events").select("tzs_delta, event_date, payable:supplier_payables!inner(supplier_id, currency_code)").eq("company_id", companyId).eq("payable.supplier_id", supplierId).lte("event_date", end),
+    // Landed costs and transfer charges posted to this supplier (credit notes reduce what we owe).
+    admin.from("cost_invoices").select("document_number, supplier_invoice_number, document_date, document_kind, currency_code, grand_total, fc_grand_total").eq("company_id", companyId).eq("supplier_id", supplierId).eq("document_status", "posted"),
   ]);
-  type Ev = { date: string; doc: string; type: string; debit: number; credit: number };
+  /** tzsDebit / tzsCredit: the TZS value of a foreign-currency line (shown beside it). */
+  type Ev = { date: string; doc: string; type: string; debit: number; credit: number; tzsDebit?: number; tzsCredit?: number };
   const byCur = new Map<string, Ev[]>();
   const add = (cur: string, e: Ev) => { if (!byCur.has(cur)) byCur.set(cur, []); byCur.get(cur)!.push(e); };
   byCur.set("TZS", []);
   // Supplier statement: credit increases what we owe, debit reduces it.
   for (const p of (purchases.data ?? []) as Record<string, unknown>[]) {
     const cur = p.currency_code as string;
-    add(cur, { date: p.document_date as string, doc: (p.document_number as string) ?? "—", type: "Purchase", debit: 0, credit: cur === "TZS" ? N(p.grand_total) : N(p.fc_grand_total) });
+    add(cur, { date: p.document_date as string, doc: (p.document_number as string) ?? "—", type: "Purchase", debit: 0, credit: cur === "TZS" ? N(p.grand_total) : N(p.fc_grand_total), tzsCredit: N(p.grand_total) });
   }
   for (const e of (expenses.data ?? []) as Record<string, unknown>[]) add("TZS", { date: e.document_date as string, doc: (e.document_number as string) ?? "—", type: "Expense", debit: 0, credit: N(e.grand_total) });
   for (const o of (openings.data ?? []) as Record<string, unknown>[]) add("TZS", { date: o.document_date as string, doc: (o.document_number as string) ?? "Opening", type: "Opening", debit: 0, credit: N(o.amount) });
   for (const a of (allocs.data ?? []) as Record<string, unknown>[]) {
     const p = a.payment as { document_number: string; document_date: string; currency_code: string };
-    add(p.currency_code, { date: p.document_date, doc: p.document_number ?? "Payment", type: "Payment", debit: p.currency_code === "TZS" ? N(a.amount) : N(a.fc_amount), credit: 0 });
+    add(p.currency_code, { date: p.document_date, doc: p.document_number ?? "Payment", type: "Payment", debit: p.currency_code === "TZS" ? N(a.amount) : N(a.fc_amount), credit: 0, tzsDebit: N(a.amount) });
+  }
+  for (const c of (costInvoices.data ?? []) as Record<string, unknown>[]) {
+    const cur = c.currency_code as string;
+    const amt = cur === "TZS" ? N(c.grand_total) : N(c.fc_grand_total);
+    const doc = `${(c.document_number as string) ?? "Cost invoice"}${c.supplier_invoice_number ? ` (inv. ${c.supplier_invoice_number})` : ""}`;
+    if (c.document_kind === "credit_note") add(cur, { date: c.document_date as string, doc, type: "Cost credit note", debit: amt, credit: 0, tzsDebit: N(c.grand_total) });
+    else add(cur, { date: c.document_date as string, doc, type: "Landed cost / charges", debit: 0, credit: amt, tzsCredit: N(c.grand_total) });
   }
   for (const v of (advances.data ?? []) as Record<string, unknown>[]) {
     const pay = v.payment as { document_number: string | null } | null;
-    add(v.currency_code as string, { date: v.advance_date as string, doc: pay?.document_number ?? "Advance", type: "Advance", debit: N(v.fc_amount), credit: 0 });
+    add(v.currency_code as string, { date: v.advance_date as string, doc: pay?.document_number ?? "Advance", type: "Advance", debit: N(v.fc_amount), credit: 0, tzsDebit: N(v.tzs_amount) });
   }
   for (const r of (rets.data ?? []) as Record<string, unknown>[]) {
     const cur = r.currency_code as string;
-    add(cur, { date: r.document_date as string, doc: (r.document_number as string) ?? "Return", type: "Return", debit: cur === "TZS" ? N(r.total) : N(r.fc_total), credit: 0 });
+    add(cur, { date: r.document_date as string, doc: (r.document_number as string) ?? "Return", type: "Return", debit: cur === "TZS" ? N(r.total) : N(r.fc_total), credit: 0, tzsDebit: N(r.total) });
   }
   const carrying = new Map<string, number>();
   for (const e of (events.data ?? []) as Record<string, unknown>[]) {
@@ -331,21 +352,22 @@ export async function supplierStatement(companyId: string, supplierId: string, s
   return { ...tzs, foreign };
 }
 
-function buildStatement(evs: { date: string; doc: string; type: string; debit: number; credit: number }[], start: string, end: string) {
+function buildStatement(evs: { date: string; doc: string; type: string; debit: number; credit: number; tzsDebit?: number; tzsCredit?: number }[], start: string, end: string) {
   evs.sort((a, b) => (a.date < b.date ? -1 : 1));
-  let opening = 0;
+  let opening = 0, tzsOpening = 0;
   const rows: StatementRow[] = [];
-  let running = 0;
+  const tz = (e: { tzsDebit?: number; tzsCredit?: number }) => round2((e.tzsDebit ?? 0) - (e.tzsCredit ?? 0));
   for (const e of evs) {
-    if (e.date < start) { opening = round2(opening + e.debit - e.credit); continue; }
+    if (e.date < start) { opening = round2(opening + e.debit - e.credit); tzsOpening = round2(tzsOpening + tz(e)); }
   }
-  running = opening;
+  let running = opening, tzsRunning = tzsOpening;
   for (const e of evs) {
     if (e.date < start || e.date > end) continue;
     running = round2(running + e.debit - e.credit);
-    rows.push({ date: e.date, doc: e.doc, type: e.type, debit: e.debit, credit: e.credit, running });
+    tzsRunning = round2(tzsRunning + tz(e));
+    rows.push({ date: e.date, doc: e.doc, type: e.type, debit: e.debit, credit: e.credit, running, tzs: tz(e), tzsRunning });
   }
-  return { opening, rows, closing: running };
+  return { opening, rows, closing: running, tzsOpening, tzsClosing: tzsRunning };
 }
 
 /* -------------------- Reconciliation control panel ---------------------- */
