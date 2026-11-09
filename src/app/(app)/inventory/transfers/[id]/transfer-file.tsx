@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { Pencil } from "lucide-react";
 import {
   dispatchTrip, deleteDraftTrip, voidTrip, changeTripTransport, addAgent, addTransferUpdate,
   resolveDiscrepancy, addTransferCharge, accrueTransferCharge, voidTransferChargeEstimate, postTransferCharge,
@@ -249,7 +250,7 @@ export function ChangeQuantityButton({ kind, id, current, label, dispatched = fa
   const [requestId, setRequestId] = React.useState(rid);
   return (
     <>
-      <button type="button" className="ml-2 text-xs font-medium text-primary hover:underline" onClick={() => { setQty(String(current)); setReason(""); setErr(null); setOpen(true); }}>Change</button>
+      <Button type="button" size="sm" variant="outline" className="ml-2 h-7 px-2 text-xs" onClick={() => { setQty(String(current)); setReason(""); setErr(null); setOpen(true); }}><Pencil className="h-3.5 w-3.5" /> Change</Button>
       <Dialog open={open} onOpenChange={(o) => !pending && setOpen(o)}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>{kind === "line" ? "Change requested quantity" : "Correct trip quantity"}</DialogTitle></DialogHeader>
