@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import {
   dispatchTrip, deleteDraftTrip, voidTrip, changeTripTransport, addAgent, addTransferUpdate,
   resolveDiscrepancy, addTransferCharge, accrueTransferCharge, voidTransferChargeEstimate, postTransferCharge,
+  changeTransferLineQuantity, changeTripLineQuantity,
 } from "@/lib/transfers/actions";
 import { NewSupplierButton } from "@/components/common/new-supplier";
 import { RecentTruckWarning } from "@/components/transfers/recent-truck-warning";
@@ -233,5 +234,43 @@ export function ChargeRowActions({ sourceId, status, estimate, canAccrue }: { so
       </>}
       <Button size="sm" variant="ghost" disabled={pending} onClick={() => run(() => voidTransferChargeEstimate(sourceId), "Estimate removed.")}>Remove</Button>
     </div>
+  );
+}
+
+/** "Change" next to a quantity: the requested quantity of a line, or the quantity on a trip. */
+export function ChangeQuantityButton({ kind, id, current, label, dispatched = false }: {
+  kind: "line" | "trip"; id: string; current: number; label: string; dispatched?: boolean;
+}) {
+  const { pending, run } = useRun();
+  const [open, setOpen] = React.useState(false);
+  const [qty, setQty] = React.useState(String(current));
+  const [reason, setReason] = React.useState("");
+  const [err, setErr] = React.useState<string | null>(null);
+  const [requestId, setRequestId] = React.useState(rid);
+  return (
+    <>
+      <button type="button" className="ml-2 text-xs font-medium text-primary hover:underline" onClick={() => { setQty(String(current)); setReason(""); setErr(null); setOpen(true); }}>Change</button>
+      <Dialog open={open} onOpenChange={(o) => !pending && setOpen(o)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>{kind === "line" ? "Change requested quantity" : "Correct trip quantity"}</DialogTitle></DialogHeader>
+          <p className="text-sm">{label} — now {current}</p>
+          {kind === "trip" && dispatched && (
+            <p className="text-xs text-muted-foreground">The trip is already dispatched. Less returns the difference to the sending branch; more takes it out of the sending branch. Goods in transit and the delivery note (marked AMENDED) are updated.</p>
+          )}
+          <div className="space-y-2">
+            <div className="space-y-1"><Label>New quantity</Label><Input type="number" min="0" step="0.0001" value={qty} onChange={(e) => setQty(e.target.value)} /></div>
+            <div className="space-y-1"><Label>Reason *</Label><Textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why the quantity changes" /></div>
+          </div>
+          {err && <p className="text-sm text-destructive">{err}</p>}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>Cancel</Button>
+            <Button disabled={pending || !(Number(qty) > 0) || !reason.trim() || Number(qty) === current} onClick={async () => {
+              const e = await run(() => kind === "line" ? changeTransferLineQuantity(id, Number(qty), reason) : changeTripLineQuantity(id, Number(qty), reason, requestId), "Quantity changed.");
+              if (e) setErr(e); else { setOpen(false); setRequestId(rid()); }
+            }}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

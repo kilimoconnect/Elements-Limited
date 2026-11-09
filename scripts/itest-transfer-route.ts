@@ -89,6 +89,48 @@ async function main() {
       && Number(await one(db, "select stock_value from stock_balances where branch_id=$1 and product_id=$2", [dod, p])) === before + 20000);
     check("a received transfer cannot change route", (await err(db, "select change_transfer_destination($1,$2,$3,'late')", [t, owner, mwz])) !== "");
 
+    // ------------------------------------------------------------ changing quantities (0055)
+    const gl = async (code: string) => Number(await one(db, `select coalesce(sum(jl.debit - jl.credit),0) from journal_lines jl join journal_entries je on je.id = jl.journal_id
+      join chart_of_accounts a on a.id = jl.account_id where je.company_id=$1 and a.code=$2`, [co, code]));
+    const stockQty = async (b: string) => Number(await one(db, "select coalesce((select quantity from stock_balances where branch_id=$1 and product_id=$2),0)", [b, p]));
+    const t2 = await one(db, "insert into stock_transfers(company_id, source_branch_id, destination_branch_id) values ($1,$2,$3) returning id", [co, hq, mwz]);
+    const l2 = await one(db, "insert into stock_transfer_lines(transfer_id, product_id, qty_requested) values ($1,$2,30) returning id", [t2, p]);
+    check("requested quantity can be changed before dispatch", (await err(db, "select change_transfer_line_quantity($1,$2,25,'customer wants less')", [l2, owner])) === ""
+      && Number(await one(db, "select qty_requested from stock_transfer_lines where id=$1", [l2])) === 25);
+    check("a reason is required to change a quantity", (await err(db, "select change_transfer_line_quantity($1,$2,24,' ')", [l2, owner])) !== "");
+    const d2 = await one(db, `insert into stock_transfer_dispatches(company_id, transfer_id, trip_no, dispatch_date, driver_name, vehicle_registration)
+      values ($1,$2,1,current_date,'Ali','T 2 BBB') returning id`, [co, t2]);
+    const dl2 = await one(db, "insert into stock_transfer_dispatch_lines(company_id, dispatch_id, transfer_line_id, qty) values ($1,$2,$3,20) returning id", [co, d2, l2]);
+    await db.query("select change_trip_line_quantity($1,$2,22,'loaded 2 more',gen_random_uuid()::text)", [dl2, owner]);
+    check("a draft trip's quantity simply changes", Number(await one(db, "select qty from stock_transfer_dispatch_lines where id=$1", [dl2])) === 22);
+    await db.query("select dispatch_transfer_trip($1,$2,gen_random_uuid()::text)", [d2, owner]);
+    await db.query("select * from issue_delivery_note($1,$2)", [d2, owner]);
+    check("the requested quantity cannot go below what is on trips",
+      /below 22/.test(await err(db, "select change_transfer_line_quantity($1,$2,10,'x')", [l2, owner])));
+    const hqQ = await stockQty(hq), tr0 = await transit(mwz), g1155 = await gl("1155"), g1150 = await gl("1150");
+    await db.query("select change_trip_line_quantity($1,$2,18,'4 bags fell off at loading, not sent',gen_random_uuid()::text)", [dl2, owner]);
+    check("reducing a dispatched trip returns the stock to the sending branch and reduces goods in transit",
+      await stockQty(hq) === hqQ + 4 && await transit(mwz) === tr0 - 4
+      && Number(await one(db, "select qty from stock_transfer_dispatch_lines where id=$1", [dl2])) === 18
+      && Number(await one(db, "select qty_dispatched from stock_transfer_lines where id=$1", [l2])) === 18);
+    check("the returned value moves from goods in transit (1155) back to inventory (1150): 4 bags x 1,000",
+      await gl("1155") === g1155 - 4000 && await gl("1150") === g1150 + 4000, `${await gl("1155") - g1155} ${await gl("1150") - g1150}`);
+    await db.query("select change_trip_line_quantity($1,$2,21,'counted again: 21 on the truck',gen_random_uuid()::text)", [dl2, owner]);
+    check("increasing takes more out of the sending branch into transit",
+      await stockQty(hq) === hqQ + 1 && await transit(mwz) === tr0 - 1 && await gl("1155") === g1155 - 1000 && await gl("1150") === g1150 + 1000);
+    check("both changes are in the trip history and the delivery note is re-issued (AMENDED)",
+      Number(await one(db, "select count(*) from stock_transfer_dispatch_changes where dispatch_id=$1 and new_values ? 'quantity RT-A'", [d2])) === 2
+      && Number(await one(db, "select max(version) from document_versions where owner_id=$1 and kind='delivery_note'", [d2])) === 3
+      && Number(await one(db, "select (snapshot->'lines'->0->>'qty')::numeric from document_versions where owner_id=$1 and kind='delivery_note' order by version desc limit 1", [d2])) === 21);
+    const dl2id = await one(db, "select id from stock_transfer_dispatch_lines where id=$1", [dl2]);
+    await db.query("select receive_transfer_trip($1,$2,$3::jsonb,now(),null,'Store',gen_random_uuid()::text,gen_random_uuid()::text)",
+      [d2, owner, JSON.stringify([{ dispatch_line_id: dl2id, accepted: 21, quarantined: 0, short: 0 }])]);
+    check("after receipt the trip quantity cannot be changed",
+      /already received/.test(await err(db, "select change_trip_line_quantity($1,$2,20,'late',gen_random_uuid()::text)", [dl2, owner])));
+    check("the received goods arrive at the corrected quantity", await stockQty(mwz) === 21);
+    check("ledger balances", Number(await one(db, `select count(*) from (select je.id from journal_entries je join journal_lines jl on jl.journal_id=je.id
+      where je.company_id=$1 group by je.id having sum(jl.debit) <> sum(jl.credit)) x`, [co])) === 0);
+
     console.log(`\nTransfer route change: ${passed} checks passed.`);
   } finally {
     await db.query("rollback");

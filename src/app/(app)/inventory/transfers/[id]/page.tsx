@@ -19,7 +19,7 @@ import { TransferActions, type TLine } from "./transfer-actions";
 import { ChangeRouteButton } from "./change-route";
 import { isHeadOfficeUser, transferGrnGroups } from "@/lib/transfers/grn-data";
 import { canUseLicenceNumber } from "@/lib/transfers/licence";
-import { TripActions, ResolveButton, ChargeForm, ChargeRowActions } from "./transfer-file";
+import { TripActions, ResolveButton, ChargeForm, ChargeRowActions, ChangeQuantityButton } from "./transfer-file";
 
 export const metadata: Metadata = { title: "Transfer" };
 type Params = Promise<{ id: string }>;
@@ -76,6 +76,10 @@ export default async function TransferDetailPage(props: { params: Params }) {
   const remainingToDispatch = ls.some((l) => N(l.qty_requested) > N(l.qty_dispatched));
   const tripOpts = tripsList.filter((x) => x.status !== "voided").map((x) => ({ id: x.id, label: x.document_number ?? `Trip ${x.trip_no} (draft)` }));
   const legacy = !t.posts_in_transit;
+  // Quantities can change until goods arrive (sending branch, dispatch permission).
+  const canChangeQty = canDispatch && t.status !== "voided" && (!legacy || t.status === "draft");
+  const canChangeTrip = (trip: { status: string }, x: { qty_reported: number }) =>
+    canDispatch && !legacy && (trip.status === "draft" || (trip.status === "dispatched" && N(x.qty_reported) === 0));
   // Route (destination) can change until anything arrives or is received.
   const canChangeRoute = canDispatch && ["draft", "dispatched"].includes(t.status) && rcs.length === 0
     && !tripsList.some((x) => x.status === "arrived" || x.status === "received");
@@ -133,6 +137,7 @@ export default async function TransferDetailPage(props: { params: Params }) {
                 ...(showCost ? [["In transit", formatMoney(legacy ? (N(r.qty_dispatched) - N(r.qty_received)) * N(r.unit_cost) : N(r.transit_value))] as Stat,
                   ["Received value", formatMoney(N(r.received_value))] as Stat, ["Charges", formatMoney(N(r.charges_applied))] as Stat] : []),
               ]} />
+              {canChangeQty && <p className="text-xs">Requested quantity <ChangeQuantityButton kind="line" id={r.id} current={N(r.qty_requested)} label={`${r.product?.sku} — ${r.product?.name}`} /></p>}
             </CardContent></Card>
           );
         })}
@@ -153,7 +158,7 @@ export default async function TransferDetailPage(props: { params: Params }) {
               return (
                 <TableRow key={r.id}>
                   <TableCell><span className="font-mono text-xs">{r.product?.sku}</span> — {r.product?.name}{r.batch_reference && <p className="text-xs text-muted-foreground">Batch {r.batch_reference}</p>}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatQuantity(N(r.qty_requested))}</TableCell>
+                  <TableCell className="whitespace-nowrap text-right tabular-nums">{formatQuantity(N(r.qty_requested))}{canChangeQty && <ChangeQuantityButton kind="line" id={r.id} current={N(r.qty_requested)} label={`${r.product?.sku} — ${r.product?.name}`} />}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatQuantity(N(r.qty_dispatched))}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatQuantity(N(r.qty_received))}</TableCell>
                   <TableCell className="text-right tabular-nums">{N(r.qty_quarantined) ? formatQuantity(N(r.qty_quarantined)) : "—"}</TableCell>
@@ -222,6 +227,7 @@ export default async function TransferDetailPage(props: { params: Params }) {
                     ["To arrive", formatQuantity(N(x.qty) - N(x.qty_reported)), true],
                     ...(showCost ? [["Value in transit", formatMoney(N(x.transit_value))] as Stat] : []),
                   ]} />
+                  {canChangeTrip(trip, x) && <p className="pt-1 text-xs">Loaded quantity <ChangeQuantityButton kind="trip" id={x.id} current={N(x.qty)} label={lname(x.transfer_line_id)} dispatched={trip.status === "dispatched"} /></p>}
                 </div>
               ))}
             </div>
@@ -234,7 +240,7 @@ export default async function TransferDetailPage(props: { params: Params }) {
                 {trip.lines.map((x) => (
                   <TableRow key={x.id}>
                     <TableCell>{lname(x.transfer_line_id)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatQuantity(N(x.qty))}</TableCell>
+                    <TableCell className="whitespace-nowrap text-right tabular-nums">{formatQuantity(N(x.qty))}{canChangeTrip(trip, x) && <ChangeQuantityButton kind="trip" id={x.id} current={N(x.qty)} label={lname(x.transfer_line_id)} dispatched={trip.status === "dispatched"} />}</TableCell>
                     <TableCell className="text-right tabular-nums">{x.net_kg == null ? "—" : formatQuantity(N(x.net_kg))}</TableCell>
                     <TableCell className="text-right tabular-nums">{formatQuantity(N(x.qty_reported))}</TableCell>
                     <TableCell className="text-right tabular-nums">{formatQuantity(N(x.qty_accepted))}</TableCell>

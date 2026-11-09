@@ -530,3 +530,30 @@ export async function checkRecentTruckUse(input: { vehicle?: string | null; trai
     return { ok: true, matches: matchRecentTrucks(input, records).sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 10) };
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "Failed." }; }
 }
+
+/** Change the requested quantity of a transfer line (never below what is on trips). */
+export async function changeTransferLineQuantity(lineId: string, qty: number, reason: string): Promise<RpcResult> {
+  try {
+    const { user, ctx, admin } = await ctxFor("inventory.transfer_dispatch");
+    const { data: l } = await admin.from("stock_transfer_lines").select("transfer_id").eq("id", lineId).maybeSingle();
+    if (!l) return { ok: false, error: "Line not found." };
+    const t = await loadTransfer(admin, l.transfer_id, ctx.companyId, user);
+    const res = await callPostingRpc("change_transfer_line_quantity", { p_line: lineId, p_user: user.id, p_qty: qty, p_reason: reason });
+    if (res.ok) { await writeAuditLog({ userId: user.id, companyId: ctx.companyId, action: "transfer.quantity_change", resourceType: "stock_transfer", resourceId: t.id, reason, newValues: { line_id: lineId, qty } }); refresh(t.id); }
+    return res;
+  } catch (e) { return fail(e); }
+}
+
+/** Correct the quantity on a trip (draft, or dispatched and not yet received). */
+export async function changeTripLineQuantity(dispatchLineId: string, qty: number, reason: string, requestId: string): Promise<RpcResult> {
+  try {
+    const { user, ctx, admin } = await ctxFor("inventory.transfer_dispatch");
+    const { data: dl } = await admin.from("stock_transfer_dispatch_lines").select("dispatch:stock_transfer_dispatches(transfer_id)").eq("id", dispatchLineId).maybeSingle();
+    const transferId = (dl?.dispatch as unknown as { transfer_id: string } | null)?.transfer_id;
+    if (!transferId) return { ok: false, error: "Trip line not found." };
+    const t = await loadTransfer(admin, transferId, ctx.companyId, user);
+    const res = await callPostingRpc("change_trip_line_quantity", { p_dispatch_line: dispatchLineId, p_user: user.id, p_qty: qty, p_reason: reason, p_idem: `trip_qty:${dispatchLineId}:${requestId}` });
+    if (res.ok) { await writeAuditLog({ userId: user.id, companyId: ctx.companyId, action: "transfer.trip_quantity_change", resourceType: "stock_transfer", resourceId: t.id, reason, newValues: { dispatch_line_id: dispatchLineId, qty } }); refresh(t.id); }
+    return res;
+  } catch (e) { return fail(e); }
+}
