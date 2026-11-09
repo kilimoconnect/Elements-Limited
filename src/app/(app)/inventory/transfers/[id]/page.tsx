@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowLeft, Pencil } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { requirePermissionPage } from "@/lib/auth/guards";
 import { getActiveContext, can } from "@/lib/context";
@@ -102,7 +102,6 @@ export default async function TransferDetailPage(props: { params: Params }) {
             {canChangeRoute && routeBranches.length > 0 && (
               <ChangeRouteButton transferId={id} current={`${t.dest?.name ?? ""}`} branches={routeBranches} dispatched={t.status === "dispatched"} />
             )}
-            {canChangeQty && <Button asChild variant="outline"><a href="#quantities"><Pencil className="h-4 w-4" /> Change quantity</a></Button>}
             {logistics && !legacy && canDispatch && remainingToDispatch && t.status !== "voided" &&
               <Button asChild variant="outline"><Link href={`/inventory/transfers/${id}/trips/new`}>New dispatch trip</Link></Button>}
             <TransferActions id={id} status={t.status} lines={tLines}
