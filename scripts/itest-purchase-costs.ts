@@ -132,6 +132,37 @@ async function main() {
     check("a Sales Officer (no purchases access) cannot see them",
       await one<boolean>(db, "select can_access_document_owner($1,'supplier_payment',$2)", [cashier, sp]) === false);
 
+    // ------------------------------------------------------------ purchase cost reaching goods in transit, then void / change quantity
+    const tr2 = await one(db, "insert into stock_transfers(company_id, source_branch_id, destination_branch_id) values ($1,$2,$3) returning id", [co, hq, mwz]);
+    const tl2 = await one(db, "insert into stock_transfer_lines(transfer_id, product_id, qty_requested) values ($1,$2,10) returning id", [tr2, prod]);
+    await db.query("select dispatch_stock_transfer($1,$2,$3)", [tr2, owner, key()]);
+    const dl2 = await one(db, "select x.id from stock_transfer_dispatch_lines x join stock_transfer_dispatches d on d.id = x.dispatch_id where d.transfer_id=$1", [tr2]);
+    await cost("PUR_OTHER", 10000); // reaches the 10 bags in transit too
+    const ch = n(await one(db, "select charges_applied from stock_transfer_dispatch_lines where id=$1", [dl2]));
+    check("a purchase cost posted while goods are in transit lands on the trip", ch > 0, String(ch));
+    const hqStock = async () => (await db.query("select quantity, stock_value from stock_balances where branch_id=$1 and product_id=$2", [hq, prod])).rows[0];
+    const s0 = await hqStock();
+    const tv0 = n(await one(db, "select transit_value from stock_transfer_dispatch_lines where id=$1", [dl2]));
+    await db.query("select change_trip_line_quantity($1,$2,8,'2 bags not loaded',$3)", [dl2, owner, key()]);
+    const s1 = await hqStock();
+    check("the trip quantity can be corrected despite the purchase cost; 2 bags return with their share of goods + cost",
+      n(s1.quantity) === n(s0.quantity) + 2 && Math.abs(n(s1.stock_value) - n(s0.stock_value) - Math.round(tv0 * 2 / 10 * 100) / 100) < 0.02,
+      `${n(s1.stock_value) - n(s0.stock_value)} vs ${tv0 * 0.2}`);
+    const tv1 = n(await one(db, "select transit_value from stock_transfer_dispatch_lines where id=$1", [dl2]));
+    await db.query("select void_stock_transfer($1,$2,'duplicate')", [tr2, owner]);
+    const s2 = await hqStock();
+    check("the duplicate transfer can be voided; its full transit value (goods + purchase cost) returns to the sending branch",
+      n(s2.quantity) === n(s1.quantity) + 8 && Math.abs(n(s2.stock_value) - n(s1.stock_value) - tv1) < 0.02
+      && await one(db, "select status from stock_transfers where id=$1", [tr2]) === "voided");
+    const tr3 = await one(db, "insert into stock_transfers(company_id, source_branch_id, destination_branch_id) values ($1,$2,$3) returning id", [co, hq, mwz]);
+    await db.query("insert into stock_transfer_lines(transfer_id, product_id, qty_requested) values ($1,$2,5)", [tr3, prod]);
+    await db.query("select dispatch_stock_transfer($1,$2,$3)", [tr3, owner, key()]);
+    const own = await one(db, `insert into cost_sources(company_id, owner_type, stock_transfer_id, cost_category_id, estimated_amount, allocation_basis)
+      values ($1,'stock_transfer',$2,(select id from cost_categories where company_id=$1 and code='TRANSPORT'),5000,'quantity') returning id`, [co, tr3]);
+    await db.query("select accrue_transfer_cost($1,5000,current_date,$2,$3)", [own, owner, key()]);
+    const vErr = await (async () => { await db.query("savepoint v"); try { await db.query("select void_stock_transfer($1,$2,'x')", [tr3, owner]); await db.query("release savepoint v"); return ""; } catch (e) { await db.query("rollback to savepoint v"); return (e as Error).message; } })();
+    check("a transfer's own charges still have to be credited before voiding", /own charges/.test(vErr), vErr);
+
     check("every shilling of both costs is accounted for",
       n(await one(db, "select coalesce(sum(amount),0) from cost_delta_lines where src_id = any($1::uuid[])", [[sBags, sOther]])) === 150000);
     check("the ledger still balances", n(await one(db, `select count(*) from (select j.id from journal_entries j join journal_lines l on l.journal_id=j.id
