@@ -12,6 +12,7 @@ import {
 } from "@/lib/transfers/actions";
 import { NewSupplierButton } from "@/components/common/new-supplier";
 import { normaliseRegistration } from "@/lib/transfers/registration";
+import { normalisePhone } from "@/lib/phone";
 import { RecentTruckWarning } from "@/components/transfers/recent-truck-warning";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -70,7 +71,8 @@ export function TripActions({ transferId, tripId, status, isSender, isReceiver, 
           <div className="grid grid-cols-2 gap-3">
             {fields.map(([k, l]) => (
               <div key={k} className="space-y-1"><Label>{l}</Label><Input value={form[k] ?? ""}
-                onChange={(e) => setForm({ ...form, [k]: k === "vehicle_registration" || k === "trailer_registration" ? normaliseRegistration(e.target.value) : e.target.value })} /></div>
+                onChange={(e) => setForm({ ...form, [k]: k === "vehicle_registration" || k === "trailer_registration" ? normaliseRegistration(e.target.value) : e.target.value })}
+                onBlur={k === "driver_phone" ? (e) => setForm({ ...form, driver_phone: normalisePhone(e.target.value) }) : undefined} /></div>
             ))}
             {(form.vehicle_registration !== transport.vehicle_registration || form.trailer_registration !== transport.trailer_registration) && (
               <div className="col-span-2"><RecentTruckWarning vehicle={form.vehicle_registration ?? ""} trailer={form.trailer_registration ?? ""} excludeTransferId={transferId} excludeTripId={tripId} /></div>

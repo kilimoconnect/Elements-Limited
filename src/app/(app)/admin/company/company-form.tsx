@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
+import { PhoneInput } from "@/components/common/phone-input";
 
 export interface CompanyValues {
   code: string;
@@ -74,7 +75,7 @@ export function CompanyForm({ company }: { company: CompanyValues }) {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="phone">Phone</Label>
-            <Input id="phone" name="phone" defaultValue={company.phone ?? ""} />
+            <PhoneInput id="phone" name="phone" defaultValue={company.phone ?? ""} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="email">Email</Label>

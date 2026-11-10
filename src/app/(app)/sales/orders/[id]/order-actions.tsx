@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PhoneInput } from "@/components/common/phone-input";
 
 interface Exc { id: string; kind: string; description: string; status: string; resolution: string | null; resolved_by: string; raised_at: string; truck: string | null }
 interface Amd { id: string; kind: string; reason: string; status: string; changes: Record<string, unknown>; requested_by: string; requester: string; requested_at: string; value_change: number | null; decision_reason: string | null }
@@ -192,7 +193,7 @@ function AmendDialog({ open, onOpenChange, lines, delivery, branches, onSubmit }
           <div className="space-y-2">
             <div className="space-y-1"><Label>Destination</Label><Input value={d.destination} onChange={(e) => setD({ ...d, destination: e.target.value })} /></div>
             <div className="space-y-1"><Label>Consignee</Label><Input value={d.consignee_name} onChange={(e) => setD({ ...d, consignee_name: e.target.value })} /></div>
-            <div className="space-y-1"><Label>Consignee phone</Label><Input value={d.consignee_phone} onChange={(e) => setD({ ...d, consignee_phone: e.target.value })} /></div>
+            <div className="space-y-1"><Label>Consignee phone</Label><PhoneInput value={d.consignee_phone} onChange={(e) => setD({ ...d, consignee_phone: e.target.value })} /></div>
           </div>
         )}
         {kind === "change_branch" && (

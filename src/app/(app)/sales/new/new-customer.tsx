@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { PhoneInput } from "@/components/common/phone-input";
 
 const EMPTY = { name: "", phone: "", email: "", tin: "", vat: "", address: "" };
 
@@ -52,7 +53,7 @@ export function NewCustomerButton({ branchId, existing, onCreated }: {
             {similar.length > 0 && (
               <p className="rounded-md bg-warning/15 px-3 py-2 text-xs sm:col-span-2">Similar existing customers: {similar.map((c) => `${c.code} — ${c.name}`).join("; ")}. Check it is not one of these.</p>
             )}
-            <div className="space-y-1"><Label>Phone <span className="text-destructive">*</span></Label><Input value={f.phone} onChange={set("phone")} inputMode="tel" /></div>
+            <div className="space-y-1"><Label>Phone <span className="text-destructive">*</span></Label><PhoneInput value={f.phone} onChange={set("phone")} /></div>
             <div className="space-y-1"><Label>Email</Label><Input value={f.email} onChange={set("email")} type="email" /></div>
             <div className="space-y-1"><Label>TIN</Label><Input value={f.tin} onChange={set("tin")} /></div>
             <div className="space-y-1"><Label>VAT registration no.</Label><Input value={f.vat} onChange={set("vat")} /></div>

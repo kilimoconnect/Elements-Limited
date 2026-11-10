@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
+import { PhoneInput } from "@/components/common/phone-input";
 
 export interface UserRow {
   id: string;
@@ -346,7 +347,7 @@ function UserForm({
         )}
         <div className="space-y-1.5">
           <Label htmlFor="u-phone">Phone</Label>
-          <Input id="u-phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          <PhoneInput id="u-phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
         </div>
         <div className="space-y-1.5">
           <Label>Role *</Label>

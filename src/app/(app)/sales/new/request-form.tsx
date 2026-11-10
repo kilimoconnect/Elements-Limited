@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ProductPicker } from "@/components/common/product-picker";
 import type { ProductOpt, TaxOpt, AccountOpt, CustomerOpt } from "./sale-form";
 import { NewCustomerButton } from "./new-customer";
+import { PhoneInput } from "@/components/common/phone-input";
 
 export interface FundOpt { id: string; customer_id: string; document_number: string; reference: string | null; available: number; document_date: string }
 export interface RequestInitial {
@@ -172,7 +173,7 @@ export function RequestForm({
                 <SelectContent>{allCustomers.filter((c) => !c.is_protected).map((c) => <SelectItem key={c.id} value={c.id}>{c.code} — {c.name}</SelectItem>)}</SelectContent>
               </Select></div>
             <div className="space-y-1.5"><Label>Contact person</Label><Input value={contactName} onChange={(e) => setContactName(e.target.value)} /></div>
-            <div className="space-y-1.5"><Label>Contact phone</Label><Input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} /></div>
+            <div className="space-y-1.5"><Label>Contact phone</Label><PhoneInput value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} /></div>
             <div className="space-y-1.5"><Label>Fulfilment</Label>
               <Select value={mode} onValueChange={(v) => setMode(v as "collection" | "delivery")}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -183,7 +184,7 @@ export function RequestForm({
               <>
                 <div className="space-y-1.5 sm:col-span-2"><Label>Destination <span className="text-destructive">*</span></Label><Input value={destination} onChange={(e) => setDestination(e.target.value)} /></div>
                 <div className="space-y-1.5"><Label>Consignee</Label><Input value={consigneeName} onChange={(e) => setConsigneeName(e.target.value)} /></div>
-                <div className="space-y-1.5"><Label>Consignee phone</Label><Input value={consigneePhone} onChange={(e) => setConsigneePhone(e.target.value)} /></div>
+                <div className="space-y-1.5"><Label>Consignee phone</Label><PhoneInput value={consigneePhone} onChange={(e) => setConsigneePhone(e.target.value)} /></div>
               </>
             )}
           </CardContent>

@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { PhoneInput } from "@/components/common/phone-input";
 
 const EMPTY = { name: "", contact: "", phone: "", email: "", tin: "", vat: "", terms: "0", address: "" };
 
@@ -51,7 +52,7 @@ export function NewSupplierButton({ branchId, existing, onCreated, size = "sm" }
               <p className="rounded-md bg-warning/15 px-3 py-2 text-xs sm:col-span-2">Similar existing suppliers: {similar.map((c) => `${c.code} — ${c.name}`).join("; ")}. Check it is not one of these.</p>
             )}
             <div className="space-y-1"><Label>Contact person</Label><Input value={f.contact} onChange={set("contact")} /></div>
-            <div className="space-y-1"><Label>Phone</Label><Input value={f.phone} onChange={set("phone")} inputMode="tel" /></div>
+            <div className="space-y-1"><Label>Phone</Label><PhoneInput value={f.phone} onChange={set("phone")} /></div>
             <div className="space-y-1"><Label>Email</Label><Input value={f.email} onChange={set("email")} type="email" /></div>
             <div className="space-y-1"><Label>Payment terms (days)</Label><Input value={f.terms} onChange={set("terms")} type="number" min="0" /></div>
             <div className="space-y-1"><Label>TIN</Label><Input value={f.tin} onChange={set("tin")} /></div>

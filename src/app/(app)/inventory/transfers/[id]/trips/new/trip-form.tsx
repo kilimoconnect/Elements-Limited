@@ -11,7 +11,8 @@ import { Label } from "@/components/ui/label";
 import { normaliseRegistration } from "@/lib/transfers/registration";
 import { RecentTruckWarning } from "@/components/transfers/recent-truck-warning";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { PhoneInput } from "@/components/common/phone-input";
 
 const rid = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}-trip`);
 
@@ -63,7 +64,7 @@ export function TripForm({ transferId, lines, canLicence, defaults }: {
         <div className="space-y-1.5"><Label>Expected arrival</Label><Input type="datetime-local" value={f.expected} onChange={set("expected")} /></div>
         <div />
         <div className="space-y-1.5"><Label>Driver name</Label><Input value={f.driverName} onChange={set("driverName")} /></div>
-        <div className="space-y-1.5"><Label>Driver phone</Label><Input value={f.driverPhone} onChange={set("driverPhone")} /></div>
+        <div className="space-y-1.5"><Label>Driver phone</Label><PhoneInput value={f.driverPhone} onChange={set("driverPhone")} /></div>
         {canLicence ? <div className="space-y-1.5"><Label>Licence number</Label><Input value={f.driverLicence} onChange={set("driverLicence")} /></div>
           : <p className="text-xs text-muted-foreground sm:pt-7">Licence details are recorded by users allowed to see them.</p>}
         <div className="space-y-1.5"><Label>Truck registration</Label><Input value={f.vehicle} onChange={(e) => setF({ ...f, vehicle: normaliseRegistration(e.target.value) })} placeholder="e.g. T760DWG" /><p className="text-[11px] text-muted-foreground">Saved without spaces or dots, e.g. T760DWG</p></div>

@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { PhoneInput } from "@/components/common/phone-input";
 
 interface L { id: string; label: string; unit: string; planned: number; loaded: number | null; dispatched: number; batch: string; maxLoad: number }
 
@@ -87,7 +88,7 @@ export function ShipmentActions({ id, status, collection, onHold, canFulfil, lin
             <p className="font-medium">{collection ? "Record collection" : "Record delivery"}</p>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <div className="space-y-1"><Label>Received by</Label><Input value={recipient.name} onChange={(e) => setRecipient({ ...recipient, name: e.target.value })} /></div>
-              <div className="space-y-1"><Label>Phone</Label><Input value={recipient.phone} onChange={(e) => setRecipient({ ...recipient, phone: e.target.value })} /></div>
+              <div className="space-y-1"><Label>Phone</Label><PhoneInput value={recipient.phone} onChange={(e) => setRecipient({ ...recipient, phone: e.target.value })} /></div>
             </div>
             {lines.filter((l) => l.dispatched > 0).map((l) => (
               <div key={l.id} className="grid grid-cols-2 gap-2 rounded-md border border-border p-2 text-sm sm:grid-cols-[1fr_110px_110px] sm:items-center">

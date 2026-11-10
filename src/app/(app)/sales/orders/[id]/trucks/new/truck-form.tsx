@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { normaliseRegistration } from "@/lib/transfers/registration";
 import { Textarea } from "@/components/ui/textarea";
+import { PhoneInput } from "@/components/common/phone-input";
 
 interface L { id: string; description: string; sku: string; unit: string; remaining: number; kgPerUnit: number | null }
 
@@ -77,7 +78,7 @@ export function TruckForm({ orderId, mode, canLicence, defaults, lines }: {
         <div className="space-y-1.5"><Label>Expected arrival</Label><Input type="datetime-local" value={f.expected} onChange={set("expected")} /></div>
         <div />
         <div className="space-y-1.5"><Label>Driver name</Label><Input value={f.driverName} onChange={set("driverName")} /></div>
-        <div className="space-y-1.5"><Label>Driver phone</Label><Input value={f.driverPhone} onChange={set("driverPhone")} /></div>
+        <div className="space-y-1.5"><Label>Driver phone</Label><PhoneInput value={f.driverPhone} onChange={set("driverPhone")} /></div>
         {canLicence ? <div className="space-y-1.5"><Label>Licence number</Label><Input value={f.driverLicence} onChange={set("driverLicence")} /></div>
           : <p className="text-xs text-muted-foreground sm:pt-7">Licence details are recorded by users allowed to see them.</p>}
         <div className="space-y-1.5"><Label>Truck registration</Label><Input value={f.vehicle} onChange={(e) => setF({ ...f, vehicle: normaliseRegistration(e.target.value) })} placeholder="e.g. T760DWG" /><p className="text-[11px] text-muted-foreground">Saved without spaces or dots, e.g. T760DWG</p></div>
@@ -89,14 +90,14 @@ export function TruckForm({ orderId, mode, canLicence, defaults, lines }: {
         {mode === "collection" ? (
           <>
             <div className="space-y-1.5"><Label>Collector name</Label><Input value={f.collectorName} onChange={set("collectorName")} /></div>
-            <div className="space-y-1.5"><Label>Collector phone</Label><Input value={f.collectorPhone} onChange={set("collectorPhone")} /></div>
+            <div className="space-y-1.5"><Label>Collector phone</Label><PhoneInput value={f.collectorPhone} onChange={set("collectorPhone")} /></div>
             <div className="space-y-1.5"><Label>Collector ID number</Label><Input value={f.collectorId} onChange={set("collectorId")} /></div>
           </>
         ) : (
           <>
             <div className="space-y-1.5"><Label>Destination</Label><Input value={f.destination} onChange={set("destination")} /></div>
             <div className="space-y-1.5"><Label>Consignee</Label><Input value={f.consigneeName} onChange={set("consigneeName")} /></div>
-            <div className="space-y-1.5"><Label>Consignee phone</Label><Input value={f.consigneePhone} onChange={set("consigneePhone")} /></div>
+            <div className="space-y-1.5"><Label>Consignee phone</Label><PhoneInput value={f.consigneePhone} onChange={set("consigneePhone")} /></div>
           </>
         )}
         <div className="space-y-1.5 sm:col-span-3"><Label>Notes</Label><Textarea value={f.notes} onChange={set("notes")} /></div>

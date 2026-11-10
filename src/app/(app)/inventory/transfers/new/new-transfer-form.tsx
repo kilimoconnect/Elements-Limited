@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { StockLineEditor, newLine, type ProductOption, type StockLine } from "@/components/inventory/stock-line-editor";
 import { ChargeRows, newCharge, parseCharges, type ChargeCategory, type ChargeRow } from "@/components/inventory/charge-rows";
+import { PhoneInput } from "@/components/common/phone-input";
 
 type Branch = { id: string; name: string; code: string };
 const rid = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}-transfer`);
@@ -127,7 +128,7 @@ export function NewTransferForm({
           <div />
           <RecentTruckWarning vehicle={tp.vehicleRegistration} trailer={tp.trailerRegistration} />
           <div className="space-y-1.5"><Label>Driver name *</Label><Input value={tp.driverName} onChange={setT("driverName")} /></div>
-          <div className="space-y-1.5"><Label>Driver phone</Label><Input type="tel" value={tp.driverPhone} onChange={setT("driverPhone")} placeholder="e.g. 0712 345 678" /></div>
+          <div className="space-y-1.5"><Label>Driver phone</Label><PhoneInput value={tp.driverPhone} onChange={setT("driverPhone")} placeholder="e.g. 0712 345 678" /></div>
           {canLicence
             ? <div className="space-y-1.5"><Label>Driving licence number</Label><Input value={tp.driverLicence} onChange={setT("driverLicence")} /></div>
             : <p className="text-xs text-muted-foreground sm:pt-7">The licence number is recorded by users allowed to see licences.</p>}
