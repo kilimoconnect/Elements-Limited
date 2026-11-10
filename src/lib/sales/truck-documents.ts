@@ -4,7 +4,8 @@
  * (document_versions). Reprinting reads the same snapshot: nothing is
  * recomputed or posted.
  */
-import { brandedPdf, header, panel, kvRows, table, signatures, finish, fmtDate, fmtLongDate, qty, money, C, L, R, W, type Col } from "@/lib/pdf/brand";
+import { brandedPdf, header, panel, kvRows, table, signatures, finish, fmtDate, fmtLongDate, qty, money, wrapText, BOTTOM, C, L, R, W, type Col } from "@/lib/pdf/brand";
+import { amountInWords } from "@/lib/pdf/amount-words";
 import type { SimplePdf } from "@/lib/pdf/simple-pdf";
 
 export type TruckDocKind = "loading_order" | "delivery_note" | "commercial_invoice";
@@ -83,15 +84,19 @@ export function renderTruckDocument(s: TruckSnapshot): Uint8Array {
     let y = parties(pdf, s, top(), s.order.fulfilment_mode === "delivery" ? "Deliver to" : "Collected by");
     pdf.textFit(L, y, `Dispatched from ${s.shipment.dispatch_location ?? s.branch.name} on ${fmtDate(s.shipment.dispatched_at)} by ${s.shipment.dispatched_by ?? "-"}   ·   Loading order ${s.shipment.loading_order_number ?? "-"}`, W, 8.5, "regular", C.text);
     y = goods(pdf, s, y - 14, top) - 16;
-    signatures(pdf, y, ["Dispatched by (store)", s.order.fulfilment_mode === "delivery" ? "Driver" : "Collector", "Received by (customer)"], top);
+    signatures(pdf, y, s.order.fulfilment_mode === "delivery"
+      ? ["Dispatched by (store)", "Driver", "Received by (customer)"]
+      : ["Dispatched by (store)", "Collector"], top);
     finish(pdf, s.company, `DELIVERY NOTE  ${no}`, "Check the goods on receipt. Note any shortage or damage on this note before signing. No prices are shown.");
     return pdf.toBytes({ title: `Delivery note ${no}` });
   }
   const inv = s.invoice!;
   const top = () => header(pdf, s.company, "COMMERCIAL INVOICE", inv.number, fmtLongDate(inv.date));
   let y = parties(pdf, s, top(), "Bill to");
-  pdf.textFit(L, y, `Truck ${s.shipment.number}  ·  Delivery note ${s.shipment.delivery_note_number ?? "-"}  ·  Part of sales order ${s.order.number} (order value ${money(inv.order_total)} TZS)`, W, 8.5, "regular", C.text);
-  y -= 14;
+  for (const ln of wrapText(`Truck ${s.shipment.number}  ·  Delivery note ${s.shipment.delivery_note_number ?? "-"}  ·  Part of sales order ${s.order.number} (order value TZS ${money(inv.order_total)})`, W, 8.5)) {
+    pdf.text(L, y, ln, 8.5, "regular", C.text); y -= 11;
+  }
+  y -= 3;
   const cols: Col[] = [
     { h: "#", x: L + 8, w: 16 }, { h: "Description", x: L + 28, w: 200 }, { h: "Qty", x: R - 236, w: 54, right: true },
     { h: "Price", x: R - 166, w: 66, right: true }, { h: "VAT", x: R - 92, w: 60, right: true }, { h: "Amount", x: R - 8, w: 76, right: true },
@@ -118,6 +123,13 @@ export function renderTruckDocument(s: TruckSnapshot): Uint8Array {
     });
   }
   y = Math.min(ty, y - 36 - inv.payments.length * 13) - 18;
+  // The invoice value in words as well as in figures.
+  const words = wrapText(`${amountInWords(inv.grand_total)}  (TZS ${money(inv.grand_total)})`, W - 18, 9, "bold");
+  const wh = 18 + words.length * 12;
+  if (y - wh < BOTTOM + 30) { pdf.addPage(); y = top(); }
+  const wi = panel(pdf, L, y, W, wh + 4, "Amount in words");
+  words.forEach((t, i) => pdf.text(L + 9, wi - 14 - i * 12, t, 9, "bold", C.green));
+  y -= wh + 14;
   finish(pdf, s.company, `COMMERCIAL INVOICE  ${inv.number}`, "This invoice covers the goods on this truck only. Thank you for your business.");
   return pdf.toBytes({ title: `Commercial invoice ${inv.number}` });
 }
