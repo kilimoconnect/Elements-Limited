@@ -13,8 +13,8 @@ export function BranchPicker({ value, branches, path }: { value: string; branche
     <Card className="mb-4">
       <CardContent className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:gap-4">
         <Label className="shrink-0">Branch</Label>
-        <Select value={value} onValueChange={(v) => { if (v !== value) { startNavigation(); router.push(`${path}?branch=${v}`); } }}>
-          <SelectTrigger className="sm:w-72"><SelectValue /></SelectTrigger>
+        <Select value={value || undefined} onValueChange={(v) => { if (v !== value) { startNavigation(); router.push(`${path}?branch=${v}`); } }}>
+          <SelectTrigger className="sm:w-72"><SelectValue placeholder="Choose branch" /></SelectTrigger>
           <SelectContent>{branches.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">Stock, payment accounts and the approving managers follow this branch.</p>

@@ -13,8 +13,17 @@ export default async function NewSalesRequestPage(props: { searchParams: Promise
   await requirePermissionPage("sales.create");
   const ctx = await getActiveContext();
   const { branch } = await props.searchParams;
-  // A chosen branch must be one the user is assigned to; otherwise the active branch.
-  const branchId = branch && ctx.branches.some((b) => b.id === branch) ? branch : ctx.branchId;
+  // Several branches: the user chooses first (the form opens after). One branch: it opens at once.
+  const chosen = branch && ctx.branches.some((b) => b.id === branch) ? branch : null;
+  const branchId = ctx.branches.length > 1 ? chosen : (chosen ?? ctx.branchId);
+  if (!branchId && ctx.branches.length > 1) {
+    return (
+      <div>
+        <PageHeader title="New Sales Request" description="Choose the branch this sale is made from. The form opens once a branch is chosen." />
+        <BranchPicker value="" branches={ctx.branches.map((b) => ({ id: b.id, name: b.name }))} path="/sales/new" />
+      </div>
+    );
+  }
   if (!branchId) {
     return (
       <div>
