@@ -33,7 +33,7 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
 
   // Sender and receiver see the same transfer; other branches see nothing (Stage 1 D3).
   let q = admin.from("stock_transfers")
-    .select("id, document_number, transfer_date, status, reference, has_open_discrepancy, source_branch_id, destination_branch_id, source:branches!stock_transfers_source_branch_id_fkey(code, name), dest:branches!stock_transfers_destination_branch_id_fkey(code, name), lines:stock_transfer_lines(qty_requested, qty_dispatched, qty_received, qty_quarantined, qty_short_pending, qty_lost_normal, qty_lost_abnormal), trips:stock_transfer_dispatches(id, status, trip_no, document_number, driver_name, driver_phone, vehicle_registration, dispatched_at, expected_arrival_at), agents:stock_transfer_agents(name, phone, role), events:stock_transfer_events(event_type, note, created_at)")
+    .select("id, document_number, transfer_date, status, reference, has_open_discrepancy, source_branch_id, destination_branch_id, source:branches!stock_transfers_source_branch_id_fkey(code, name), dest:branches!stock_transfers_destination_branch_id_fkey(code, name), lines:stock_transfer_lines(qty_requested, qty_dispatched, qty_received, qty_quarantined, qty_short_pending, qty_lost_normal, qty_lost_abnormal), trips:stock_transfer_dispatches(id, status, trip_no, document_number, driver_name, driver_phone, vehicle_registration, trailer_registration, dispatched_at, expected_arrival_at), agents:stock_transfer_agents(name, phone, role), events:stock_transfer_events(event_type, note, created_at)")
     .eq("company_id", ctx.companyId)
     .or(`source_branch_id.in.(${(myBranches.length ? myBranches : none).join(",")}),destination_branch_id.in.(${(myBranches.length ? myBranches : none).join(",")})`)
     .order("created_at", { ascending: false }).limit(200);
@@ -43,7 +43,7 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
     id: string; document_number: string | null; transfer_date: string; status: string; reference: string | null; has_open_discrepancy: boolean;
     source_branch_id: string; destination_branch_id: string; source: { code: string; name: string } | null; dest: { code: string; name: string } | null;
     lines: { qty_requested: number; qty_dispatched: number; qty_received: number; qty_quarantined: number; qty_short_pending: number; qty_lost_normal: number; qty_lost_abnormal: number }[];
-    trips: { id: string; status: string; trip_no: number; document_number: string | null; driver_name: string | null; driver_phone: string | null; vehicle_registration: string | null; dispatched_at: string | null; expected_arrival_at: string | null }[];
+    trips: { id: string; status: string; trip_no: number; document_number: string | null; driver_name: string | null; driver_phone: string | null; vehicle_registration: string | null; trailer_registration: string | null; dispatched_at: string | null; expected_arrival_at: string | null }[];
     events: { event_type: string; note: string | null; created_at: string }[];
     agents: { name: string; phone: string | null; role: string | null }[];
   };
@@ -70,9 +70,9 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
         <Link href="/inventory/transfers?view=all" className={`rounded-md px-3 py-1.5 ${!inTransit ? "bg-primary text-primary-foreground" : "border border-border"}`}>All transfers</Link>
         <ParamSelect param="branch" value={branchF} placeholder="All my branches" options={ctx.branches.filter((b) => myBranches.includes(b.id)).map((b) => ({ id: b.id, label: `${b.code} — ${b.name}` }))} />
         <span className="ml-auto"><ExportCsvButton filename="in-transit.csv"
-          header={["Transfer", "From", "To", "Status", "Trip", "Driver", "Driver phone", "Vehicle", "Agents", "Dispatched", "ETA", "Overdue", "Dispatched qty", "Received qty"]}
-          rows={filtered.flatMap((r) => (r.trips.length ? r.trips : [null]).map((t) => [r.document_number ?? "draft", r.source?.code ?? "", r.dest?.code ?? "", r.status,
-            t?.document_number ?? "", t?.driver_name ?? "", t?.driver_phone ?? "", t?.vehicle_registration ?? "", r.agents.map((a) => `${a.name}${a.role ? ` (${a.role})` : ""}${a.phone ? ` ${a.phone}` : ""}`).join("; "),
+          header={["Transfer", "From", "To", "Status", "Trip", "Driver", "Driver phone", "Vehicle", "Trailer", "Agents", "Dispatched", "ETA", "Overdue", "Dispatched qty", "Received qty"]}
+          rows={filtered.flatMap((r) => (r.trips.length ? r.trips : [null]).map((t) => [r.document_number ?? "draft", r.source?.name ?? r.source?.code ?? "", r.dest?.name ?? r.dest?.code ?? "", r.status,
+            t?.document_number ?? "", t?.driver_name ?? "", t?.driver_phone ?? "", t?.vehicle_registration ?? "", t?.trailer_registration ?? "", r.agents.map((a) => `${a.name}${a.role ? ` (${a.role})` : ""}${a.phone ? ` ${a.phone}` : ""}`).join("; "),
             t?.dispatched_at ?? "", t?.expected_arrival_at ?? "", overdueOf(r) ? "yes" : "",
             r.lines.reduce((a, l) => a + N(l.qty_dispatched), 0), r.lines.reduce((a, l) => a + N(l.qty_received), 0)]))} /></span>
       </div>
