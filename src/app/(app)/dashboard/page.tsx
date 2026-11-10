@@ -34,7 +34,7 @@ export default async function DashboardPage() {
 
   const [{ data: postedSales }, { data: receiptsToday }, { data: balances }] = await Promise.all([
     admin.from("sales")
-      .select("id, document_number, document_date, grand_total, net_total, cogs_total, outstanding, amount_paid, payment_status, created_at, customer:customers(name), branch:branches(code)")
+      .select("id, document_number, document_date, grand_total, net_total, cogs_total, outstanding, amount_paid, payment_status, created_at, customer:customers(name), branch:branches(code, name)")
       .eq("company_id", companyId).eq("document_status", "posted").order("created_at", { ascending: false }),
     admin.from("customer_receipts")
       .select("amount").eq("company_id", companyId).eq("document_status", "posted").eq("document_date", today),
@@ -42,7 +42,7 @@ export default async function DashboardPage() {
       .select("quantity, stock_value, qty_in_transit, product:products(reorder_level)").eq("company_id", companyId),
   ]);
 
-  type Sale = { id: string; document_number: string | null; document_date: string; grand_total: number; net_total: number; cogs_total: number; outstanding: number; amount_paid: number; payment_status: string; created_at: string; customer: { name: string } | null; branch: { code: string } | null };
+  type Sale = { id: string; document_number: string | null; document_date: string; grand_total: number; net_total: number; cogs_total: number; outstanding: number; amount_paid: number; payment_status: string; created_at: string; customer: { name: string } | null; branch: { code: string; name?: string } | null };
   const sales = (postedSales ?? []) as unknown as Sale[];
 
   const salesToday = sales.filter((s) => s.document_date === today).reduce((a, s) => a + Number(s.grand_total), 0);
@@ -194,7 +194,7 @@ export default async function DashboardPage() {
                 <Link key={s.id} href={`/sales/${s.id}`} className="flex items-center justify-between gap-3 py-2 text-sm hover:bg-muted/40">
                   <div className="min-w-0">
                     <span className="font-mono text-xs">{s.document_number}</span>
-                    <span className="ml-2 text-muted-foreground">{s.customer?.name} · {s.branch?.code} · {formatDate(s.document_date)}</span>
+                    <span className="ml-2 text-muted-foreground">{s.customer?.name} · {s.branch?.name ?? s.branch?.code} · {formatDate(s.document_date)}</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <PayStatusBadge status={s.payment_status} />

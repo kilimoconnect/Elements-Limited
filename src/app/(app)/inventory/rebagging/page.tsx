@@ -24,12 +24,12 @@ export default async function RebaggingPage() {
   }
   const admin = createAdminClient();
   let q = admin.from("rebag_orders")
-    .select("id, document_number, order_date, document_status, issued_kg, output_value, branch:branches(code), bulk:products!rebag_orders_bulk_product_id_fkey(name), shipment:import_shipments(id, document_number), outputs:rebag_outputs(bags, net_kg, product:products(name, net_weight_kg))")
+    .select("id, document_number, order_date, document_status, issued_kg, output_value, branch:branches(code, name), bulk:products!rebag_orders_bulk_product_id_fkey(name), shipment:import_shipments(id, document_number), outputs:rebag_outputs(bags, net_kg, product:products(name, net_weight_kg))")
     .eq("company_id", ctx.companyId).order("order_date", { ascending: false }).order("created_at", { ascending: false }).limit(300);
   if (!ctx.user.isOwner) q = q.in("branch_id", ctx.user.branchIds.length ? ctx.user.branchIds : ["00000000-0000-0000-0000-000000000000"]);
   const { data } = await q;
   type Row = { id: string; document_number: string | null; order_date: string; document_status: string; issued_kg: number; output_value: number;
-    branch: { code: string } | null; bulk: { name: string } | null; shipment: { id: string; document_number: string | null } | null;
+    branch: { code: string; name?: string } | null; bulk: { name: string } | null; shipment: { id: string; document_number: string | null } | null;
     outputs: { bags: number; net_kg: number; product: { name: string; net_weight_kg: number } | null }[] };
   const rows = (data ?? []) as unknown as Row[];
   const open = rows.filter((r) => r.document_status === "issued");
@@ -54,7 +54,7 @@ export default async function RebaggingPage() {
                 <ClickableRow key={r.id} href={`/inventory/rebagging/${r.id}`}>
                   <TableCell><Link className="font-mono text-xs underline" href={`/inventory/rebagging/${r.id}`}>{r.document_number ?? "draft"}</Link></TableCell>
                   <TableCell>{formatDate(r.order_date)}</TableCell>
-                  <TableCell>{r.branch?.code}</TableCell>
+                  <TableCell>{r.branch?.name ?? r.branch?.code}</TableCell>
                   <TableCell className="text-sm">{r.bulk?.name}</TableCell>
                   <TableCell>{r.shipment ? <Link className="font-mono text-xs underline" href={`/imports/${r.shipment.id}`}>{r.shipment.document_number}</Link> : "—"}</TableCell>
                   <TableCell className="text-right tabular-nums">{Number(r.issued_kg) ? formatQuantity(Number(r.issued_kg)) : "—"}</TableCell>

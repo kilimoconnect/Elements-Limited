@@ -34,7 +34,7 @@ export default async function SalesHistoryPage(props: { searchParams: SP }) {
   const from = (page - 1) * PAGE, to = from + PAGE - 1;
 
   let query = admin.from("sales")
-    .select("id, document_number, document_date, net_total, tax_total, grand_total, amount_paid, outstanding, payment_status, document_status, approval_status, customer:customers(name), branch:branches(code)", { count: "exact" })
+    .select("id, document_number, document_date, net_total, tax_total, grand_total, amount_paid, outstanding, payment_status, document_status, approval_status, customer:customers(name), branch:branches(code, name)", { count: "exact" })
     .eq("company_id", ctx.companyId)
     .order("created_at", { ascending: false })
     .range(from, to);
@@ -50,7 +50,7 @@ export default async function SalesHistoryPage(props: { searchParams: SP }) {
   const rows = (data ?? []) as unknown as Array<{
     id: string; document_number: string | null; document_date: string; net_total: number; tax_total: number;
     grand_total: number; amount_paid: number; outstanding: number; payment_status: string; document_status: string; approval_status: string;
-    customer: { name: string } | null; branch: { code: string } | null;
+    customer: { name: string } | null; branch: { code: string; name?: string } | null;
   }>;
   const total = count ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE));
@@ -100,7 +100,7 @@ export default async function SalesHistoryPage(props: { searchParams: SP }) {
                 <ClickableRow key={r.id} href={`/sales/${r.id}`}>
                   <TableCell className="text-sm">{formatDate(r.document_date)}</TableCell>
                   <TableCell className="font-mono text-xs">{r.document_number ?? <Badge variant="muted">Order</Badge>}</TableCell>
-                  <TableCell className="text-sm">{r.branch?.code}</TableCell>
+                  <TableCell className="text-sm">{r.branch?.name ?? r.branch?.code}</TableCell>
                   <TableCell className="text-sm">{r.customer?.name ?? "—"}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatMoney(r.grand_total)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatMoney(r.outstanding)}</TableCell>

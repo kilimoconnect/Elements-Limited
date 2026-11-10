@@ -25,11 +25,11 @@ export default async function OpeningBalancesPage() {
     .select("id, sku, name").eq("company_id", ctx.companyId).eq("is_active", true).order("sku");
 
   const { data: rows } = await admin.from("inventory_openings")
-    .select("id, document_number, opening_date, reference, total_cost, document_status, branch:branches(code)")
+    .select("id, document_number, opening_date, reference, total_cost, document_status, branch:branches(code, name)")
     .eq("company_id", ctx.companyId).order("created_at", { ascending: false }).limit(100);
   const list = (rows ?? []) as unknown as Array<{
     id: string; document_number: string | null; opening_date: string; reference: string | null;
-    total_cost: number; document_status: string; branch: { code: string } | null;
+    total_cost: number; document_status: string; branch: { code: string; name?: string } | null;
   }>;
 
   return (
@@ -59,7 +59,7 @@ export default async function OpeningBalancesPage() {
               {list.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell className="font-mono text-xs">{r.document_number ?? <Badge variant="muted">Draft</Badge>}</TableCell>
-                  <TableCell className="text-sm">{r.branch?.code}</TableCell>
+                  <TableCell className="text-sm">{r.branch?.name ?? r.branch?.code}</TableCell>
                   <TableCell className="text-sm">{formatDate(r.opening_date)}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{r.reference ?? "—"}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatMoney(r.total_cost)}</TableCell>

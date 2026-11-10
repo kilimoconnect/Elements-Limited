@@ -26,11 +26,11 @@ export default async function AdjustmentsPage() {
     .select("id, sku, name").eq("company_id", ctx.companyId).eq("is_active", true).order("sku");
 
   const { data: rows } = await admin.from("stock_adjustments")
-    .select("id, document_number, adjustment_date, direction, reason, total_value, document_status, branch:branches(code)")
+    .select("id, document_number, adjustment_date, direction, reason, total_value, document_status, branch:branches(code, name)")
     .eq("company_id", ctx.companyId).order("created_at", { ascending: false }).limit(100);
   const list = (rows ?? []) as unknown as Array<{
     id: string; document_number: string | null; adjustment_date: string; direction: string;
-    reason: string; total_value: number; document_status: string; branch: { code: string } | null;
+    reason: string; total_value: number; document_status: string; branch: { code: string; name?: string } | null;
   }>;
 
   return (
@@ -61,7 +61,7 @@ export default async function AdjustmentsPage() {
               {list.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell className="font-mono text-xs">{r.document_number ?? <Badge variant="muted">Draft</Badge>}</TableCell>
-                  <TableCell className="text-sm">{r.branch?.code}</TableCell>
+                  <TableCell className="text-sm">{r.branch?.name ?? r.branch?.code}</TableCell>
                   <TableCell className="text-sm">{formatDate(r.adjustment_date)}</TableCell>
                   <TableCell><Badge variant={r.direction === "increase" ? "success" : "warning"}>{r.direction === "increase" ? "Increase" : "Decrease"}</Badge></TableCell>
                   <TableCell className="text-sm text-muted-foreground">{r.reason}</TableCell>

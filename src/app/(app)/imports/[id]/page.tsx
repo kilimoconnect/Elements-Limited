@@ -39,7 +39,7 @@ export default async function ShipmentPage(props: { params: Params }) {
     admin.rpc("import_finalization_checks", { p_shipment: id }),
     admin.from("cost_sources").select("*, category:cost_categories(code, name), supplier:suppliers(name), actual:cost_source_actuals(line:cost_invoice_lines(invoice:cost_invoices(id, document_number, supplier_invoice_number)))").eq("import_shipment_id", id).order("created_at"),
     admin.from("purchases").select("id, document_number, supplier_invoice_number, document_date, document_status, currency_code, exchange_rate, fc_grand_total, grand_total").eq("import_shipment_id", id).order("document_date"),
-    admin.from("import_receipts").select("id, document_number, receipt_date, document_status, branch:branches(code), lines:import_receipt_lines(net_kg_received, weighbridge_ref, batch_code, is_final, shortage_kg, resolution, value_tzs, cost_delta_tzs, short_value_tzs, shipment_line_id)").eq("shipment_id", id).order("receipt_date"),
+    admin.from("import_receipts").select("id, document_number, receipt_date, document_status, branch:branches(code, name), lines:import_receipt_lines(net_kg_received, weighbridge_ref, batch_code, is_final, shortage_kg, resolution, value_tzs, cost_delta_tzs, short_value_tzs, shipment_line_id)").eq("shipment_id", id).order("receipt_date"),
     admin.from("cost_categories").select("id, code, name, inventory_treatment, allocation_basis, component").eq("company_id", ctx.companyId).eq("is_active", true).eq("applies_to_import", true).eq("is_goods_value", false).order("name"),
     admin.from("suppliers").select("id, code, name").eq("company_id", ctx.companyId).eq("is_active", true).order("code"),
   ]);
@@ -51,7 +51,7 @@ export default async function ShipmentPage(props: { params: Params }) {
   const invoiceIds = (invoices ?? []).map((i) => i.id);
   const costInvoiceIds = (sources ?? []).flatMap((s) => ((s as unknown as { actual: { line: { invoice: { id: string } | null } | null }[] }).actual ?? []).map((a) => a.line?.invoice?.id)).filter(Boolean) as string[];
   const [{ data: movements }, { data: journals }] = await Promise.all([
-    receiptIds.length ? admin.from("stock_movements").select("source_number, qty_in, movement_value, created_at, branch:branches(code), product:products(name)").eq("source_type", "import_receipt").in("source_id", receiptIds).order("created_at") : Promise.resolve({ data: [] }),
+    receiptIds.length ? admin.from("stock_movements").select("source_number, qty_in, movement_value, created_at, branch:branches(code, name), product:products(name)").eq("source_type", "import_receipt").in("source_id", receiptIds).order("created_at") : Promise.resolve({ data: [] }),
     admin.from("journal_entries").select("id, entry_date, source_type, source_number, memo").eq("company_id", ctx.companyId)
       .in("source_id", [id, ...receiptIds, ...sourceIds, ...invoiceIds, ...costInvoiceIds]).order("entry_date").limit(200),
   ]);
@@ -218,10 +218,10 @@ export default async function ShipmentPage(props: { params: Params }) {
         </CardContent></Card>
         <Card><CardContent className="p-5 text-sm">
           <h3 className="mb-2 font-semibold">Receipts</h3>
-          {(receipts ?? []).length === 0 ? <p className="text-muted-foreground">Nothing received yet.</p> : ((receipts ?? []) as unknown as Array<{ id: string; document_number: string | null; receipt_date: string; branch: { code: string } | null;
+          {(receipts ?? []).length === 0 ? <p className="text-muted-foreground">Nothing received yet.</p> : ((receipts ?? []) as unknown as Array<{ id: string; document_number: string | null; receipt_date: string; branch: { code: string; name?: string } | null;
             lines: { net_kg_received: number; weighbridge_ref: string | null; batch_code: string | null; is_final: boolean; shortage_kg: number; resolution: string | null; value_tzs: number; cost_delta_tzs: number }[] }>).map((r) => (
             <div key={r.id} className="border-b border-border py-1 last:border-0">
-              <div className="flex justify-between"><span className="font-mono text-xs">{r.document_number}</span><span>{formatDate(r.receipt_date)} · {r.branch?.code}</span></div>
+              <div className="flex justify-between"><span className="font-mono text-xs">{r.document_number}</span><span>{formatDate(r.receipt_date)} · {r.branch?.name ?? r.branch?.code}</span></div>
               {r.lines.map((x, i) => (
                 <p key={i} className="text-xs text-muted-foreground">{formatQuantity(N(x.net_kg_received))} kg · WB {x.weighbridge_ref ?? "—"} · batch {x.batch_code ?? "—"}
                   {x.is_final && " · final"}{N(x.shortage_kg) > 0 && ` · short ${formatQuantity(N(x.shortage_kg))} kg (${x.resolution})`}
@@ -238,8 +238,8 @@ export default async function ShipmentPage(props: { params: Params }) {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div>
               <p className="mb-1 text-xs uppercase text-muted-foreground">Stock received</p>
-              {(movements ?? []).length === 0 ? <p className="text-muted-foreground">—</p> : ((movements ?? []) as unknown as Array<{ source_number: string; qty_in: number; movement_value: number; branch: { code: string } | null; product: { name: string } | null }>).map((m, i) => (
-                <p key={i} className="text-xs">{m.source_number} · {m.branch?.code} · {m.product?.name} · {formatQuantity(N(m.qty_in))} @ {formatMoney(N(m.movement_value))}</p>
+              {(movements ?? []).length === 0 ? <p className="text-muted-foreground">—</p> : ((movements ?? []) as unknown as Array<{ source_number: string; qty_in: number; movement_value: number; branch: { code: string; name?: string } | null; product: { name: string } | null }>).map((m, i) => (
+                <p key={i} className="text-xs">{m.source_number} · {m.branch?.name ?? m.branch?.code} · {m.product?.name} · {formatQuantity(N(m.qty_in))} @ {formatMoney(N(m.movement_value))}</p>
               ))}
             </div>
             <div>

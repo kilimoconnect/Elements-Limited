@@ -23,11 +23,11 @@ export default async function CustomerPaymentsPage() {
   const canVoid = can(ctx.user, "transactions.void");
 
   const { data: rows } = await admin.from("customer_receipts")
-    .select("id, document_number, document_date, amount, reference, document_status, customer:customers(name), branch:branches(code), account:payment_accounts(name)")
+    .select("id, document_number, document_date, amount, reference, document_status, customer:customers(name), branch:branches(code, name), account:payment_accounts(name)")
     .eq("company_id", ctx.companyId).order("created_at", { ascending: false }).limit(100);
   const list = (rows ?? []) as unknown as Array<{
     id: string; document_number: string | null; document_date: string; amount: number; reference: string | null;
-    document_status: string; customer: { name: string } | null; branch: { code: string } | null; account: { name: string } | null;
+    document_status: string; customer: { name: string } | null; branch: { code: string; name?: string } | null; account: { name: string } | null;
   }>;
 
   return (
@@ -60,7 +60,7 @@ export default async function CustomerPaymentsPage() {
                   <TableCell className="font-mono text-xs">{r.document_number ?? "—"}</TableCell>
                   <TableCell className="text-sm">{formatDate(r.document_date)}</TableCell>
                   <TableCell className="text-sm">{r.customer?.name}</TableCell>
-                  <TableCell className="text-sm">{r.branch?.code}</TableCell>
+                  <TableCell className="text-sm">{r.branch?.name ?? r.branch?.code}</TableCell>
                   <TableCell className="text-sm">{r.account?.name}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatMoney(r.amount)}</TableCell>
                   <TableCell><DocStatusBadge status={r.document_status} /></TableCell>

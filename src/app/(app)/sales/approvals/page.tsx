@@ -22,7 +22,7 @@ export default async function SalesApprovalsPage() {
   const bids = ctx.branches.map((b) => b.id);
 
   const [{ data: queue }, { data: trucks }, { data: orders }] = await Promise.all([
-    (admin.from("sales_requests").select("id, document_number, grand_total, submitted_by, submitted_at, created_by, customer:customers(name), branch:branches(code), payments:sales_request_payments(amount), funds:sales_request_funds(amount)")
+    (admin.from("sales_requests").select("id, document_number, grand_total, submitted_by, submitted_at, created_by, customer:customers(name), branch:branches(code, name), payments:sales_request_payments(amount), funds:sales_request_funds(amount)")
       .eq("company_id", ctx.companyId).in("branch_id", bids).eq("status", "pending_approval").order("submitted_at")),
     (admin.from("sales_shipments").select("id, document_number, status, dispatched_at, payment_flag, vehicle_registration, order:sales_orders(document_number, customer:customers(name)), invoice:sales!sales_shipments_invoice_sale_id_fkey(document_number, grand_total)")
       .eq("company_id", ctx.companyId).in("branch_id", bids).not("dispatched_at", "is", null).order("dispatched_at", { ascending: false }).limit(30)),
@@ -34,7 +34,7 @@ export default async function SalesApprovalsPage() {
     admin.from("sales_order_amendments").select("id, kind, reason, requested_by, requested_at, order:sales_orders(id, document_number, customer:customers(name))").eq("status", "pending").in("order_id", orderIds).order("requested_at"),
   ]) : [{ data: [] }, { data: [] }];
 
-  type Q = { id: string; document_number: string; grand_total: number; submitted_by: string | null; submitted_at: string; created_by: string | null; customer: { name: string } | null; branch: { code: string } | null;
+  type Q = { id: string; document_number: string; grand_total: number; submitted_by: string | null; submitted_at: string; created_by: string | null; customer: { name: string } | null; branch: { code: string; name?: string } | null;
     payments: { amount: number }[]; funds: { amount: number }[] };
   const q = (queue ?? []) as unknown as Q[];
   type T = { id: string; document_number: string; status: string; dispatched_at: string; payment_flag: boolean; vehicle_registration: string | null;
@@ -61,7 +61,7 @@ export default async function SalesApprovalsPage() {
               return (
                 <ClickableRow key={r.id} href={`/sales/requests/${r.id}`}>
                   <TableCell className="text-xs">{formatDateTime(r.submitted_at)}</TableCell>
-                  <TableCell className="text-sm font-medium">{r.document_number}<span className="block text-xs text-muted-foreground">{r.branch?.code}</span></TableCell>
+                  <TableCell className="text-sm font-medium">{r.document_number}<span className="block text-xs text-muted-foreground">{r.branch?.name ?? r.branch?.code}</span></TableCell>
                   <TableCell className="text-sm">{r.customer?.name}</TableCell>
                   <TableCell className="text-sm">{nameOf(r.submitted_by)}{own && <Badge variant="muted" className="ml-1">Yours</Badge>}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatMoney(r.grand_total)}</TableCell>
