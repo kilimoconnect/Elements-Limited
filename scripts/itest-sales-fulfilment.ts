@@ -318,14 +318,15 @@ async function main() {
     const ci1 = await one(db, "select dispatch_sales_shipment($1,$2,'c1d',true)", [c1, officer]);
     check("charges follow the goods share (40% of transport on the first truck)",
       await num(db, "select grand_total from sales where id=$1", [ci1]) === 472000 + 20000);
-    check("collection orders are marked dispatched (not in transit)", await one(db, "select status from sales_shipments where id=$1", [c1]) === "dispatched");
+    check("on a collection order, dispatch also records the truck as collected by its collector (full quantity)",
+      await one(db, "select status || '|' || recipient_name from sales_shipments where id=$1", [c1]) === "collected|C. Collector"
+      && await num(db, "select qty_accepted from sales_shipment_lines where shipment_id=$1", [c1]) === 4);
     const c2 = await truck(so4, ol4, "c2", 6);
     const ci2 = await one(db, "select dispatch_sales_shipment($1,$2,'c2d',true)", [c2, officer]);
     check("the final truck takes the remaining charge and the invoices reconcile",
       await num(db, "select sum(grand_total) from sales where sales_order_id=$1", [so4]) === 1230000
       && await num(db, "select grand_total from sales where id=$1", [ci2]) === 708000 + 30000);
-    await db.query("select record_shipment_delivery($1,$2,$3::jsonb)", [c1, officer, JSON.stringify({ recipient_name: "C. Collector" })]);
-    check("collected shipments are marked collected", await one(db, "select status from sales_shipments where id=$1", [c1]) === "collected");
+    check("the collection order completes once its last truck is dispatched", await one(db, "select status from sales_orders where id=$1", [so4]) === "completed");
 
     // ------------------------------------------------------------ payment reversal
     const rq5 = await mkRequest([{ product: prod, qty: 4, price: 100000 }], [{ account: bank, amount: 472000, ref: "NMB-BOUNCE" }]);
