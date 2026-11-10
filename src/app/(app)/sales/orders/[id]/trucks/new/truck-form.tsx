@@ -20,7 +20,7 @@ export function TruckForm({ orderId, mode, canLicence, defaults, lines }: {
   defaults: { destination: string; consignee_name: string; consignee_phone: string; dispatch_location: string }; lines: L[];
 }) {
   const router = useRouter();
-  const [qty, setQty] = React.useState<Record<string, string>>(Object.fromEntries(lines.map((l) => [l.id, l.remaining > 0 ? String(l.remaining) : "0"])));
+  const [qty, setQty] = React.useState<Record<string, string>>(Object.fromEntries(lines.map((l) => [l.id, ""])));
   const [f, setF] = React.useState({
     dispatchDate: todayISO(), expected: "", driverName: "", driverPhone: "", driverLicence: "", vehicle: "", trailer: "",
     transporter: "", transporterContact: "", notes: "",
@@ -65,7 +65,7 @@ export function TruckForm({ orderId, mode, canLicence, defaults, lines }: {
           <div key={l.id} className="flex flex-wrap items-center gap-3 text-sm">
             <span className="w-72 truncate">{l.sku} — {l.description}</span>
             <Input className={`h-8 w-32 text-right tabular-nums ${over.includes(l) ? "border-destructive" : ""}`} type="number" min="0" max={l.remaining} step="0.0001"
-              value={qty[l.id]} onChange={(e) => setQty({ ...qty, [l.id]: e.target.value })} disabled={l.remaining <= 0} />
+              value={qty[l.id]} onChange={(e) => setQty({ ...qty, [l.id]: e.target.value })} disabled={l.remaining <= 0} placeholder="Qty" />
             <span className="text-xs text-muted-foreground">of {formatQuantity(l.remaining)} {l.unit} left{l.kgPerUnit ? ` · ${formatQuantity(Number(qty[l.id] || 0) * l.kgPerUnit)} kg` : ""}</span>
           </div>
         ))}
