@@ -8,6 +8,7 @@ import { formatQuantity, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { normaliseRegistration } from "@/lib/transfers/registration";
 import { RecentTruckWarning } from "@/components/transfers/recent-truck-warning";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,7 +23,7 @@ export function TripForm({ transferId, lines, canLicence, defaults }: {
   const [qty, setQty] = React.useState<Record<string, string>>(Object.fromEntries(lines.map((l) => [l.id, String(l.remaining)])));
   const [f, setF] = React.useState({
     dispatchDate: todayISO(), expected: defaults.expected ? `${defaults.expected}T12:00` : "",
-    driverName: defaults.driverName, driverPhone: defaults.driverPhone, driverLicence: "", vehicle: defaults.vehicle, trailer: defaults.trailer,
+    driverName: defaults.driverName, driverPhone: defaults.driverPhone, driverLicence: "", vehicle: normaliseRegistration(defaults.vehicle), trailer: normaliseRegistration(defaults.trailer),
     transporter: "", transporterContact: "", notes: "",
   });
   const [requestId] = React.useState(rid);
@@ -65,8 +66,8 @@ export function TripForm({ transferId, lines, canLicence, defaults }: {
         <div className="space-y-1.5"><Label>Driver phone</Label><Input value={f.driverPhone} onChange={set("driverPhone")} /></div>
         {canLicence ? <div className="space-y-1.5"><Label>Licence number</Label><Input value={f.driverLicence} onChange={set("driverLicence")} /></div>
           : <p className="text-xs text-muted-foreground sm:pt-7">Licence details are recorded by users allowed to see them.</p>}
-        <div className="space-y-1.5"><Label>Truck registration</Label><Input value={f.vehicle} onChange={set("vehicle")} /></div>
-        <div className="space-y-1.5"><Label>Trailer registration</Label><Input value={f.trailer} onChange={set("trailer")} /></div>
+        <div className="space-y-1.5"><Label>Truck registration</Label><Input value={f.vehicle} onChange={(e) => setF({ ...f, vehicle: normaliseRegistration(e.target.value) })} placeholder="e.g. T760DWG" /><p className="text-[11px] text-muted-foreground">Saved without spaces or dots, e.g. T760DWG</p></div>
+        <div className="space-y-1.5"><Label>Trailer registration</Label><Input value={f.trailer} onChange={(e) => setF({ ...f, trailer: normaliseRegistration(e.target.value) })} /></div>
         <div />
         <RecentTruckWarning vehicle={f.vehicle} trailer={f.trailer} excludeTransferId={transferId} />
         <div className="space-y-1.5"><Label>Transporter company</Label><Input value={f.transporter} onChange={set("transporter")} /></div>

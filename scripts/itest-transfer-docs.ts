@@ -68,7 +68,7 @@ async function main() {
     check("the delivery note shows its number, destination, truck and driver",
       await one(db, "select snapshot->>'delivery_note_number' from document_versions where id=$1", [v1.version_id]) === dn1
       && await one(db, "select snapshot->'receiver'->>'name' from document_versions where id=$1", [v1.version_id]) === "Dodoma"
-      && await one(db, "select snapshot->'vehicle'->>'registration' from document_versions where id=$1", [v1.version_id]) === "T 123 ABC"
+      && await one(db, "select snapshot->'vehicle'->>'registration' from document_versions where id=$1", [v1.version_id]) === "T123ABC"
       && await one(db, "select snapshot->'driver'->>'name' from document_versions where id=$1", [v1.version_id]) === "Juma Ali");
     check("the delivery note carries no prices or supplier",
       !(await one<string>(db, "select snapshot::text from document_versions where id=$1", [v1.version_id])).match(/unit_cost|price|value|supplier/i));

@@ -247,7 +247,7 @@ async function main() {
     const snapText = JSON.stringify(snapRow.snapshot);
     check("delivery note content: references, both branches, driver, vehicle, agents, quantities and net kg",
       snapRow.snapshot.reference.endsWith("-T1") && snapRow.snapshot.sender.code === "HQ" && snapRow.snapshot.receiver.code === "MWZ6"
-      && snapRow.snapshot.driver.name === "Juma Ali" && snapRow.snapshot.vehicle.registration === "T 123 ABC" && snapRow.snapshot.agents.length === 2
+      && snapRow.snapshot.driver.name === "Juma Ali" && snapRow.snapshot.vehicle.registration === "T123ABC" && snapRow.snapshot.agents.length === 2
       && snapRow.snapshot.lines[0].qty === 1000 && Number(snapRow.snapshot.lines[0].net_kg) === 50000 && snapRow.snapshot.lines[0].batch === "LOT-A", snapText);
     check("delivery note shows the driver's licence number and no costs", snapText.includes("DL-778899") && !snapText.includes("46500") && !snapText.includes("48500"));
     const pdf = Buffer.from(renderDeliveryNote(snapRow.snapshot, { version: 1, sha256: snapRow.content_sha256, issuedAt: snapRow.created_at })).toString("latin1");

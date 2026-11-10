@@ -63,7 +63,7 @@ async function main() {
     await db.query("select change_transfer_destination($1,$2,$3,'redirected on the road')", [t, owner, dod]);
     check("in-transit stock moves to the new destination", await transit(dod) === 20 && await transit(mwz) === 0);
     check("the trip, truck and driver are unchanged",
-      await one(db, "select status || '|' || vehicle_registration || '|' || driver_name from stock_transfer_dispatches where id=$1", [d]) === "dispatched|T 1 AAA|Juma");
+      await one(db, "select status || '|' || vehicle_registration || '|' || driver_name from stock_transfer_dispatches where id=$1", [d]) === "dispatched|T1AAA|Juma");
     check("the delivery note keeps its number and shows the new destination",
       await one(db, "select delivery_note_number from stock_transfer_dispatches where id=$1", [d]) === dn
       && await one(db, "select snapshot->'receiver'->>'name' from document_versions where owner_id=$1 and kind='delivery_note' order by version desc limit 1", [d]) === "Dodoma R");
@@ -148,6 +148,14 @@ async function main() {
     check("ledger balances", Number(await one(db, `select count(*) from (select je.id from journal_entries je join journal_lines jl on jl.journal_id=je.id
       where je.company_id=$1 group by je.id having sum(jl.debit) <> sum(jl.credit)) x`, [co])) === 0);
 
+    // ------------------------------------------------------------ registrations saved in one form (0059)
+    const t9 = await one(db, "insert into stock_transfers(company_id, source_branch_id, destination_branch_id, vehicle_registration, trailer_registration) values ($1,$2,$3,'T. T 760 DWG','t-111 zz.z') returning id", [co, hq, mwz]);
+    check("a transfer saves T. T 760 DWG as T760DWG and the trailer as T111ZZZ",
+      await one(db, "select vehicle_registration || '|' || trailer_registration from stock_transfers where id=$1", [t9]) === "T760DWG|T111ZZZ");
+    const d9 = await one(db, "insert into stock_transfer_dispatches(company_id, transfer_id, trip_no, dispatch_date, vehicle_registration) values ($1,$2,1,current_date,'UAA 123A') returning id", [co, t9]);
+    check("foreign plates keep every letter and digit (UAA 123A -> UAA123A)", await one(db, "select vehicle_registration from stock_transfer_dispatches where id=$1", [d9]) === "UAA123A");
+    await db.query("update stock_transfer_dispatches set vehicle_registration='T. 760DWG' where id=$1", [d9]);
+    check("trips are corrected on update too", await one(db, "select vehicle_registration from stock_transfer_dispatches where id=$1", [d9]) === "T760DWG");
     console.log(`\nTransfer route change: ${passed} checks passed.`);
   } finally {
     await db.query("rollback");

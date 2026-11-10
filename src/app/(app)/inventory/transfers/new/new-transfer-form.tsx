@@ -9,6 +9,7 @@ import { todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { normaliseRegistration } from "@/lib/transfers/registration";
 import { RecentTruckWarning } from "@/components/transfers/recent-truck-warning";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
@@ -121,8 +122,8 @@ export function NewTransferForm({
       <Card><CardContent className="space-y-4 p-5">
         <h3 className="font-semibold">Truck and driver</h3>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div className="space-y-1.5"><Label>Truck registration *</Label><Input value={tp.vehicleRegistration} onChange={setT("vehicleRegistration")} placeholder="e.g. T 123 ABC" /></div>
-          <div className="space-y-1.5"><Label>Trailer registration</Label><Input value={tp.trailerRegistration} onChange={setT("trailerRegistration")} /></div>
+          <div className="space-y-1.5"><Label>Truck registration *</Label><Input value={tp.vehicleRegistration} onChange={(e) => setTp({ ...tp, vehicleRegistration: normaliseRegistration(e.target.value) })} placeholder="e.g. T760DWG" /><p className="text-[11px] text-muted-foreground">Saved without spaces or dots, e.g. T760DWG</p></div>
+          <div className="space-y-1.5"><Label>Trailer registration</Label><Input value={tp.trailerRegistration} onChange={(e) => setTp({ ...tp, trailerRegistration: normaliseRegistration(e.target.value) })} /></div>
           <div />
           <RecentTruckWarning vehicle={tp.vehicleRegistration} trailer={tp.trailerRegistration} />
           <div className="space-y-1.5"><Label>Driver name *</Label><Input value={tp.driverName} onChange={setT("driverName")} /></div>

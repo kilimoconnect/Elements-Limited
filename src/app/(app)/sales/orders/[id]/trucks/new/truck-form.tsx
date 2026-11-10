@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { normaliseRegistration } from "@/lib/transfers/registration";
 import { Textarea } from "@/components/ui/textarea";
 
 interface L { id: string; description: string; sku: string; unit: string; remaining: number; kgPerUnit: number | null }
@@ -79,8 +80,8 @@ export function TruckForm({ orderId, mode, canLicence, defaults, lines }: {
         <div className="space-y-1.5"><Label>Driver phone</Label><Input value={f.driverPhone} onChange={set("driverPhone")} /></div>
         {canLicence ? <div className="space-y-1.5"><Label>Licence number</Label><Input value={f.driverLicence} onChange={set("driverLicence")} /></div>
           : <p className="text-xs text-muted-foreground sm:pt-7">Licence details are recorded by users allowed to see them.</p>}
-        <div className="space-y-1.5"><Label>Truck registration</Label><Input value={f.vehicle} onChange={set("vehicle")} /></div>
-        <div className="space-y-1.5"><Label>Trailer registration</Label><Input value={f.trailer} onChange={set("trailer")} /></div>
+        <div className="space-y-1.5"><Label>Truck registration</Label><Input value={f.vehicle} onChange={(e) => setF({ ...f, vehicle: normaliseRegistration(e.target.value) })} placeholder="e.g. T760DWG" /><p className="text-[11px] text-muted-foreground">Saved without spaces or dots, e.g. T760DWG</p></div>
+        <div className="space-y-1.5"><Label>Trailer registration</Label><Input value={f.trailer} onChange={(e) => setF({ ...f, trailer: normaliseRegistration(e.target.value) })} /></div>
         <div />
         <div className="space-y-1.5"><Label>Transporter company</Label><Input value={f.transporter} onChange={set("transporter")} /></div>
         <div className="space-y-1.5"><Label>Transporter contact</Label><Input value={f.transporterContact} onChange={set("transporterContact")} /></div>

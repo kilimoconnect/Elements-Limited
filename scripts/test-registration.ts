@@ -9,6 +9,11 @@ function check(name: string, cond: boolean, detail = "") {
 // Formatting variants all normalise to T360AWB.
 const variants = ["T360AWB", "T. 360 AWB", "T 360AWB", "t-360-awb", "T 360 AWB", "T\t360 AWB", "T/360_AWB", " t.360.awb "];
 for (const v of variants) check(`"${v.replace(/ /g, "<nbsp>").replace(/\t/g, "<tab>")}" -> T360AWB`, normaliseRegistration(v) === "T360AWB", normaliseRegistration(v));
+for (const v of ["T. 760DWG", "T 760 DWG", "T. T 760 DWG", "T T. 760DWG", "t.760.dwg"]) check(`"${v}" -> T760DWG`, normaliseRegistration(v) === "T760DWG", normaliseRegistration(v));
+check("only a doubled T on a Tanzanian plate is collapsed (TT760DWG -> T760DWG; T760TTT stays)", normaliseRegistration("TT760DWG") === "T760DWG" && normaliseRegistration("T760TTT") === "T760TTT");
+const regional: [string, string][] = [["UAA 123A", "UAA123A"], ["UBH-456B", "UBH456B"], ["KBZ 123A", "KBZ123A"], ["KCA. 987 X", "KCA987X"], ["RAB 123 A", "RAB123A"],
+  ["ABC 1234", "ABC1234"], ["AEF-1234", "AEF1234"], ["BT 1234", "BT1234"], ["MZ. 123", "MZ123"], ["AAA-123-MC", "AAA123MC"], ["TT 1234", "TT1234"], ["TTA 123B", "TTA123B"]];
+for (const [v, out] of regional) check(`"${v}" -> ${out} (letters and digits kept)`, normaliseRegistration(v) === out, normaliseRegistration(v));
 check("different letters stay different (T360AWB vs T360AWE)", normaliseRegistration("T360AWB") !== normaliseRegistration("T360AWE"));
 check("different digits stay different (T360AWB vs T361AWB)", normaliseRegistration("T360AWB") !== normaliseRegistration("T361AWB"));
 check("empty and punctuation-only values normalise to empty", normaliseRegistration("") === "" && normaliseRegistration(" .-/ ") === "" && normaliseRegistration(null) === "");

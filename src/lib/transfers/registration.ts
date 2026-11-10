@@ -2,14 +2,17 @@
  * Vehicle registrations compared without their formatting: "T 360 AWB",
  * "T. 360 AWB", "t-360-awb" and "T360AWB" are the same truck. Only
  * formatting is ignored (case, spaces of any kind, punctuation and
- * separators); different letters or digits stay different. The original
- * text is kept for display and documents.
+ * separators); different letters or digits stay different. Registrations
+ * are saved in this form (database trigger, migration 0059).
  */
 export function normaliseRegistration(value: string | null | undefined): string {
   return (value ?? "")
     .normalize("NFKC")
     .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "");
+    .replace(/[^A-Z0-9]/g, "")
+    // Works for plates of any country (letters and digits kept). Only a doubled T on a
+    // Tanzanian plate (T + 3 digits + 3 letters, "T. T 760 DWG") is collapsed.
+    .replace(/^T+([0-9]{3}[A-Z]{3})$/, "T$1");
 }
 
 export interface TripRecord {
