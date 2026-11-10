@@ -31,3 +31,8 @@ export function ClickableRow({ href, className, children }: { href: string; clas
     </TableRow>
   );
 }
+
+/** A ClickableRow when there is somewhere to go, otherwise a plain row. */
+export function MaybeClickableRow({ href, className, children }: { href: string | null; className?: string; children: React.ReactNode }) {
+  return href ? <ClickableRow href={href} className={className}>{children}</ClickableRow> : <TableRow className={className}>{children}</TableRow>;
+}

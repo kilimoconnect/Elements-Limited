@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { MaybeClickableRow } from "@/components/common/clickable-row";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { requirePermissionPage } from "@/lib/auth/guards";
@@ -25,6 +26,22 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 type SP = Promise<Record<string, string | string[] | undefined>>;
+
+/** The page that shows the document behind a stock movement (null when there is none). */
+function sourceHref(type: string, id: string | null): string | null {
+  if (!id) return null;
+  switch (type) {
+    case "sale": return `/sales/${id}`;
+    case "purchase": return `/purchases/${id}`;
+    case "stock_transfer": case "stock_transfer_void": return `/inventory/transfers/${id}`;
+    case "rebag_order": return `/inventory/rebagging/${id}`;
+    case "import_shipment": return `/imports/${id}`;
+    case "cost_invoice": return "/imports/cost-invoices";
+    case "stock_adjustment": return "/inventory/adjustments";
+    case "inventory_opening": case "opening": return "/inventory/opening-balances";
+    default: return null;
+  }
+}
 
 export default async function KardexPage(props: { searchParams: SP }) {
   await requirePermissionPage("inventory.view_kardex");
@@ -101,8 +118,9 @@ export default async function KardexPage(props: { searchParams: SP }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((r) => (
-                <TableRow key={r.id}>
+              {rows.map((r) => {
+                return (
+                <MaybeClickableRow key={r.id} href={sourceHref(r.source_type, r.source_id)}>
                   <TableCell className="whitespace-nowrap text-xs tabular-nums">{formatDateTime(r.created_at)}</TableCell>
                   <TableCell className="min-w-[8rem] text-sm">{r.branch?.name ?? r.branch?.code}</TableCell>
                   <TableCell>
@@ -116,8 +134,9 @@ export default async function KardexPage(props: { searchParams: SP }) {
                   <TableCell className="text-right tabular-nums font-medium">{formatQuantity(r.balance_qty)}</TableCell>
                   {showCost && <TableCell className="text-right tabular-nums">{formatMoney(r.unit_cost)}</TableCell>}
                   {showCost && <TableCell className="text-right tabular-nums">{formatMoney(r.balance_value)}</TableCell>}
-                </TableRow>
-              ))}
+                </MaybeClickableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
