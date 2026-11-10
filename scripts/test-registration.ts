@@ -11,6 +11,9 @@ const variants = ["T360AWB", "T. 360 AWB", "T 360AWB", "t-360-awb", "T 360 AWB
 for (const v of variants) check(`"${v.replace(/ /g, "<nbsp>").replace(/\t/g, "<tab>")}" -> T360AWB`, normaliseRegistration(v) === "T360AWB", normaliseRegistration(v));
 for (const v of ["T. 760DWG", "T 760 DWG", "T. T 760 DWG", "T T. 760DWG", "t.760.dwg"]) check(`"${v}" -> T760DWG`, normaliseRegistration(v) === "T760DWG", normaliseRegistration(v));
 check("only a doubled T on a Tanzanian plate is collapsed (TT760DWG -> T760DWG; T760TTT stays)", normaliseRegistration("TT760DWG") === "T760DWG" && normaliseRegistration("T760TTT") === "T760TTT");
+for (const [v, out] of [["426EQN", "T426EQN"], ["523 DDW", "T523DDW"], ["445.EUL", "T445EUL"], ["T988DYL", "T988DYL"]] as [string, string][])
+  check(`Tanzanian plate missing its T: "${v}" -> ${out}`, normaliseRegistration(v) === out, normaliseRegistration(v));
+check("a missing T makes 426EQN match an earlier T426EQN", matchRecentTrucks({ trailer: "426EQN" }, [{ transferNumber: "STR-X", tripNo: 1, date: "2026-11-08", vehicle: null, trailer: "T 426 EQN", transferId: "x", status: "dispatched" }]).length === 1);
 const regional: [string, string][] = [["UAA 123A", "UAA123A"], ["UBH-456B", "UBH456B"], ["KBZ 123A", "KBZ123A"], ["KCA. 987 X", "KCA987X"], ["RAB 123 A", "RAB123A"],
   ["ABC 1234", "ABC1234"], ["AEF-1234", "AEF1234"], ["BT 1234", "BT1234"], ["MZ. 123", "MZ123"], ["AAA-123-MC", "AAA123MC"], ["TT 1234", "TT1234"], ["TTA 123B", "TTA123B"]];
 for (const [v, out] of regional) check(`"${v}" -> ${out} (letters and digits kept)`, normaliseRegistration(v) === out, normaliseRegistration(v));

@@ -152,6 +152,8 @@ async function main() {
     const t9 = await one(db, "insert into stock_transfers(company_id, source_branch_id, destination_branch_id, vehicle_registration, trailer_registration) values ($1,$2,$3,'T. T 760 DWG','t-111 zz.z') returning id", [co, hq, mwz]);
     check("a transfer saves T. T 760 DWG as T760DWG and the trailer as T111ZZZ",
       await one(db, "select vehicle_registration || '|' || trailer_registration from stock_transfers where id=$1", [t9]) === "T760DWG|T111ZZZ");
+    const t10 = await one(db, "insert into stock_transfers(company_id, source_branch_id, destination_branch_id, trailer_registration) values ($1,$2,$3,'426 EQN') returning id", [co, hq, mwz]);
+    check("a Tanzanian trailer typed without its T is saved as T426EQN", await one(db, "select trailer_registration from stock_transfers where id=$1", [t10]) === "T426EQN");
     const d9 = await one(db, "insert into stock_transfer_dispatches(company_id, transfer_id, trip_no, dispatch_date, vehicle_registration) values ($1,$2,1,current_date,'UAA 123A') returning id", [co, t9]);
     check("foreign plates keep every letter and digit (UAA 123A -> UAA123A)", await one(db, "select vehicle_registration from stock_transfer_dispatches where id=$1", [d9]) === "UAA123A");
     await db.query("update stock_transfer_dispatches set vehicle_registration='T. 760DWG' where id=$1", [d9]);

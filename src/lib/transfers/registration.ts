@@ -12,7 +12,9 @@ export function normaliseRegistration(value: string | null | undefined): string 
     .replace(/[^A-Z0-9]/g, "")
     // Works for plates of any country (letters and digits kept). Only a doubled T on a
     // Tanzanian plate (T + 3 digits + 3 letters, "T. T 760 DWG") is collapsed.
-    .replace(/^T+([0-9]{3}[A-Z]{3})$/, "T$1");
+    .replace(/^T+([0-9]{3}[A-Z]{3})$/, "T$1")
+    // A Tanzanian plate typed without its T ("426 EQN") gets it.
+    .replace(/^([0-9]{3}[A-Z]{3})$/, "T$1");
 }
 
 export interface TripRecord {
