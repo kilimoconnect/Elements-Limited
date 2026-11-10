@@ -118,7 +118,6 @@ export function renderTruckDocument(s: TruckSnapshot): Uint8Array {
     });
   }
   y = Math.min(ty, y - 36 - inv.payments.length * 13) - 18;
-  signatures(pdf, y, ["Issued by", "Customer"], top);
   finish(pdf, s.company, `COMMERCIAL INVOICE  ${inv.number}`, "This invoice covers the goods on this truck only. Thank you for your business.");
   return pdf.toBytes({ title: `Commercial invoice ${inv.number}` });
 }
