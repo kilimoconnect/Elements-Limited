@@ -112,11 +112,16 @@ export function table(pdf: SimplePdf, y0: number, cols: Col[], rows: string[][],
   };
   head();
   rows.forEach((r, i) => {
-    if (y - 18 < BOTTOM + 30) { pdf.addPage(); y = cont(); head(); }
-    if (i % 2 === 1) pdf.fillRect(L, y - 18, W, 18, C.zebra);
-    cols.forEach((c, j) => (c.right ? pdf.textRight(c.x, y - 12.5, r[j] ?? "", 9, "regular", C.text) : pdf.textFit(c.x, y - 12.5, r[j] ?? "", c.w, 9, "regular", C.text)));
-    pdf.line(L, y - 18, R, y - 18, 0.4, C.line);
-    y -= 18;
+    // Text columns wrap instead of being cut off; the row is as tall as its longest cell.
+    const cells = cols.map((c, j) => (c.right ? [r[j] ?? ""] : (wrapText(r[j] ?? "", c.w, 9).length ? wrapText(r[j] ?? "", c.w, 9) : [""])));
+    const rh = 18 + (Math.max(...cells.map((x) => x.length)) - 1) * 11;
+    if (y - rh < BOTTOM + 30) { pdf.addPage(); y = cont(); head(); }
+    if (i % 2 === 1) pdf.fillRect(L, y - rh, W, rh, C.zebra);
+    cols.forEach((c, j) => cells[j].forEach((t, k) => (c.right
+      ? pdf.textRight(c.x, y - 12.5 - k * 11, t, 9, "regular", C.text)
+      : pdf.textFit(c.x, y - 12.5 - k * 11, t, c.w, 9, "regular", C.text))));
+    pdf.line(L, y - rh, R, y - rh, 0.4, C.line);
+    y -= rh;
   });
   if (totals) {
     pdf.fillRect(L, y - 20, W, 20, C.tint);

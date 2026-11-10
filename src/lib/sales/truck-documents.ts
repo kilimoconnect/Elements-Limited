@@ -32,17 +32,22 @@ export interface TruckSnapshot {
 const join = (...p: (string | null | undefined)[]) => p.filter((x) => x && String(x).trim()).join(", ");
 
 function parties(pdf: SimplePdf, s: TruckSnapshot, y: number, left: string): number {
-  const bw = W / 2 - 6, h = 96;
-  const ci = panel(pdf, L, y, bw, h, left);
+  const bw = W / 2 - 6;
   const delivery = s.order.fulfilment_mode === "delivery";
-  pdf.textFit(L + 9, ci - 15, s.customer.name, bw - 18, 11, "bold", C.green);
-  [
+  const nameLines = wrapText(s.customer.name, bw - 18, 11, "bold");
+  const detail = [
     `Customer ${s.customer.code}${s.customer.tin ? `  ·  TIN ${s.customer.tin}` : ""}${s.customer.vat_number ? `  ·  VRN ${s.customer.vat_number}` : ""}`,
     s.customer.address ?? "",
     join(s.customer.contact_name, s.customer.contact_phone ?? s.customer.phone),
     delivery ? `Deliver to: ${join(s.consignee.destination)}` : "Collection by the customer",
     delivery ? `Consignee: ${join(s.consignee.name, s.consignee.phone) || "-"}` : `Collector: ${join(s.transport.collector, s.transport.collector_phone, s.transport.collector_id && `ID ${s.transport.collector_id}`) || "-"}`,
-  ].filter(Boolean).forEach((r, i) => pdf.textFit(L + 9, ci - 29 - i * 11.5, r, bw - 18, 8.5, "regular", i === 0 ? C.muted : C.text));
+  ].filter(Boolean).flatMap((r, i) => wrapText(r, bw - 18, 8.5).map((t) => ({ t, muted: i === 0 })));
+  // Tall enough for every line of the customer panel and the six order / truck rows.
+  const h = Math.max(96, 16 + nameLines.length * 13 + detail.length * 11.5 + 10);
+  const ci = panel(pdf, L, y, bw, h, left);
+  nameLines.forEach((t, i) => pdf.text(L + 9, ci - 15 - i * 13, t, 11, "bold", C.green));
+  const dy = ci - 15 - nameLines.length * 13 - 1;
+  detail.forEach((d, i) => pdf.text(L + 9, dy - i * 11.5, d.t, 8.5, "regular", d.muted ? C.muted : C.text));
   const di = panel(pdf, L + bw + 12, y, bw, h, "Order and truck");
   kvRows(pdf, L + bw + 12, di, bw, [
     ["Sales order", s.order.number], ["Approved", `${s.order.approved_by ?? "-"}, ${fmtDate(s.order.approved_at)}`],
