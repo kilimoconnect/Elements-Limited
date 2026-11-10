@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PeriodFilter, PrintButton, ParamSelect } from "@/components/reports/report-tools";
 import { formatMoney, formatDate } from "@/lib/format";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { MaybeClickableRow } from "@/components/common/clickable-row";
 
 export const metadata: Metadata = { title: "Supplier Statement" };
 
@@ -49,7 +50,7 @@ export default async function SupplierStatementsPage(props: { searchParams: Prom
 }
 
 type Statement = { opening: number; closing: number; tzsOpening?: number; tzsClosing?: number;
-  rows: { date: string; doc: string; type: string; debit: number; credit: number; running: number; tzs?: number; tzsRunning?: number }[] };
+  rows: { date: string; doc: string; type: string; debit: number; credit: number; running: number; tzs?: number; tzsRunning?: number; href?: string | null }[] };
 
 function StatementTable({ title, st, currency }: { title: string | null; st: Statement; currency: string }) {
   const fc = currency !== "TZS";
@@ -64,7 +65,7 @@ function StatementTable({ title, st, currency }: { title: string | null; st: Sta
           <TableRow><TableCell colSpan={5} className="text-sm font-medium">Opening balance</TableCell><TableCell className="text-right tabular-nums font-medium">{m(st.opening)}</TableCell>
             {fc && <><TableCell /><TableCell className="text-right tabular-nums font-medium">{formatMoney(st.tzsOpening ?? 0)}</TableCell></>}</TableRow>
           {st.rows.map((r, i) => (
-            <TableRow key={i}>
+            <MaybeClickableRow key={i} href={r.href ?? null}>
               <TableCell className="text-sm">{formatDate(r.date)}</TableCell>
               <TableCell className="font-mono text-xs">{r.doc}</TableCell>
               <TableCell className="text-sm">{r.type}</TableCell>
@@ -73,7 +74,7 @@ function StatementTable({ title, st, currency }: { title: string | null; st: Sta
               <TableCell className="text-right tabular-nums">{m(r.running)}</TableCell>
               {fc && <><TableCell className="text-right tabular-nums text-muted-foreground">{r.tzs ? formatMoney(Math.abs(r.tzs)) : ""}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatMoney(r.tzsRunning ?? 0)}</TableCell></>}
-            </TableRow>
+            </MaybeClickableRow>
           ))}
           <TableRow className="font-semibold"><TableCell colSpan={5}>Closing balance</TableCell><TableCell className="text-right tabular-nums">{m(st.closing)}</TableCell>
             {fc && <><TableCell /><TableCell className="text-right tabular-nums">{formatMoney(st.tzsClosing ?? 0)}</TableCell></>}</TableRow>
