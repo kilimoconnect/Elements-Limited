@@ -53,6 +53,8 @@ export default async function KardexPage(props: { searchParams: SP }) {
   const q = typeof sp.q === "string" ? sp.q.trim() : "";
   const branch = typeof sp.branch === "string" ? sp.branch : "";
   const type = typeof sp.type === "string" ? sp.type : "";
+  // One product (opened from Current Stock).
+  const product = typeof sp.product === "string" && /^[0-9a-f-]{36}$/i.test(sp.product) ? sp.product : "";
   const page = typeof sp.page === "string" ? Math.max(1, parseInt(sp.page, 10) || 1) : 1;
   const from = (page - 1) * PAGE, to = from + PAGE - 1;
 
@@ -73,6 +75,10 @@ export default async function KardexPage(props: { searchParams: SP }) {
   else if (!ctx.user.isOwner) query = query.in("branch_id", ctx.branches.map((b) => b.id));
   if (type) query = query.eq("movement_type", type);
   if (productIds) query = query.in("product_id", productIds);
+  if (product) query = query.eq("product_id", product);
+  const { data: productRow } = product
+    ? await admin.from("products").select("sku, name").eq("id", product).eq("company_id", ctx.companyId).maybeSingle()
+    : { data: null as { sku: string; name: string } | null };
 
   const { data, count } = await query;
   const rows = (data ?? []) as unknown as Array<{
@@ -87,6 +93,10 @@ export default async function KardexPage(props: { searchParams: SP }) {
   return (
     <div>
       <PageHeader title="Kardex" description="Immutable stock-movement ledger. Rows cannot be edited." />
+      {productRow && (
+        <p className="mb-3 text-sm">Showing <span className="font-medium">{productRow.sku} — {productRow.name}</span>{" "}
+          <Link className="text-primary hover:underline" href={`/inventory/kardex${branch ? `?branch=${branch}` : ""}`}>Show all products</Link></p>
+      )}
       <ListToolbar
         searchValue={q}
         searchPlaceholder="Search product SKU or name..."

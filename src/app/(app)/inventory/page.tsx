@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ListToolbar } from "@/components/common/list-toolbar";
+import { ClickableRow } from "@/components/common/clickable-row";
 import { formatMoney, formatQuantity, formatDate } from "@/lib/format";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -47,7 +48,7 @@ export default async function InventoryPage(props: { searchParams: SP }) {
   const { data: rows } = await query;
   type Row = {
     id: string; quantity: number; avg_unit_cost: number; stock_value: number;
-    qty_in_transit: number; last_movement_at: string | null;
+    qty_in_transit: number; last_movement_at: string | null; product_id: string; branch_id: string;
     product: { sku: string; name: string; reorder_level: number; is_active: boolean;
       category: { name: string } | null; brand: { name: string } | null; unit: { symbol: string } | null } | null;
     branch: { name: string; code: string } | null;
@@ -95,7 +96,7 @@ export default async function InventoryPage(props: { searchParams: SP }) {
               {list.map((r) => {
                 const lowStock = Number(r.quantity) <= Number(r.product?.reorder_level ?? 0);
                 return (
-                  <TableRow key={r.id}>
+                  <ClickableRow key={r.id} href={`/inventory/kardex?product=${r.product_id}&branch=${r.branch_id}`}>
                     <TableCell className="font-mono text-xs">{r.product?.sku}</TableCell>
                     <TableCell>
                       <div className="font-medium">{r.product?.name}</div>
@@ -121,7 +122,7 @@ export default async function InventoryPage(props: { searchParams: SP }) {
                         <StatusBadge active={r.product?.is_active ?? true} />
                       )}
                     </TableCell>
-                  </TableRow>
+                  </ClickableRow>
                 );
               })}
             </TableBody>
