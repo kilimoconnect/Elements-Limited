@@ -93,6 +93,9 @@ export function ExportCsvButton({ filename, header, rows }: { filename: string; 
   function download() {
     const esc = (v: string | number) => {
       const s = String(v ?? "");
+      // Phone numbers and codes ("0687322677", "+254712345678", long references) stay text in
+      // Excel, which would otherwise drop the leading 0 or round them.
+      if (typeof v === "string" && (/^0\d+$/.test(s) || /^\+\d+$/.test(s) || /^\d{16,}$/.test(s))) return `="${s}"`;
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
     const csv = [header, ...rows].map((r) => r.map(esc).join(",")).join("\n");
