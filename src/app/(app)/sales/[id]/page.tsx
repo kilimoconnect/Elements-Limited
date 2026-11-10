@@ -36,6 +36,12 @@ export default async function SaleDetailPage(props: { params: Params }) {
     admin.from("sales_returns").select("id, document_number, document_date, total, refund_amount, document_status").eq("sale_id", id).order("created_at", { ascending: false }),
   ]);
 
+  // A truck invoice: the proof of payment was attached to the Sales Request.
+  const { data: order } = sale.sales_order_id
+    ? await admin.from("sales_orders").select("request:sales_requests!sales_orders_request_id_fkey(id, document_number)").eq("id", sale.sales_order_id).maybeSingle()
+    : { data: null };
+  const request = (order as { request: { id: string; document_number: string } | null } | null)?.request ?? null;
+
   const people = [sale.submitted_by, sale.approved_by, sale.rejected_by].filter(Boolean) as string[];
   const { data: profiles } = people.length
     ? await admin.from("user_profiles").select("id, full_name, email").in("id", people)
@@ -74,7 +80,7 @@ export default async function SaleDetailPage(props: { params: Params }) {
             canEdit={inMyBranch && can(ctx.user, "sales.edit_draft")} canSubmit={inMyBranch && can(ctx.user, "sales.create")}
             canApprove={inMyBranch && can(ctx.user, "sales.approve")} canVoid={can(ctx.user, "transactions.void")}
             canDelete={can(ctx.user, "transactions.delete_draft")} canReceive={can(ctx.user, "sales.receive_payment")}
-            canReturn={can(ctx.user, "sales.create_return")} />
+            canReturn={can(ctx.user, "sales.create_return")} truck={Boolean(sale.shipment_id)} />
         }
       />
 
@@ -197,6 +203,13 @@ export default async function SaleDetailPage(props: { params: Params }) {
 
         <Card><CardContent className="p-5">
           <h3 className="mb-2 text-sm font-semibold">Proof of payment & documents</h3>
+          {request && (
+            <div className="mb-4 space-y-1">
+              <p className="text-sm text-muted-foreground">Attached to Sales Request <Link className="font-medium text-primary hover:underline" href={`/sales/requests/${request.id}`}>{request.document_number}</Link></p>
+              <AttachmentsPanel ownerType="sales_request" ownerId={request.id} categories={["proof_of_payment", "other"]} />
+            </div>
+          )}
+          {request && <p className="mb-1 text-sm text-muted-foreground">Further documents for this invoice</p>}
           <AttachmentsPanel ownerType="sale" ownerId={id} categories={["proof_of_payment", "other"]} />
         </CardContent></Card>
       </div>

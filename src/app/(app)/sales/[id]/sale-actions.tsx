@@ -12,11 +12,11 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 type Confirm = null | "delete" | "void" | "reject";
 
 export function SaleActions({
-  id, status, approvalStatus, outstanding, customerId, canEdit, canSubmit, canApprove, canVoid, canDelete, canReceive, canReturn,
+  id, status, approvalStatus, outstanding, customerId, canEdit, canSubmit, canApprove, canVoid, canDelete, canReceive, canReturn, truck = false,
 }: {
   id: string; status: string; approvalStatus: string; outstanding: number; customerId: string;
   canEdit: boolean; canSubmit: boolean; canApprove: boolean;
-  canVoid: boolean; canDelete: boolean; canReceive: boolean; canReturn: boolean;
+  canVoid: boolean; canDelete: boolean; canReceive: boolean; canReturn: boolean; truck?: boolean;
 }) {
   const router = useRouter();
   const [confirm, setConfirm] = React.useState<Confirm>(null);
@@ -71,7 +71,7 @@ export function SaleActions({
         <>
           <Button asChild variant="outline"><a href={`/api/sales/${id}/invoice`}><FileDown className="h-4 w-4" /> Invoice (PDF)</a></Button>
           <Button asChild variant="outline"><a href={`/api/sales/${id}/delivery-note`}><Truck className="h-4 w-4" /> Delivery note (PDF)</a></Button>
-          <Button asChild variant="outline"><Link href={`/invoice/${id}`} target="_blank"><Printer className="h-4 w-4" /> Print</Link></Button>
+          <Button asChild variant="outline"><Link href={truck ? `/api/sales/${id}/invoice?inline=1` : `/invoice/${id}`} target="_blank"><Printer className="h-4 w-4" /> Print</Link></Button>
         </>
       )}
       {status === "posted" && outstanding > 0 && canReceive && (

@@ -61,12 +61,12 @@ export async function loadSaleDocument(saleId: string, kind: "invoice" | "delive
   };
 }
 
-export function pdfResponse(bytes: Uint8Array, fileName: string): Response {
+export function pdfResponse(bytes: Uint8Array, fileName: string, inline = false): Response {
   const name = fileName.replace(/[^A-Za-z0-9._-]/g, "_");
   return new Response(new Blob([bytes as BlobPart], { type: "application/pdf" }), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${name}"`,
+      "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${name}"`,
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
     },

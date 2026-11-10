@@ -9,7 +9,7 @@ const KINDS: TruckDocKind[] = ["loading_order", "delivery_note", "commercial_inv
 const NAME: Record<TruckDocKind, string> = { loading_order: "LoadingOrder", delivery_note: "DeliveryNote", commercial_invoice: "CommercialInvoice" };
 
 /** GET a truck document as PDF from its latest stored version. Reprinting posts nothing. */
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string; kind: string }> }) {
+export async function GET(req: Request, ctx: { params: Promise<{ id: string; kind: string }> }) {
   const { id, kind } = await ctx.params;
   let user;
   try { user = await assertActiveUser(); } catch { return new Response("Not signed in.", { status: 401 }); }
@@ -27,5 +27,5 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string; ki
 
   await writeAuditLog({ userId: user.id, companyId: s.company_id, branchId: s.branch_id, action: `sales_shipment.${kind}_download`, resourceType: "sales_shipment", resourceId: id });
   const no = kind === "commercial_invoice" ? snap.invoice?.number : kind === "delivery_note" ? snap.shipment.delivery_note_number : snap.shipment.loading_order_number;
-  return pdfResponse(renderTruckDocument(snap), `${NAME[kind as TruckDocKind]}-${no ?? s.document_number}.pdf`);
+  return pdfResponse(renderTruckDocument(snap), `${NAME[kind as TruckDocKind]}-${no ?? s.document_number}.pdf`, new URL(req.url).searchParams.get("inline") === "1");
 }
