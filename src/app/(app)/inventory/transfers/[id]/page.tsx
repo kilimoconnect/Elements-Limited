@@ -145,7 +145,7 @@ export default async function TransferDetailPage(props: { params: Params }) {
       </div>
 
       <span id="quantities" className="block scroll-mt-20" />
-      {canChangeQty && <p className="text-xs text-muted-foreground">Use <span className="font-medium text-foreground">Change</span> next to Requested, or next to Loaded on a trip below, to change a quantity.</p>}
+      {canChangeQty && <p className="text-xs text-muted-foreground">Use <span className="font-medium text-foreground">Change</span> next to Requested, or next to Loaded on a trip below: requested and loaded change together.</p>}
       <Card className="hidden overflow-x-auto md:block">
         <Table>
           <TableHeader><TableRow>

@@ -115,6 +115,7 @@ async function main() {
     const dl2 = await one(db, "insert into stock_transfer_dispatch_lines(company_id, dispatch_id, transfer_line_id, qty) values ($1,$2,$3,20) returning id", [co, d2, l2]);
     await db.query("select change_trip_line_quantity($1,$2,22,'loaded 2 more',gen_random_uuid()::text)", [dl2, owner]);
     check("a draft trip's quantity simply changes", Number(await one(db, "select qty from stock_transfer_dispatch_lines where id=$1", [dl2])) === 22);
+    check("requested moves with the trip (25 -> 27); the 5 still to load stays the same", Number(await one(db, "select qty_requested from stock_transfer_lines where id=$1", [l2])) === 27, String(Number(await one(db, "select qty_requested from stock_transfer_lines where id=$1", [l2]))));
     await db.query("select dispatch_transfer_trip($1,$2,gen_random_uuid()::text)", [d2, owner]);
     await db.query("select * from issue_delivery_note($1,$2)", [d2, owner]);
     const hqBefore = await stockQty(hq);
@@ -139,6 +140,11 @@ async function main() {
       Number(await one(db, "select count(*) from stock_transfer_dispatch_changes where dispatch_id=$1 and new_values ? 'quantity RT-A'", [d2])) === 4
       && Number(await one(db, "select max(version) from document_versions where owner_id=$1 and kind='delivery_note'", [d2])) === 5
       && Number(await one(db, "select (snapshot->'lines'->0->>'qty')::numeric from document_versions where owner_id=$1 and kind='delivery_note' order by version desc limit 1", [d2])) === 21);
+    await db.query("select change_transfer_line_quantity($1,$2,23,'customer added 2')", [l2, owner]);
+    check("raising requested on a fully loaded line puts the extra on the trip (21 -> 23) and out of the sending branch",
+      Number(await one(db, "select qty from stock_transfer_dispatch_lines where id=$1", [dl2])) === 23 && Number(await one(db, "select qty_requested from stock_transfer_lines where id=$1", [l2])) === 23 && await stockQty(hq) === hqQ - 1, `${Number(await one(db, "select qty from stock_transfer_dispatch_lines where id=$1", [dl2]))} ${Number(await one(db, "select qty_requested from stock_transfer_lines where id=$1", [l2]))}`);
+    await db.query("select change_trip_line_quantity($1,$2,21,'back to 21',gen_random_uuid()::text)", [dl2, owner]);
+    check("lowering the trip lowers requested to match (23 -> 21)", Number(await one(db, "select qty from stock_transfer_dispatch_lines where id=$1", [dl2])) === 21 && Number(await one(db, "select qty_requested from stock_transfer_lines where id=$1", [l2])) === 21 && await stockQty(hq) === hqQ + 1);
     const dl2id = await one(db, "select id from stock_transfer_dispatch_lines where id=$1", [dl2]);
     await db.query("select receive_transfer_trip($1,$2,$3::jsonb,now(),null,'Store',gen_random_uuid()::text,gen_random_uuid()::text)",
       [d2, owner, JSON.stringify([{ dispatch_line_id: dl2id, accepted: 21, quarantined: 0, short: 0 }])]);

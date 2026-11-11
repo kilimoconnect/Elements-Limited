@@ -242,7 +242,7 @@ export function ChargeRowActions({ sourceId, status, estimate, canAccrue }: { so
   );
 }
 
-/** "Change" next to a quantity: the requested quantity of a line, or the quantity on a trip. */
+/** "Change" next to Requested or Loaded: one quantity, both change together (migration 0063). */
 export function ChangeQuantityButton({ kind, id, current, label, dispatched = false }: {
   kind: "line" | "trip"; id: string; current: number; label: string; dispatched?: boolean;
 }) {
@@ -257,8 +257,9 @@ export function ChangeQuantityButton({ kind, id, current, label, dispatched = fa
       <Button type="button" size="sm" variant="outline" className="ml-2 h-7 px-2 text-xs" onClick={() => { setQty(String(current)); setReason(""); setErr(null); setOpen(true); }}><Pencil className="h-3.5 w-3.5" /> Change</Button>
       <Dialog open={open} onOpenChange={(o) => !pending && setOpen(o)}>
         <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>{kind === "line" ? "Change requested quantity" : "Correct trip quantity"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Change quantity</DialogTitle></DialogHeader>
           <p className="text-sm">{label} — now {current}</p>
+          <p className="text-xs text-muted-foreground">Requested and loaded are one quantity: both change together.{kind === "line" ? " Less is taken off what is not yet loaded first, then off the latest trip not yet received; more on a fully loaded line goes on the latest trip." : ""}</p>
           {kind === "trip" && dispatched && (
             <p className="text-xs text-muted-foreground">The trip is already dispatched. Less returns the difference to the sending branch; more takes it out of the sending branch. Goods in transit and the delivery note (marked AMENDED) are updated.</p>
           )}
