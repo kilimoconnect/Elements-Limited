@@ -60,7 +60,7 @@ export const NAV: NavEntry[] = [
     items: [
       { label: "Current Stock", href: "/inventory", enabled: true, requires: "inventory.view" },
       { label: "Kardex", href: "/inventory/kardex", enabled: true, requires: "inventory.view_kardex" },
-      { label: "Stock Transfers / In Transit", href: "/inventory/transfers", enabled: true, requires: "inventory.transfer_view" },
+      { label: "Transfer Orders / In Transit", href: "/inventory/transfers", enabled: true, requires: "inventory.transfer_view" },
       { label: "Stock Adjustments", href: "/inventory/adjustments", enabled: true, requires: "inventory.adjustment_create" },
       { label: "Rebagging", href: "/inventory/rebagging", enabled: true, requires: "rebagging.view", feature: "rebagging" },
       { label: "Pricing", href: "/inventory/pricing", enabled: true, requires: "inventory.view_cost" },

@@ -26,7 +26,9 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
   const ctx = await getActiveContext();
   const sp = await props.searchParams;
   const view = str(sp, "view"), branchF = str(sp, "branch"), page = pageOf(sp);
-  const inTransit = view !== "all";
+  // Views: transfer orders (default, every order with its loading status), in transit / open, all.
+  const ordersView = view !== "transit" && view !== "all";
+  const inTransit = view === "transit";
   const admin = createAdminClient();
   const myBranches = ctx.user.isOwner ? ctx.branches.map((b) => b.id) : ctx.user.branchIds;
   const none = ["00000000-0000-0000-0000-000000000000"];
@@ -76,8 +78,9 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
         actions={ctx.branchId && can(ctx.user, "inventory.transfer_create") && <Button asChild><Link href="/inventory/transfers/new">New Transfer Order</Link></Button>}
       />
       <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
-        <Link href="/inventory/transfers" className={`rounded-md px-3 py-1.5 ${inTransit ? "bg-primary text-primary-foreground" : "border border-border"}`}>In transit / open</Link>
-        <Link href="/inventory/transfers?view=all" className={`rounded-md px-3 py-1.5 ${!inTransit ? "bg-primary text-primary-foreground" : "border border-border"}`}>All transfers</Link>
+        <Link href="/inventory/transfers" className={`rounded-md px-3 py-1.5 ${ordersView ? "bg-primary text-primary-foreground" : "border border-border"}`}>Transfer orders</Link>
+        <Link href="/inventory/transfers?view=transit" className={`rounded-md px-3 py-1.5 ${inTransit ? "bg-primary text-primary-foreground" : "border border-border"}`}>In transit / open</Link>
+        <Link href="/inventory/transfers?view=all" className={`rounded-md px-3 py-1.5 ${view === "all" ? "bg-primary text-primary-foreground" : "border border-border"}`}>All transfers</Link>
         <ParamSelect param="branch" value={branchF} placeholder="All my branches" options={ctx.branches.filter((b) => myBranches.includes(b.id)).map((b) => ({ id: b.id, label: `${b.code} — ${b.name}` }))} />
         <span className="ml-auto"><ExportCsvButton filename="in-transit.csv"
           header={["Transfer", "From", "To", "Status", "Trip", "Driver", "Driver phone", "Vehicle", "Trailer", "Agents", "Dispatched", "ETA", "Overdue", "Dispatched qty", "Received qty"]}
@@ -105,7 +108,36 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
           </Table>
         </Card>
       )}
-      {list.length === 0 ? (
+      {ordersView ? (list.length === 0 ? <EmptyState title="No transfer orders yet" /> : (
+        <Card className="overflow-x-auto">
+          <Table>
+            <TableHeader><TableRow>
+              <TableHead>Transfer order</TableHead><TableHead>From → To</TableHead><TableHead>Trucks</TableHead>
+              <TableHead className="text-right">Ordered</TableHead><TableHead className="text-right">Loaded</TableHead><TableHead className="text-right">Received</TableHead><TableHead>Status</TableHead>
+            </TableRow></TableHeader>
+            <TableBody>{list.map((r) => {
+              const req = r.lines.reduce((a, l) => a + N(l.qty_requested), 0);
+              const disp = r.lines.reduce((a, l) => a + N(l.qty_dispatched), 0);
+              const recv = r.lines.reduce((a, l) => a + N(l.qty_received), 0);
+              const live = r.trips.filter((t) => t.status !== "voided").sort((a, b) => a.trip_no - b.trip_no);
+              const st = orderStatus(r.status, live.map((t) => t.status), req, disp);
+              return (
+                <ClickableRow key={r.id} href={`/inventory/transfers/${r.id}`}>
+                  <TableCell><span className="font-mono text-xs">{r.document_number ?? "Order (not yet loaded)"}</span><p className="text-xs text-muted-foreground">{formatDate(r.transfer_date)}</p></TableCell>
+                  <TableCell className="min-w-[12rem] text-sm"><p className="font-medium">{r.source?.name ?? r.source?.code}</p><p className="text-muted-foreground">→ {r.dest?.name ?? r.dest?.code}</p></TableCell>
+                  <TableCell className="text-xs">{live.length === 0 ? "—" : live.map((t) => (
+                    <p key={t.id}>{t.vehicle_registration ?? `Trip ${t.trip_no}`}{t.trailer_registration ? ` / ${t.trailer_registration}` : ""} · <span className={t.status === "draft" ? "font-medium text-amber-700 dark:text-amber-400" : "text-muted-foreground"}>{TRUCK[t.status] ?? t.status}</span></p>
+                  ))}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatQuantity(req)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatQuantity(disp)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatQuantity(recv)}</TableCell>
+                  <TableCell><Badge variant={st.variant}>{st.label}</Badge>{r.has_open_discrepancy && <Badge variant="warning" className="ml-1">discrepancy</Badge>}</TableCell>
+                </ClickableRow>
+              );
+            })}</TableBody>
+          </Table>
+        </Card>
+      )) : list.length === 0 ? (
         <EmptyState title={inTransit ? "Nothing in transit for your branches" : "No transfers yet"} />
       ) : (
         <Card className="overflow-x-auto">
@@ -151,4 +183,17 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
       <p className="mt-3 text-xs text-muted-foreground">Licence numbers, licence images and costs are never included in this list or its export. Positions are as recorded by the branches (dispatch, updates, arrival); there is no live GPS tracking.</p>
     </div>
   );
+}
+
+const TRUCK: Record<string, string> = { draft: "waiting for loading", dispatched: "loaded · in transit", arrived: "arrived", received: "received" };
+
+/** A transfer order's status from its trucks: waiting for loading, partly loaded, loaded, received. */
+function orderStatus(status: string, trucks: string[], ordered: number, loaded: number): { label: string; variant: "warning" | "success" | "secondary" | "default" | "muted" } {
+  if (status === "voided") return { label: "Voided", variant: "secondary" };
+  if (status === "received") return { label: "Received", variant: "success" };
+  const waiting = trucks.filter((t) => t === "draft").length;
+  if (loaded <= 0) return { label: "Waiting for loading", variant: "warning" };
+  if (waiting > 0 || loaded < ordered - 1e-9) return { label: status === "partially_received" ? "Partly loaded · partly received" : "Partly loaded", variant: "warning" };
+  if (status === "partially_received") return { label: "Loaded · partly received", variant: "default" };
+  return { label: "Loaded", variant: "default" };
 }
