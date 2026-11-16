@@ -160,6 +160,7 @@ export const NAV: NavEntry[] = [
       { label: "Cost Reconciliation", href: "/reports/cost-reconciliation", enabled: true, requires: "reports.view_inventory_valuation" },
       { label: "Shipment Costing", href: "/reports/shipment-costing", enabled: true, requires: "imports.view_cost", feature: "imports" },
       { label: "Rebagging Costing", href: "/reports/rebagging-costing", enabled: true, requires: "inventory.view_cost", feature: "rebagging" },
+      { label: "Transfer Report", href: "/reports/transfers", enabled: true, requires: "inventory.transfer_view" },
       { label: "Transfer Costing", href: "/reports/transfer-costing", enabled: true, requires: "inventory.view_cost" },
       { label: "Branch Landed Cost", href: "/reports/branch-landed-cost", enabled: true, requires: "inventory.view_cost" },
       { label: "Profitability", href: "/reports/profitability", enabled: true, requires: "reports.view_profit_loss" },

@@ -17,6 +17,7 @@ const REPORTS: { href: string; title: string; desc: string; perm: string }[] = [
   { href: "/reports/customer-statements", title: "Customer Statements", desc: "Statement of account for a customer", perm: "reports.view_receivables" },
   { href: "/reports/supplier-statements", title: "Supplier Statements", desc: "Statement of account for a supplier", perm: "reports.view_payables" },
   { href: "/reports/inventory-valuation", title: "Inventory Valuation", desc: "Stock value by product & branch", perm: "reports.view_inventory_valuation" },
+  { href: "/reports/transfers", title: "Transfer Report", desc: "Stock moved between branches: loaded, received, in transit, losses and timing", perm: "inventory.transfer_view" },
 ];
 
 export default async function ReportsIndex() {
