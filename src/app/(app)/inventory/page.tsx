@@ -39,8 +39,9 @@ export default async function InventoryPage(props: { searchParams: SP }) {
   let query = admin.from("stock_balances")
     .select("id, quantity, avg_unit_cost, stock_value, qty_in_transit, last_movement_at, branch_id, product_id, product:products(sku, name, reorder_level, is_active, category:product_categories(name), brand:brands(name), unit:units(symbol)), branch:branches(name, code)")
     .eq("company_id", ctx.companyId)
+    .or("quantity.neq.0,qty_in_transit.gt.0")
     .order("updated_at", { ascending: false })
-    .limit(200);
+    .limit(500);
   if (branch) query = query.eq("branch_id", branch);
   else if (!ctx.user.isOwner) query = query.in("branch_id", ctx.branches.map((b) => b.id));
   if (productIds) query = query.in("product_id", productIds);
