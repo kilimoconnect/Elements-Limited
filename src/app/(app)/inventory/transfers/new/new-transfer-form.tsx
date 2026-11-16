@@ -162,7 +162,7 @@ export function NewTransferForm({
       <div className="flex flex-wrap items-center justify-end gap-2">
         {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
         <Button variant="outline" onClick={() => router.push("/inventory/transfers")} disabled={pending}>Cancel</Button>
-        <Button variant="outline" onClick={() => submit(false)} disabled={pending}>Save draft</Button>
+        <Button onClick={() => submit(false)} disabled={pending}>{pending ? "Working..." : "Create transfer order"}</Button>
         {canDispatch && <Button onClick={() => submit(true)} disabled={pending}>{pending ? "Working..." : "Save & Dispatch"}</Button>}
       </div>
     </div>

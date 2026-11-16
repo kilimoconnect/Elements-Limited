@@ -57,10 +57,11 @@ export interface TripInput {
   lines: { transfer_line_id: string; qty: number }[];
 }
 
-/** Create a draft trip (cargo + driver / vehicle). Dispatching it posts stock. */
+/** Create a draft trip (cargo + driver / vehicle): a truck waiting for loading. Confirming loading posts stock. */
 export async function createTrip(input: TripInput): Promise<RpcResult> {
   try {
-    const { user, ctx, admin } = await ctxFor("inventory.transfer_dispatch");
+    const { user, ctx, admin } = await ctxFor("inventory.transfer_view");
+    if (!(user.isOwner || user.permissions.has("inventory.transfer_create") || user.permissions.has("inventory.transfer_dispatch"))) return { ok: false, error: "You are not allowed to prepare transfer trucks." };
     const t = await loadTransfer(admin, input.transferId, ctx.companyId, user);
     if (!user.isOwner && !user.branchIds.includes(t.source_branch_id)) return { ok: false, error: "Only the sending branch prepares trips." };
     if (!t.posts_in_transit) return { ok: false, error: "This transfer was dispatched before the upgrade and cannot take new trips." };
@@ -147,6 +148,56 @@ export async function dispatchTrip(tripId: string): Promise<RpcResult & { messag
   } catch (e) { return fail(e); }
 }
 
+/**
+ * The store keeper confirms a truck is loaded (after checking it in two steps):
+ * the trip is dispatched (stock leaves the sending branch, goods in transit),
+ * then its delivery note and the transfer's GRNs are issued.
+ * The truck registration typed from the truck must match the order.
+ */
+export async function confirmTripLoading(tripId: string, typedRegistration: string): Promise<RpcResult & { message?: string }> {
+  try {
+    const { user, ctx, admin } = await ctxFor("inventory.transfer_dispatch");
+    const { trip, t } = await loadTrip(admin, tripId, ctx.companyId, user);
+    if (!user.isOwner && !user.branchIds.includes(t.source_branch_id)) return { ok: false, error: "Only the sending branch confirms loading." };
+    if (trip.status !== "draft") return { ok: false, error: "This truck was already confirmed as loaded." };
+    const { data: tr } = await admin.from("stock_transfer_dispatches").select("vehicle_registration").eq("id", tripId).single();
+    const want = normaliseRegistration(tr?.vehicle_registration);
+    if (want && normaliseRegistration(typedRegistration) !== want) return { ok: false, error: "The truck registration does not match this order. Check you are loading the right truck." };
+    const d = await dispatchTrip(tripId);
+    if (!d.ok) return d;
+    await writeAuditLog({ userId: user.id, companyId: ctx.companyId, branchId: t.source_branch_id, action: "transfer.loading_confirm", resourceType: "stock_transfer_dispatch", resourceId: tripId });
+    const issued: string[] = [];
+    const dn = await admin.rpc("issue_delivery_note", { p_dispatch: tripId, p_user: user.id });
+    if (dn.error) issued.push("the delivery note could not be issued yet");
+    const { transferGrnGroups } = await import("@/lib/transfers/grn-data");
+    const grns: string[] = [];
+    for (const g of await transferGrnGroups(t.id)) {
+      const { data: num } = await admin.rpc("issue_transfer_grn", { p_transfer: t.id, p_supplier: g.supplierId, p_user: user.id });
+      if (num) grns.push(String(num));
+    }
+    const { data: after } = await admin.from("stock_transfer_dispatches").select("document_number, delivery_note_number").eq("id", tripId).single();
+    refresh(t.id);
+    const docs = [after?.delivery_note_number ? `delivery note ${after.delivery_note_number}` : null, grns.length ? `GRN ${grns.join(", ")}` : null].filter(Boolean).join(" and ");
+    return { ok: true, id: tripId, message: `Loading confirmed${after?.document_number ? ` (${after.document_number})` : ""}${docs ? `; ${docs} issued` : ""}.${issued.length ? ` Note: ${issued.join("; ")}.` : ""}${d.message && d.message !== "Trip dispatched." ? ` ${d.message.replace("Trip dispatched. ", "")}` : ""}` };
+  } catch (e) { return fail(e); }
+}
+
+/** An admin undoes a loading confirmation made by mistake: the dispatch is reversed and the truck waits for loading again. */
+export async function undoTripLoading(tripId: string, reason: string, requestId: string): Promise<RpcResult> {
+  try {
+    const { user, ctx, admin } = await ctxFor("transactions.void");
+    const { t } = await loadTrip(admin, tripId, ctx.companyId, user);
+    if (!reason?.trim()) return { ok: false, error: "Enter the reason." };
+    if (!reqOk(requestId)) return { ok: false, error: "Missing request id; reload the page." };
+    const res = await callPostingRpc("undo_trip_loading", { p_dispatch: tripId, p_user: user.id, p_reason: reason.trim(), p_idem: `undo_trip_loading:${tripId}:${requestId}` });
+    if (!res.ok) return res;
+    const data = res.id;
+    await writeAuditLog({ userId: user.id, companyId: ctx.companyId, branchId: t.source_branch_id, action: "transfer.loading_undo", resourceType: "stock_transfer_dispatch", resourceId: tripId, reason, newValues: { new_trip_id: data } });
+    refresh(t.id);
+    return { ok: true, id: data };
+  } catch (e) { return fail(e); }
+}
+
 export interface ChargeInput { categoryId: string; description?: string; amount: number }
 
 async function checkCharges(admin: Admin, companyId: string, charges: ChargeInput[]): Promise<string | null> {
@@ -217,7 +268,7 @@ export async function createTransferWithTrip(input: NewTransferInput): Promise<R
       if (!r.ok) return { ok: false, id: transferId, error: `Transfer saved as a draft, but a charge could not be added: ${r.error ?? "failed"}` };
     }
 
-    if (!input.dispatch) { refresh(transferId); return { ok: true, id: transferId, message: "Transfer saved as a draft with its truck and charges." }; }
+    if (!input.dispatch) { refresh(transferId); return { ok: true, id: transferId, message: "Transfer order created. The store keeper confirms loading, which issues the delivery note and GRN." }; }
     const d = await dispatchTrip(trip.id);
     if (!d.ok) return { ok: false, id: transferId, error: `Transfer saved, but dispatch failed: ${d.error ?? "failed"}` };
     return { ok: true, id: transferId, message: d.message };
@@ -363,7 +414,7 @@ export async function addTransferCharge(input: {
     const { user, ctx, admin } = await ctxFor("inventory.transfer_view");
     const t = await loadTransfer(admin, input.transferId, ctx.companyId, user);
     if (!(await isFeatureEnabled(ctx.companyId, "transfer_logistics"))) return { ok: false, error: "Transfer logistics is not enabled." };
-    if (!(user.isOwner || user.permissions.has("inventory.transfer_cost") || user.permissions.has("inventory.transfer_dispatch") || user.permissions.has("inventory.transfer_receive"))) {
+    if (!(user.isOwner || user.permissions.has("inventory.transfer_cost") || user.permissions.has("inventory.transfer_create") || user.permissions.has("inventory.transfer_dispatch") || user.permissions.has("inventory.transfer_receive"))) {
       return { ok: false, error: "Not allowed to record transfer charges." };
     }
     if (!(input.amount >= 0)) return { ok: false, error: "Amount cannot be negative." };

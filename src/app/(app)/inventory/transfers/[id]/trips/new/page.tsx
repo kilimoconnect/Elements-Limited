@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { requirePermissionPage } from "@/lib/auth/guards";
-import { getActiveContext } from "@/lib/context";
+import { getActiveContext, can } from "@/lib/context";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -13,8 +13,9 @@ type Params = Promise<{ id: string }>;
 const N = (v: unknown) => Number(v ?? 0);
 
 export default async function NewTripPage(props: { params: Params }) {
-  await requirePermissionPage("inventory.transfer_dispatch");
+  await requirePermissionPage("inventory.transfer_view");
   const ctx = await getActiveContext();
+  if (!can(ctx.user, "inventory.transfer_create") && !can(ctx.user, "inventory.transfer_dispatch")) notFound();
   const { id } = await props.params;
   const admin = createAdminClient();
   const { data: t } = await admin.from("stock_transfers").select("id, company_id, source_branch_id, document_number, status, posts_in_transit, expected_date, driver_name, driver_phone, vehicle_registration, trailer_registration").eq("id", id).maybeSingle();

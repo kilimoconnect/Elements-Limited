@@ -50,7 +50,6 @@ export function TripActions({ transferId, tripId, status, isSender, isReceiver, 
     ["vehicle_registration", "Truck reg."], ["trailer_registration", "Trailer reg."], ["transporter_name", "Transporter"], ["transporter_contact", "Transporter contact"]];
   return (
     <div className="flex flex-wrap gap-1.5">
-      {status === "draft" && isSender && <Button size="sm" onClick={() => setOpen("dispatch")} disabled={pending}>Dispatch trip</Button>}
       {status === "draft" && isSender && <Button size="sm" variant="ghost" onClick={() => setOpen("delete")}>Delete draft</Button>}
       {["dispatched", "arrived"].includes(status) && isReceiver && <Button size="sm" asChild><Link href={`/inventory/transfers/${transferId}/trips/${tripId}/receive`}>Record arrival / receive</Link></Button>}
       {status !== "voided" && <Button size="sm" variant="outline" asChild><a href={`/api/transfers/trips/${tripId}/delivery-note`}>Delivery note (PDF)</a></Button>}

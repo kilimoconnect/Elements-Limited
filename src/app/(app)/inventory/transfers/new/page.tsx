@@ -33,8 +33,8 @@ export default async function NewTransferPage() {
   for (const b of bals ?? []) (stockByBranch[b.branch_id] ??= {})[b.product_id] = Number(b.quantity);
   return (
     <div>
-      <PageHeader title="New Transfer"
-        description="Goods, truck and driver, and the loading, transport and other charges for this move. Charges are added to the cost of the goods at the receiving branch; offloading is entered when the goods are received." />
+      <PageHeader title="New Transfer Order"
+        description="Goods, truck and driver, and the loading, transport and other charges for this move. The store keeper then confirms loading, which dispatches the goods and issues the delivery note and GRN. Charges are added to the cost of the goods at the receiving branch; offloading is entered when the goods are received." />
       {!ctx.branchId || myBranches.length === 0 ? <EmptyState title="Choose a branch first" /> : (
         <NewTransferForm
           products={(products ?? []) as never}
@@ -42,7 +42,7 @@ export default async function NewTransferPage() {
           sourceBranches={myBranches}
           allBranches={companyBranches ?? []}
           sourceBranchId={ctx.branchId}
-          canDispatch={can(ctx.user, "inventory.transfer_dispatch")}
+          canDispatch={false}
           canLicence={canUseLicenceNumber(ctx.user)}
           chargesEnabled={logistics}
           categories={(categories ?? []).map((c) => ({ id: c.id, code: c.code, label: c.name }))}

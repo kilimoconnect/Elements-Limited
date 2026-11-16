@@ -20,6 +20,7 @@ import { ChangeRouteButton } from "./change-route";
 import { isHeadOfficeUser, transferGrnGroups } from "@/lib/transfers/grn-data";
 import { canUseLicenceNumber } from "@/lib/transfers/licence";
 import { TripActions, ResolveButton, ChargeForm, ChargeRowActions, ChangeQuantityButton } from "./transfer-file";
+import { ConfirmLoadingButton, UndoLoadingButton } from "./confirm-loading";
 
 export const metadata: Metadata = { title: "Transfer" };
 type Params = Promise<{ id: string }>;
@@ -102,8 +103,8 @@ export default async function TransferDetailPage(props: { params: Params }) {
             {canChangeRoute && routeBranches.length > 0 && (
               <ChangeRouteButton transferId={id} current={`${t.dest?.name ?? ""}`} branches={routeBranches} dispatched={t.status === "dispatched"} />
             )}
-            {logistics && !legacy && canDispatch && remainingToDispatch && t.status !== "voided" &&
-              <Button asChild variant="outline"><Link href={`/inventory/transfers/${id}/trips/new`}>New dispatch trip</Link></Button>}
+            {logistics && !legacy && isSender && (canDispatch || can(ctx.user, "inventory.transfer_create")) && remainingToDispatch && t.status !== "voided" &&
+              <Button asChild variant="outline"><Link href={`/inventory/transfers/${id}/trips/new`}>Add truck</Link></Button>}
             <TransferActions id={id} status={t.status} lines={tLines}
               canDispatch={canDispatch && tripsList.length === 0} canReceive={canReceive && (legacy || tripsList.length <= 1)} canVoid={can(ctx.user, "transactions.void")} />
           </div>
@@ -205,12 +206,24 @@ export default async function TransferDetailPage(props: { params: Params }) {
           <Card key={trip.id}><CardContent className="space-y-3 p-4 text-sm sm:p-5">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
-                <h3 className="font-semibold">{trip.document_number ?? `Trip ${trip.trip_no} (draft)`} <Badge variant={trip.status === "received" ? "success" : trip.status === "voided" ? "secondary" : "warning"}>{trip.status}</Badge></h3>
+                <h3 className="font-semibold">{trip.document_number ?? `Trip ${trip.trip_no} (draft)`} <Badge variant={trip.status === "received" ? "success" : trip.status === "voided" ? "secondary" : "warning"}>{trip.status === "draft" ? "waiting for loading" : trip.status === "dispatched" ? "loaded · in transit" : trip.status}</Badge></h3>
                 <p className="text-xs text-muted-foreground">Dispatch {trip.dispatched_at ? formatDateTime(trip.dispatched_at) : formatDate(trip.dispatch_date)} · ETA {trip.expected_arrival_at ? formatDateTime(trip.expected_arrival_at) : "—"} · Arrived {trip.arrived_at ? formatDateTime(trip.arrived_at) : "—"}</p>
               </div>
+              <div className="flex flex-wrap items-start gap-1.5">
+              {trip.status === "draft" && canDispatch && (
+                <ConfirmLoadingButton tripId={trip.id} summary={{
+                  trip: trip.document_number ?? `Trip ${trip.trip_no}`, from: t.source?.name ?? "", to: t.dest?.name ?? "",
+                  vehicle: trip.vehicle_registration, trailer: trip.trailer_registration, driver: trip.driver_name, phone: trip.driver_phone, transporter: trip.transporter_name,
+                  lines: trip.lines.map((x) => ({ label: lname(x.transfer_line_id), qty: formatQuantity(N(x.qty)) })),
+                }} />
+              )}
+              {trip.status === "dispatched" && isSender && can(ctx.user, "transactions.void") && trip.lines.every((x) => N(x.qty_reported) === 0) && (
+                <UndoLoadingButton tripId={trip.id} trip={trip.document_number ?? `Trip ${trip.trip_no}`} />
+              )}
               <TripActions transferId={id} tripId={trip.id} status={trip.status} isSender={canDispatch} isReceiver={canReceive} canVoid={can(ctx.user, "transactions.void")} canLicence={canLicence}
                 transport={{ driver_name: trip.driver_name ?? "", driver_phone: trip.driver_phone ?? "", ...(canLicence ? { driver_licence: trip.driver_licence ?? "" } : {}),
                   vehicle_registration: trip.vehicle_registration ?? "", trailer_registration: trip.trailer_registration ?? "", transporter_name: trip.transporter_name ?? "", transporter_contact: trip.transporter_contact ?? "" }} />
+              </div>
             </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div><p className="text-xs text-muted-foreground">Driver</p><p>{trip.driver_name ?? "—"}{trip.driver_phone && <> · <a className="underline" href={`tel:${trip.driver_phone}`}>{trip.driver_phone}</a></>}</p>

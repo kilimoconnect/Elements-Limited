@@ -51,6 +51,16 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
     .filter((r) => !inTransit || r.status !== "received" || r.has_open_discrepancy)
     .filter((r) => !branchF || r.source_branch_id === branchF || r.destination_branch_id === branchF);
   const list = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  // Trucks waiting for the store keeper to confirm loading (sending branches I belong to).
+  const { data: waiting } = await admin.from("stock_transfer_dispatches")
+    .select("id, trip_no, dispatch_date, vehicle_registration, trailer_registration, driver_name, transfer:stock_transfers!inner(id, document_number, status, source_branch_id, dest:branches!stock_transfers_destination_branch_id_fkey(name)), lines:stock_transfer_dispatch_lines(qty, line:stock_transfer_lines(product:products(sku)))")
+    .eq("company_id", ctx.companyId).eq("status", "draft").neq("transfer.status", "voided")
+    .in("transfer.source_branch_id", myBranches.length ? myBranches : none)
+    .order("dispatch_date").limit(50);
+  type W = { id: string; trip_no: number; dispatch_date: string; vehicle_registration: string | null; trailer_registration: string | null; driver_name: string | null;
+    transfer: { id: string; document_number: string | null; status: string; source_branch_id: string; dest: { name: string } | null };
+    lines: { qty: number; line: { product: { sku: string } | null } | null }[] };
+  const waits = ((waiting ?? []) as unknown as W[]).filter((w) => !branchF || w.transfer.source_branch_id === branchF);
   const now = new Date().toISOString();
   const overdueOf = (r: Row) => r.trips.some((t) => ["dispatched", "arrived"].includes(t.status) && t.expected_arrival_at && t.expected_arrival_at < now);
   // Document counts per transfer and per trip (opened from the detail page with the usual access checks).
@@ -63,7 +73,7 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
       <PageHeader
         title="Stock Transfers"
         description="One shared transfer for the sending and the receiving branch: trips, cargo, documents and receipt progress."
-        actions={ctx.branchId && can(ctx.user, "inventory.transfer_create") && <Button asChild><Link href="/inventory/transfers/new">New Transfer</Link></Button>}
+        actions={ctx.branchId && can(ctx.user, "inventory.transfer_create") && <Button asChild><Link href="/inventory/transfers/new">New Transfer Order</Link></Button>}
       />
       <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
         <Link href="/inventory/transfers" className={`rounded-md px-3 py-1.5 ${inTransit ? "bg-primary text-primary-foreground" : "border border-border"}`}>In transit / open</Link>
@@ -76,6 +86,25 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
             t?.dispatched_at ?? "", t?.expected_arrival_at ?? "", overdueOf(r) ? "yes" : "",
             r.lines.reduce((a, l) => a + N(l.qty_dispatched), 0), r.lines.reduce((a, l) => a + N(l.qty_received), 0)]))} /></span>
       </div>
+      {waits.length > 0 && (
+        <Card className="mb-4 overflow-x-auto border-amber-300 dark:border-amber-700">
+          <div className="flex items-center gap-2 px-4 pt-3 text-sm font-semibold">Waiting for loading <Badge variant="warning">{waits.length}</Badge>
+            <span className="font-normal text-muted-foreground">· open a truck and use Confirm loading</span></div>
+          <Table>
+            <TableHeader><TableRow><TableHead>Transfer / trip</TableHead><TableHead>To</TableHead><TableHead>Truck</TableHead><TableHead>Driver</TableHead><TableHead>Cargo</TableHead><TableHead>Date</TableHead></TableRow></TableHeader>
+            <TableBody>{waits.map((w) => (
+              <ClickableRow key={w.id} href={`/inventory/transfers/${w.transfer.id}`}>
+                <TableCell className="text-sm font-medium">{w.transfer.document_number ?? "Transfer order"}<span className="block text-xs text-muted-foreground">Trip {w.trip_no}</span></TableCell>
+                <TableCell className="text-sm">{w.transfer.dest?.name}</TableCell>
+                <TableCell className="text-sm font-medium">{w.vehicle_registration ?? "—"}{w.trailer_registration && <span className="block text-xs text-muted-foreground">Trailer {w.trailer_registration}</span>}</TableCell>
+                <TableCell className="text-sm">{w.driver_name ?? "—"}</TableCell>
+                <TableCell className="text-xs">{w.lines.map((l, i) => <span key={i} className="block">{formatQuantity(N(l.qty))} {l.line?.product?.sku}</span>)}</TableCell>
+                <TableCell className="text-xs">{formatDate(w.dispatch_date)}</TableCell>
+              </ClickableRow>
+            ))}</TableBody>
+          </Table>
+        </Card>
+      )}
       {list.length === 0 ? (
         <EmptyState title={inTransit ? "Nothing in transit for your branches" : "No transfers yet"} />
       ) : (

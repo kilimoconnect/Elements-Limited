@@ -42,7 +42,7 @@ export function TripForm({ transferId, lines, canLicence, defaults }: {
       requestId, lines: lines.map((l) => ({ transfer_line_id: l.id, qty: Number(qty[l.id] || 0) })),
     });
     setPending(false);
-    if (res.ok) { toast.success("Trip prepared. Dispatch it from the transfer page."); router.push(`/inventory/transfers/${transferId}`); }
+    if (res.ok) { toast.success("Truck added. It waits for the store keeper to confirm loading."); router.push(`/inventory/transfers/${transferId}`); }
     else setError(res.error ?? "Failed.");
   }
 
@@ -77,7 +77,7 @@ export function TripForm({ transferId, lines, canLicence, defaults }: {
       </CardContent></Card>
       <div className="flex items-center justify-end gap-2">
         {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
-        <Button onClick={submit} disabled={pending}>{pending ? "Saving..." : "Save trip"}</Button>
+        <Button onClick={submit} disabled={pending}>{pending ? "Saving..." : "Add truck"}</Button>
       </div>
     </div>
   );

@@ -288,7 +288,7 @@ export const ROLE_DEFS: RoleDef[] = [
     permissions: [
       "dashboard.view",
       "sales.view", "sales.create", "sales.edit_draft", "sales.export", "sales.approve", "sales.approve_own", "sales.fulfil",
-      "inventory.transfer_view", "inventory.transfer_quantity",
+      "inventory.transfer_view", "inventory.transfer_create", "inventory.transfer_quantity",
       "sales.override_price", "sales.receive_payment", "sales.create_return",
       "inventory.view", "inventory.view_kardex", "kardex.view",
       "reports.view", "reports.export", "reports.view_receivables",
@@ -318,7 +318,8 @@ export const ROLE_DEFS: RoleDef[] = [
       "dashboard.view",
       "inventory.view", "inventory.create", "inventory.edit_draft", "inventory.post", "inventory.manage",
       "inventory.view_kardex", "inventory.adjustment_create",
-      "inventory.transfer_create", "inventory.transfer_dispatch", "inventory.transfer_receive", "inventory.transfer_quantity",
+      // Store keepers confirm loading (dispatch); transfer orders are created by managers.
+      "inventory.transfer_dispatch", "inventory.transfer_receive", "inventory.transfer_quantity",
       "kardex.view", "kardex.export",
       "purchases.view", "purchases.create", "purchases.edit_draft", "purchases.post",
       "imports.view", "imports.receive", "rebagging.view", "rebagging.create", "rebagging.post",

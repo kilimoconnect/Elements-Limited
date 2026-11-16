@@ -151,6 +151,34 @@ async function main() {
     check("after receipt the trip quantity cannot be changed",
       /already received/.test(await err(db, "select change_trip_line_quantity($1,$2,20,'late',gen_random_uuid()::text)", [dl2, owner])));
     check("the received goods arrive at the corrected quantity", await stockQty(mwz) === 21);
+    // ------------------------------------------------------------ transfer orders and undoing a loading confirmation (0064)
+    check("store keepers no longer create transfers; Branch Manager, CEO and Sales Manager do",
+      Number(await one(db, "select count(*) from role_permissions rp join roles r on r.id=rp.role_id join permissions x on x.id=rp.permission_id where x.code='inventory.transfer_create' and r.code='STOREKEEPER'")) === 0
+      && Number(await one(db, "select count(*) from role_permissions rp join roles r on r.id=rp.role_id join permissions x on x.id=rp.permission_id where x.code='inventory.transfer_create' and r.code in ('DIRECTOR','CEO','SALES_MANAGER')")) === 3);
+    const t5 = await one(db, "insert into stock_transfers(company_id, source_branch_id, destination_branch_id) values ($1,$2,$3) returning id", [co, hq, mwz]);
+    const l5 = await one(db, "insert into stock_transfer_lines(transfer_id, product_id, qty_requested) values ($1,$2,6) returning id", [t5, p]);
+    const d5 = await one(db, `insert into stock_transfer_dispatches(company_id, transfer_id, trip_no, dispatch_date, driver_name, driver_phone, vehicle_registration, trailer_registration)
+      values ($1,$2,1,current_date,'Juma','0712 000 111','T 555 ABC','T 556 ABC') returning id`, [co, t5]);
+    await db.query("insert into stock_transfer_dispatch_lines(company_id, dispatch_id, transfer_line_id, qty) values ($1,$2,$3,6)", [co, d5, l5]);
+    const hq5 = await stockQty(hq), tr5 = await transit(mwz), g5 = await gl("1155");
+    await db.query("select dispatch_transfer_trip($1,$2,gen_random_uuid()::text)", [d5, owner]);
+    await db.query("select * from issue_delivery_note($1,$2)", [d5, owner]);
+    check("confirming loading dispatches the truck", await stockQty(hq) === hq5 - 6 && await transit(mwz) === tr5 + 6);
+    check("a Sales Officer cannot undo a loading confirmation",
+      /not allowed|permission|authoris/i.test(await err(db, "select undo_trip_loading($1,$2,'x',gen_random_uuid()::text)", [d5, so])));
+    const n5 = await one(db, "select undo_trip_loading($1,$2,'wrong truck loaded','undo-key-0001-abcdef')", [d5, owner]);
+    check("undo returns the stock and clears goods in transit", await stockQty(hq) === hq5 && await transit(mwz) === tr5 && await gl("1155") === g5);
+    check("the confirmed trip is voided with the reason",
+      await one(db, "select status || '|' || void_reason from stock_transfer_dispatches where id=$1", [d5]) === "voided|Loading confirmation undone: wrong truck loaded");
+    check("the same truck and cargo wait for loading again (trip 2, draft)",
+      await one(db, "select status || '|' || trip_no || '|' || vehicle_registration || '|' || trailer_registration || '|' || driver_phone from stock_transfer_dispatches where id=$1", [n5]) === "draft|2|T555ABC|T556ABC|0712000111"
+      && Number(await one(db, "select qty from stock_transfer_dispatch_lines where dispatch_id=$1", [n5])) === 6
+      && Number(await one(db, "select qty_requested from stock_transfer_lines where id=$1", [l5])) === 6);
+    check("a retried undo returns the same new trip", await one(db, "select undo_trip_loading($1,$2,'wrong truck loaded','undo-key-0001-abcdef')", [d5, owner]) === n5);
+    check("a truck waiting for loading cannot be undone", /Only a loaded/.test(await err(db, "select undo_trip_loading($1,$2,'x',gen_random_uuid()::text)", [n5, owner])));
+    await db.query("select dispatch_transfer_trip($1,$2,gen_random_uuid()::text)", [n5, owner]);
+    check("the corrected truck can be confirmed again", await stockQty(hq) === hq5 - 6 && await transit(mwz) === tr5 + 6
+      && await one(db, "select status from stock_transfer_dispatches where id=$1", [n5]) === "dispatched");
     check("ledger balances", Number(await one(db, `select count(*) from (select je.id from journal_entries je join journal_lines jl on jl.journal_id=je.id
       where je.company_id=$1 group by je.id having sum(jl.debit) <> sum(jl.credit)) x`, [co])) === 0);
 
