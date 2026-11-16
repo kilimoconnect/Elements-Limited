@@ -154,7 +154,7 @@ export async function dispatchTrip(tripId: string): Promise<RpcResult & { messag
  * then its delivery note and the transfer's GRNs are issued.
  * The truck registration typed from the truck must match the order.
  */
-export async function confirmTripLoading(tripId: string, typedRegistration: string): Promise<RpcResult & { message?: string }> {
+export async function confirmTripLoading(tripId: string, typedRegistration: string, expectedArrivalAt: string): Promise<RpcResult & { message?: string }> {
   try {
     const { user, ctx, admin } = await ctxFor("inventory.transfer_dispatch");
     const { trip, t } = await loadTrip(admin, tripId, ctx.companyId, user);
@@ -163,6 +163,12 @@ export async function confirmTripLoading(tripId: string, typedRegistration: stri
     const { data: tr } = await admin.from("stock_transfer_dispatches").select("vehicle_registration").eq("id", tripId).single();
     const want = normaliseRegistration(tr?.vehicle_registration);
     if (want && normaliseRegistration(typedRegistration) !== want) return { ok: false, error: "The truck registration does not match this order. Check you are loading the right truck." };
+    const eta = new Date(expectedArrivalAt);
+    if (!expectedArrivalAt || Number.isNaN(eta.getTime())) return { ok: false, error: "Enter the expected arrival." };
+    if (eta.getTime() < Date.now() - 5 * 60_000) return { ok: false, error: "The expected arrival must be later than now." };
+    // The dispatch date is the day loading is confirmed.
+    const { error: upErr } = await admin.from("stock_transfer_dispatches").update({ dispatch_date: todayISO(), expected_arrival_at: eta.toISOString() }).eq("id", tripId).eq("status", "draft");
+    if (upErr) return { ok: false, error: upErr.message };
     const d = await dispatchTrip(tripId);
     if (!d.ok) return d;
     await writeAuditLog({ userId: user.id, companyId: ctx.companyId, branchId: t.source_branch_id, action: "transfer.loading_confirm", resourceType: "stock_transfer_dispatch", resourceId: tripId });

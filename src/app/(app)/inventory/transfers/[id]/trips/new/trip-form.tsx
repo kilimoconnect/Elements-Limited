@@ -23,7 +23,6 @@ export function TripForm({ transferId, lines, canLicence, defaults }: {
   const router = useRouter();
   const [qty, setQty] = React.useState<Record<string, string>>(Object.fromEntries(lines.map((l) => [l.id, String(l.remaining)])));
   const [f, setF] = React.useState({
-    dispatchDate: todayISO(), expected: defaults.expected ? `${defaults.expected}T12:00` : "",
     driverName: defaults.driverName, driverPhone: defaults.driverPhone, driverLicence: "", vehicle: normaliseRegistration(defaults.vehicle), trailer: normaliseRegistration(defaults.trailer),
     transporter: "", transporterContact: "", notes: "",
   });
@@ -36,7 +35,7 @@ export function TripForm({ transferId, lines, canLicence, defaults }: {
   async function submit() {
     setError(null); setPending(true);
     const res = await createTrip({
-      transferId, dispatchDate: f.dispatchDate, expectedArrivalAt: f.expected ? new Date(f.expected).toISOString() : null,
+      transferId, dispatchDate: todayISO(), expectedArrivalAt: null,
       driverName: f.driverName, driverPhone: f.driverPhone, driverLicence: canLicence ? f.driverLicence : undefined,
       vehicleRegistration: f.vehicle, trailerRegistration: f.trailer, transporterName: f.transporter, transporterContact: f.transporterContact, notes: f.notes,
       requestId, lines: lines.map((l) => ({ transfer_line_id: l.id, qty: Number(qty[l.id] || 0) })),
@@ -60,9 +59,6 @@ export function TripForm({ transferId, lines, canLicence, defaults }: {
         <p className="text-xs text-muted-foreground">Total net kg {formatQuantity(totalKg)}</p>
       </CardContent></Card>
       <Card><CardContent className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-3">
-        <div className="space-y-1.5"><Label>Dispatch date</Label><Input type="date" value={f.dispatchDate} onChange={set("dispatchDate")} /></div>
-        <div className="space-y-1.5"><Label>Expected arrival</Label><Input type="datetime-local" value={f.expected} onChange={set("expected")} /></div>
-        <div />
         <div className="space-y-1.5"><Label>Driver name</Label><Input value={f.driverName} onChange={set("driverName")} /></div>
         <div className="space-y-1.5"><Label>Driver phone</Label><PhoneInput value={f.driverPhone} onChange={set("driverPhone")} /></div>
         {canLicence ? <div className="space-y-1.5"><Label>Licence number</Label><Input value={f.driverLicence} onChange={set("driverLicence")} /></div>

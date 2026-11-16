@@ -35,14 +35,14 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
 
   // Sender and receiver see the same transfer; other branches see nothing (Stage 1 D3).
   let q = admin.from("stock_transfers")
-    .select("id, document_number, transfer_date, status, reference, has_open_discrepancy, source_branch_id, destination_branch_id, source:branches!stock_transfers_source_branch_id_fkey(code, name), dest:branches!stock_transfers_destination_branch_id_fkey(code, name), lines:stock_transfer_lines(qty_requested, qty_dispatched, qty_received, qty_quarantined, qty_short_pending, qty_lost_normal, qty_lost_abnormal), trips:stock_transfer_dispatches(id, status, trip_no, document_number, driver_name, driver_phone, vehicle_registration, trailer_registration, dispatched_at, expected_arrival_at), agents:stock_transfer_agents(name, phone, role), events:stock_transfer_events(event_type, note, created_at)")
+    .select("id, document_number, transfer_date, created_at, status, reference, has_open_discrepancy, source_branch_id, destination_branch_id, source:branches!stock_transfers_source_branch_id_fkey(code, name), dest:branches!stock_transfers_destination_branch_id_fkey(code, name), lines:stock_transfer_lines(qty_requested, qty_dispatched, qty_received, qty_quarantined, qty_short_pending, qty_lost_normal, qty_lost_abnormal), trips:stock_transfer_dispatches(id, status, trip_no, document_number, driver_name, driver_phone, vehicle_registration, trailer_registration, dispatched_at, expected_arrival_at), agents:stock_transfer_agents(name, phone, role), events:stock_transfer_events(event_type, note, created_at)")
     .eq("company_id", ctx.companyId)
     .or(`source_branch_id.in.(${(myBranches.length ? myBranches : none).join(",")}),destination_branch_id.in.(${(myBranches.length ? myBranches : none).join(",")})`)
     .order("created_at", { ascending: false }).limit(200);
   if (inTransit) q = q.in("status", ["dispatched", "partially_received", "received"]);
   const { data: rows } = await q;
   type Row = {
-    id: string; document_number: string | null; transfer_date: string; status: string; reference: string | null; has_open_discrepancy: boolean;
+    id: string; document_number: string | null; transfer_date: string; created_at: string; status: string; reference: string | null; has_open_discrepancy: boolean;
     source_branch_id: string; destination_branch_id: string; source: { code: string; name: string } | null; dest: { code: string; name: string } | null;
     lines: { qty_requested: number; qty_dispatched: number; qty_received: number; qty_quarantined: number; qty_short_pending: number; qty_lost_normal: number; qty_lost_abnormal: number }[];
     trips: { id: string; status: string; trip_no: number; document_number: string | null; driver_name: string | null; driver_phone: string | null; vehicle_registration: string | null; trailer_registration: string | null; dispatched_at: string | null; expected_arrival_at: string | null }[];
@@ -55,11 +55,11 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
   const list = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   // Trucks waiting for the store keeper to confirm loading (sending branches I belong to).
   const { data: waiting } = await admin.from("stock_transfer_dispatches")
-    .select("id, trip_no, dispatch_date, vehicle_registration, trailer_registration, driver_name, transfer:stock_transfers!inner(id, document_number, status, source_branch_id, dest:branches!stock_transfers_destination_branch_id_fkey(name)), lines:stock_transfer_dispatch_lines(qty, line:stock_transfer_lines(product:products(sku)))")
+    .select("id, trip_no, dispatch_date, created_at, vehicle_registration, trailer_registration, driver_name, transfer:stock_transfers!inner(id, document_number, status, source_branch_id, dest:branches!stock_transfers_destination_branch_id_fkey(name)), lines:stock_transfer_dispatch_lines(qty, line:stock_transfer_lines(product:products(sku)))")
     .eq("company_id", ctx.companyId).eq("status", "draft").neq("transfer.status", "voided")
     .in("transfer.source_branch_id", myBranches.length ? myBranches : none)
-    .order("dispatch_date").limit(50);
-  type W = { id: string; trip_no: number; dispatch_date: string; vehicle_registration: string | null; trailer_registration: string | null; driver_name: string | null;
+    .order("created_at").limit(50);
+  type W = { id: string; trip_no: number; dispatch_date: string; created_at: string; vehicle_registration: string | null; trailer_registration: string | null; driver_name: string | null;
     transfer: { id: string; document_number: string | null; status: string; source_branch_id: string; dest: { name: string } | null };
     lines: { qty: number; line: { product: { sku: string } | null } | null }[] };
   const waits = ((waiting ?? []) as unknown as W[]).filter((w) => !branchF || w.transfer.source_branch_id === branchF);
@@ -94,7 +94,7 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
           <div className="flex items-center gap-2 px-4 pt-3 text-sm font-semibold">Waiting for loading <Badge variant="warning">{waits.length}</Badge>
             <span className="font-normal text-muted-foreground">· open a truck and use Confirm loading</span></div>
           <Table>
-            <TableHeader><TableRow><TableHead>Transfer / trip</TableHead><TableHead>To</TableHead><TableHead>Truck</TableHead><TableHead>Driver</TableHead><TableHead>Cargo</TableHead><TableHead>Date</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>Transfer / trip</TableHead><TableHead>To</TableHead><TableHead>Truck</TableHead><TableHead>Driver</TableHead><TableHead>Cargo</TableHead><TableHead>Order created</TableHead></TableRow></TableHeader>
             <TableBody>{waits.map((w) => (
               <ClickableRow key={w.id} href={`/inventory/transfers/${w.transfer.id}`}>
                 <TableCell className="text-sm font-medium">{w.transfer.document_number ?? "Transfer order"}<span className="block text-xs text-muted-foreground">Trip {w.trip_no}</span></TableCell>
@@ -102,7 +102,7 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
                 <TableCell className="text-sm font-medium">{w.vehicle_registration ?? "—"}{w.trailer_registration && <span className="block text-xs text-muted-foreground">Trailer {w.trailer_registration}</span>}</TableCell>
                 <TableCell className="text-sm">{w.driver_name ?? "—"}</TableCell>
                 <TableCell className="text-xs">{w.lines.map((l, i) => <span key={i} className="block">{formatQuantity(N(l.qty))} {l.line?.product?.sku}</span>)}</TableCell>
-                <TableCell className="text-xs">{formatDate(w.dispatch_date)}</TableCell>
+                <TableCell className="text-xs">{formatDateTime(w.created_at)}</TableCell>
               </ClickableRow>
             ))}</TableBody>
           </Table>
@@ -123,7 +123,7 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
               const st = orderStatus(r.status, live.map((t) => t.status), req, disp);
               return (
                 <ClickableRow key={r.id} href={`/inventory/transfers/${r.id}`}>
-                  <TableCell><span className="font-mono text-xs">{r.document_number ?? "Order (not yet loaded)"}</span><p className="text-xs text-muted-foreground">{formatDate(r.transfer_date)}</p></TableCell>
+                  <TableCell><span className="font-mono text-xs">{r.document_number ?? "Order (not yet loaded)"}</span><p className="text-xs text-muted-foreground">Created {formatDateTime(r.created_at)}</p></TableCell>
                   <TableCell className="min-w-[12rem] text-sm"><p className="font-medium">{r.source?.name ?? r.source?.code}</p><p className="text-muted-foreground">→ {r.dest?.name ?? r.dest?.code}</p></TableCell>
                   <TableCell className="text-xs">{live.length === 0 ? "—" : live.map((t) => (
                     <p key={t.id}>{t.vehicle_registration ?? `Trip ${t.trip_no}`}{t.trailer_registration ? ` / ${t.trailer_registration}` : ""} · <span className={t.status === "draft" ? "font-medium text-amber-700 dark:text-amber-400" : "text-muted-foreground"}>{TRUCK[t.status] ?? t.status}</span></p>

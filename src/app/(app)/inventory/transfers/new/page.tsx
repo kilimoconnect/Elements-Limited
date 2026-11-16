@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { requirePermissionPage } from "@/lib/auth/guards";
-import { getActiveContext, can } from "@/lib/context";
+import { getActiveContext } from "@/lib/context";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isFeatureEnabled } from "@/lib/features";
 import { PageHeader } from "@/components/ui/page-header";

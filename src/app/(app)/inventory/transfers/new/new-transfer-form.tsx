@@ -11,7 +11,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { normaliseRegistration } from "@/lib/transfers/registration";
 import { RecentTruckWarning } from "@/components/transfers/recent-truck-warning";
-import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -32,10 +31,6 @@ export function NewTransferForm({
   const router = useRouter();
   const [source, setSource] = React.useState(sourceBranches.some((b) => b.id === sourceBranchId) ? sourceBranchId : sourceBranches[0]?.id ?? "");
   const [dest, setDest] = React.useState("");
-  const [date, setDate] = React.useState(todayISO());
-  const [expected, setExpected] = React.useState("");
-  const [reference, setReference] = React.useState("");
-  const [notes, setNotes] = React.useState("");
   const [lines, setLines] = React.useState<StockLine[]>([newLine()]);
   const available = stockByBranch[source] ?? {};
   // Another sending branch has different stock: drop lines for products it does not hold.
@@ -80,8 +75,8 @@ export function NewTransferForm({
     if (!parsedCharges) { setError("Each charge needs a type and an amount above zero (remove empty rows)."); return; }
     setPending(true);
     const res = await createTransferWithTrip({
-      sourceBranchId: source, destinationBranchId: dest, transferDate: date,
-      expectedArrivalAt: expected ? new Date(expected).toISOString() : null, reference, notes, requestId, dispatch,
+      sourceBranchId: source, destinationBranchId: dest, transferDate: todayISO(),
+      expectedArrivalAt: null, reference: "", notes: "", requestId, dispatch,
       lines: parsed, transport: { ...tp, driverLicence: canLicence ? tp.driverLicence : undefined }, charges: parsedCharges,
     });
     setPending(false);
@@ -98,7 +93,7 @@ export function NewTransferForm({
     <div className="space-y-4">
       <Card><CardContent className="space-y-4 p-5">
         <h3 className="font-semibold">Route</h3>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5"><Label>From branch</Label>
             <Select value={source} onValueChange={changeSource}>
               <SelectTrigger><SelectValue placeholder="Sending branch" /></SelectTrigger>
@@ -109,10 +104,8 @@ export function NewTransferForm({
               <SelectTrigger><SelectValue placeholder="Receiving branch" /></SelectTrigger>
               <SelectContent>{allBranches.filter((b) => b.id !== source).map((b) => <SelectItem key={b.id} value={b.id}>{b.code} — {b.name}</SelectItem>)}</SelectContent>
             </Select></div>
-          <div className="space-y-1.5"><Label>Dispatch date</Label><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
-          <div className="space-y-1.5"><Label>Expected arrival</Label><Input type="datetime-local" value={expected} onChange={(e) => setExpected(e.target.value)} /></div>
         </div>
-        <div className="space-y-1.5"><Label>Reference</Label><Input value={reference} onChange={(e) => setReference(e.target.value)} /></div>
+        <p className="text-xs text-muted-foreground">The store keeper enters the expected arrival when confirming loading; the dispatch date is set then automatically.</p>
       </CardContent></Card>
 
       <Card><CardContent className="space-y-3 p-5">
@@ -157,7 +150,6 @@ export function NewTransferForm({
         </CardContent></Card>
       )}
 
-      <Card><CardContent className="space-y-1.5 p-5"><Label>Notes</Label><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} /></CardContent></Card>
 
       <div className="flex flex-wrap items-center justify-end gap-2">
         {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}

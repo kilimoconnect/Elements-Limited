@@ -37,6 +37,8 @@ export function ConfirmLoadingButton({ tripId, summary }: { tripId: string; summ
   const [reg, setReg] = React.useState("");
   const [ticked, setTicked] = React.useState<boolean[]>([]);
   const [truckOk, setTruckOk] = React.useState(false);
+  const [eta, setEta] = React.useState("");
+  const [openedAt, setOpenedAt] = React.useState(0);
   const [pending, setPending] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
 
@@ -44,10 +46,11 @@ export function ConfirmLoadingButton({ tripId, summary }: { tripId: string; summ
   const regOk = want ? normaliseRegistration(reg) === want : truckOk;
   const linesOk = summary.lines.length > 0 && summary.lines.every((_, i) => ticked[i]);
 
-  const start = () => { setStep(1); setReg(""); setTicked(summary.lines.map(() => false)); setTruckOk(false); setErr(null); setOpen(true); };
+  const etaOk = !!eta && new Date(eta).getTime() > openedAt - 60_000;
+  const start = () => { setStep(1); setReg(""); setTicked(summary.lines.map(() => false)); setTruckOk(false); setEta(""); setOpenedAt(Date.now()); setErr(null); setOpen(true); };
   const confirm = async () => {
     setPending(true); setErr(null);
-    const res = await confirmTripLoading(tripId, reg);
+    const res = await confirmTripLoading(tripId, reg, new Date(eta).toISOString());
     setPending(false);
     if (!res.ok) { setErr(res.error ?? "Failed."); return; }
     toast.success(res.message ?? "Loading confirmed.");
@@ -94,12 +97,18 @@ export function ConfirmLoadingButton({ tripId, summary }: { tripId: string; summ
                 ))}
                 <p className="text-xs text-muted-foreground">If a quantity is different, cancel and use Change next to Loaded first.</p>
               </div>
+              <div className="space-y-1">
+                <Label>Expected arrival at {summary.to} *</Label>
+                <Input type="datetime-local" value={eta} onChange={(e) => setEta(e.target.value)} />
+                {eta && !etaOk && <p className="text-xs text-destructive">The expected arrival must be later than now.</p>}
+                <p className="text-xs text-muted-foreground">The dispatch date is set to today automatically when you confirm.</p>
+              </div>
             </div>
           ) : (
             <div className="space-y-3 text-sm">
               <p>You confirm that truck <span className="font-semibold">{summary.vehicle ?? "—"}</span>{summary.trailer ? <> with trailer <span className="font-semibold">{summary.trailer}</span></> : null} is loaded with:</p>
               <ul className="list-disc space-y-1 pl-5">{summary.lines.map((l, i) => <li key={i}><span className="font-semibold tabular-nums">{l.qty}</span> {l.label}</li>)}</ul>
-              <p>for <span className="font-semibold">{summary.to}</span>. The stock leaves {summary.from}, goes in transit, and the delivery note and GRN are issued. Only an admin can undo this.</p>
+              <p>for <span className="font-semibold">{summary.to}</span>, dispatched today, expected to arrive <span className="font-semibold">{eta ? new Date(eta).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) : "—"}</span>. The stock leaves {summary.from}, goes in transit, and the delivery note and GRN are issued. Only an admin can undo this.</p>
             </div>
           )}
 
@@ -108,7 +117,7 @@ export function ConfirmLoadingButton({ tripId, summary }: { tripId: string; summ
             {step === 1 ? (
               <>
                 <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-                <Button disabled={!regOk || !linesOk} onClick={() => setStep(2)}>Next</Button>
+                <Button disabled={!regOk || !linesOk || !etaOk} onClick={() => setStep(2)}>Next</Button>
               </>
             ) : (
               <>

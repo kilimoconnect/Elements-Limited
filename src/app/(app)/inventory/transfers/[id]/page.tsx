@@ -51,6 +51,9 @@ export default async function TransferDetailPage(props: { params: Params }) {
   const headOffice = await isHeadOfficeUser(ctx.user, ctx.companyId);
   const grnGroups = headOffice && t.status !== "voided" ? await transferGrnGroups(id) : [];
 
+  const { data: creator } = t.created_by
+    ? await admin.from("user_profiles").select("full_name, email").eq("id", t.created_by).maybeSingle()
+    : { data: null };
   const [{ data: lines }, { data: trips }, { data: receipts }, { data: charges }, { data: categories }] = await Promise.all([
     admin.from("stock_transfer_lines").select("id, line_no, qty_requested, qty_dispatched, qty_received, qty_quarantined, qty_short_pending, qty_lost_normal, qty_lost_abnormal, unit_cost, transit_value, received_value, lost_value, charges_applied, batch_reference, kg_per_unit, product:products(sku,name)").eq("transfer_id", id).order("line_no"),
     admin.from("stock_transfer_dispatches").select("*, lines:stock_transfer_dispatch_lines(id, transfer_line_id, qty, net_kg, value, transit_value, qty_reported, qty_accepted, qty_quarantined, qty_short, qty_lost_normal, qty_lost_abnormal), changes:stock_transfer_dispatch_changes(old_values, new_values, reason, changed_at)").eq("transfer_id", id).order("trip_no"),
@@ -114,9 +117,9 @@ export default async function TransferDetailPage(props: { params: Params }) {
       <Card><CardContent className="grid grid-cols-2 gap-x-6 gap-y-3 p-4 text-sm sm:flex sm:flex-wrap sm:gap-x-8 sm:p-5">
         <div><p className="text-xs uppercase text-muted-foreground">Status</p><DocStatusBadge status={t.status} />{t.has_open_discrepancy && <Badge variant="warning" className="ml-1">open discrepancy</Badge>}</div>
         <div><p className="text-xs uppercase text-muted-foreground">Costing</p><p>{t.cost_status}</p></div>
-        <div><p className="text-xs uppercase text-muted-foreground">Date</p><p>{formatDate(t.transfer_date)}</p></div>
+        <div><p className="text-xs uppercase text-muted-foreground">Order created</p><p>{formatDateTime(t.created_at)}</p>{creator && <p className="text-xs text-muted-foreground">by {creator.full_name || creator.email}</p>}</div>
         <div><p className="text-xs uppercase text-muted-foreground">Warehouses</p><p>{t.source_location ?? "—"} → {t.destination_location ?? "—"}</p></div>
-        <div><p className="text-xs uppercase text-muted-foreground">Reference</p><p>{t.reference ?? "—"}</p></div>
+        {t.reference && <div><p className="text-xs uppercase text-muted-foreground">Reference</p><p>{t.reference}</p></div>}
         {legacy && <div><p className="text-xs uppercase text-muted-foreground">Engine</p><p>Dispatched before the upgrade (no trips)</p></div>}
         {t.void_reason && <div><p className="text-xs uppercase text-muted-foreground">Void reason</p><p>{t.void_reason}</p></div>}
       </CardContent></Card>
