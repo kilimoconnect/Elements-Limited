@@ -25,7 +25,7 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
   await requirePermissionPage("inventory.transfer_view");
   const ctx = await getActiveContext();
   const sp = await props.searchParams;
-  const view = str(sp, "view"), branchF = str(sp, "branch"), page = pageOf(sp);
+  const view = str(sp, "view"), branchF = str(sp, "branch"), statusF = str(sp, "status"), page = pageOf(sp);
   // Views: transfer orders (default, every order with its loading status), in transit / open, all.
   const ordersView = view !== "transit" && view !== "all";
   const inTransit = view === "transit";
@@ -38,7 +38,7 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
     .select("id, document_number, transfer_date, created_at, status, reference, has_open_discrepancy, source_branch_id, destination_branch_id, source:branches!stock_transfers_source_branch_id_fkey(code, name), dest:branches!stock_transfers_destination_branch_id_fkey(code, name), lines:stock_transfer_lines(qty_requested, qty_dispatched, qty_received, qty_quarantined, qty_short_pending, qty_lost_normal, qty_lost_abnormal), trips:stock_transfer_dispatches(id, status, trip_no, document_number, driver_name, driver_phone, vehicle_registration, trailer_registration, dispatched_at, expected_arrival_at), agents:stock_transfer_agents(name, phone, role), events:stock_transfer_events(event_type, note, created_at)")
     .eq("company_id", ctx.companyId)
     .or(`source_branch_id.in.(${(myBranches.length ? myBranches : none).join(",")}),destination_branch_id.in.(${(myBranches.length ? myBranches : none).join(",")})`)
-    .order("created_at", { ascending: false }).limit(200);
+    .order("created_at", { ascending: false }).limit(statusF ? 1000 : 200);
   if (inTransit) q = q.in("status", ["dispatched", "partially_received", "received"]);
   const { data: rows } = await q;
   type Row = {
@@ -51,7 +51,8 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
   };
   const filtered = ((rows ?? []) as unknown as Row[])
     .filter((r) => !inTransit || r.status !== "received" || r.has_open_discrepancy)
-    .filter((r) => !branchF || r.source_branch_id === branchF || r.destination_branch_id === branchF);
+    .filter((r) => !branchF || r.source_branch_id === branchF || r.destination_branch_id === branchF)
+    .filter((r) => !statusF || statusMatches(statusF, rowStatus(r), r));
   const list = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   // Trucks waiting for the store keeper to confirm loading (sending branches I belong to).
   const { data: waiting } = await admin.from("stock_transfer_dispatches")
@@ -81,6 +82,7 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
         <Link href="/inventory/transfers" className={`rounded-md px-3 py-1.5 ${ordersView ? "bg-primary text-primary-foreground" : "border border-border"}`}>Transfer orders</Link>
         <Link href="/inventory/transfers?view=transit" className={`rounded-md px-3 py-1.5 ${inTransit ? "bg-primary text-primary-foreground" : "border border-border"}`}>In transit / open</Link>
         <Link href="/inventory/transfers?view=all" className={`rounded-md px-3 py-1.5 ${view === "all" ? "bg-primary text-primary-foreground" : "border border-border"}`}>All transfers</Link>
+        <ParamSelect param="status" value={statusF} placeholder="All statuses" options={STATUS_FILTERS} />
         <ParamSelect param="branch" value={branchF} placeholder="All my branches" options={ctx.branches.filter((b) => myBranches.includes(b.id)).map((b) => ({ id: b.id, label: `${b.code} — ${b.name}` }))} />
         <span className="ml-auto"><ExportCsvButton filename="in-transit.csv"
           header={["Transfer", "From", "To", "Status", "Trip", "Driver", "Driver phone", "Vehicle", "Trailer", "Agents", "Dispatch date", "Dispatch time", "ETA date", "ETA time", "Overdue", "Dispatched qty", "Received qty"]}
@@ -120,7 +122,7 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
               const disp = r.lines.reduce((a, l) => a + N(l.qty_dispatched), 0);
               const recv = r.lines.reduce((a, l) => a + N(l.qty_received), 0);
               const live = r.trips.filter((t) => t.status !== "voided").sort((a, b) => a.trip_no - b.trip_no);
-              const st = orderStatus(r.status, live.map((t) => t.status), req, disp);
+              const st = rowStatus(r);
               return (
                 <ClickableRow key={r.id} href={`/inventory/transfers/${r.id}`}>
                   <TableCell><span className="font-mono text-xs">{r.document_number ?? "Order (not yet loaded)"}</span><p className="text-xs text-muted-foreground">Created {formatDateTime(r.created_at)}</p></TableCell>
@@ -179,7 +181,7 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
           </Table>
         </Card>
       )}
-      <Pager basePath="/inventory/transfers" params={{ view, branch: branchF }} page={page} pageSize={PAGE_SIZE} total={filtered.length} />
+      <Pager basePath="/inventory/transfers" params={{ view, branch: branchF, status: statusF }} page={page} pageSize={PAGE_SIZE} total={filtered.length} />
       <p className="mt-3 text-xs text-muted-foreground">Licence numbers, licence images and costs are never included in this list or its export. Positions are as recorded by the branches (dispatch, updates, arrival); there is no live GPS tracking.</p>
     </div>
   );
@@ -188,12 +190,43 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
 const TRUCK: Record<string, string> = { draft: "waiting for loading", dispatched: "loaded · in transit", arrived: "arrived", received: "received" };
 
 /** A transfer order's status from its trucks: waiting for loading, partly loaded, loaded, received. */
-function orderStatus(status: string, trucks: string[], ordered: number, loaded: number): { label: string; variant: "warning" | "success" | "secondary" | "default" | "muted" } {
-  if (status === "voided") return { label: "Voided", variant: "secondary" };
-  if (status === "received") return { label: "Received", variant: "success" };
+type StatusKey = "waiting" | "partly_loaded" | "loaded" | "partly_received" | "received" | "voided";
+function orderStatus(status: string, trucks: string[], ordered: number, loaded: number): { key: StatusKey; label: string; variant: "warning" | "success" | "secondary" | "default" | "muted" } {
+  if (status === "voided") return { key: "voided", label: "Voided", variant: "secondary" };
+  if (status === "received") return { key: "received", label: "Received", variant: "success" };
   const waiting = trucks.filter((t) => t === "draft").length;
-  if (loaded <= 0) return { label: "Waiting for loading", variant: "warning" };
-  if (waiting > 0 || loaded < ordered - 1e-9) return { label: status === "partially_received" ? "Partly loaded · partly received" : "Partly loaded", variant: "warning" };
-  if (status === "partially_received") return { label: "Loaded · partly received", variant: "default" };
-  return { label: "Loaded", variant: "default" };
+  if (loaded <= 0) return { key: "waiting", label: "Waiting for loading", variant: "warning" };
+  if (waiting > 0 || loaded < ordered - 1e-9) return status === "partially_received"
+    ? { key: "partly_received", label: "Partly loaded · partly received", variant: "warning" }
+    : { key: "partly_loaded", label: "Partly loaded", variant: "warning" };
+  if (status === "partially_received") return { key: "partly_received", label: "Loaded · partly received", variant: "default" };
+  return { key: "loaded", label: "Loaded", variant: "default" };
+}
+
+type StatusRow = { status: string; has_open_discrepancy: boolean; lines: { qty_requested: number; qty_dispatched: number }[];
+  trips: { status: string; expected_arrival_at: string | null }[] };
+/** The order status of a list row (same as the Status column). */
+function rowStatus(r: StatusRow) {
+  const req = r.lines.reduce((a, l) => a + Number(l.qty_requested ?? 0), 0);
+  const disp = r.lines.reduce((a, l) => a + Number(l.qty_dispatched ?? 0), 0);
+  return orderStatus(r.status, r.trips.filter((t) => t.status !== "voided").map((t) => t.status), req, disp);
+}
+
+const STATUS_FILTERS = [
+  { id: "waiting", label: "Waiting for loading (pending)" },
+  { id: "partly_loaded", label: "Partly loaded" },
+  { id: "loaded", label: "Loaded · in transit" },
+  { id: "overdue", label: "Overdue (past expected arrival)" },
+  { id: "partly_received", label: "Partly received" },
+  { id: "received", label: "Received" },
+  { id: "discrepancy", label: "Open discrepancy" },
+  { id: "voided", label: "Voided" },
+];
+function statusMatches(filter: string, st: { key: StatusKey }, r: StatusRow): boolean {
+  if (filter === "discrepancy") return r.has_open_discrepancy;
+  if (filter === "overdue") {
+    const now = new Date().toISOString();
+    return r.trips.some((t) => ["dispatched", "arrived"].includes(t.status) && !!t.expected_arrival_at && t.expected_arrival_at < now);
+  }
+  return st.key === filter;
 }
