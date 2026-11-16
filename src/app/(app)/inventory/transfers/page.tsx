@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { formatDate, formatDateTime, formatQuantity } from "@/lib/format";
+import { formatDate, formatDateTime, formatQuantity, csvDate, csvTime } from "@/lib/format";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -83,10 +83,10 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
         <Link href="/inventory/transfers?view=all" className={`rounded-md px-3 py-1.5 ${view === "all" ? "bg-primary text-primary-foreground" : "border border-border"}`}>All transfers</Link>
         <ParamSelect param="branch" value={branchF} placeholder="All my branches" options={ctx.branches.filter((b) => myBranches.includes(b.id)).map((b) => ({ id: b.id, label: `${b.code} — ${b.name}` }))} />
         <span className="ml-auto"><ExportCsvButton filename="in-transit.csv"
-          header={["Transfer", "From", "To", "Status", "Trip", "Driver", "Driver phone", "Vehicle", "Trailer", "Agents", "Dispatched", "ETA", "Overdue", "Dispatched qty", "Received qty"]}
+          header={["Transfer", "From", "To", "Status", "Trip", "Driver", "Driver phone", "Vehicle", "Trailer", "Agents", "Dispatch date", "Dispatch time", "ETA date", "ETA time", "Overdue", "Dispatched qty", "Received qty"]}
           rows={filtered.flatMap((r) => (r.trips.length ? r.trips : [null]).map((t) => [r.document_number ?? "draft", r.source?.name ?? r.source?.code ?? "", r.dest?.name ?? r.dest?.code ?? "", r.status,
             t?.document_number ?? "", t?.driver_name ?? "", t?.driver_phone ?? "", t?.vehicle_registration ?? "", t?.trailer_registration ?? "", r.agents.map((a) => `${a.name}${a.role ? ` (${a.role})` : ""}${a.phone ? ` ${a.phone}` : ""}`).join("; "),
-            t?.dispatched_at ?? "", t?.expected_arrival_at ?? "", overdueOf(r) ? "yes" : "",
+            csvDate(t?.dispatched_at), csvTime(t?.dispatched_at), csvDate(t?.expected_arrival_at), csvTime(t?.expected_arrival_at), overdueOf(r) ? "yes" : "",
             r.lines.reduce((a, l) => a + N(l.qty_dispatched), 0), r.lines.reduce((a, l) => a + N(l.qty_received), 0)]))} /></span>
       </div>
       {waits.length > 0 && (

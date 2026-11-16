@@ -75,6 +75,20 @@ const isoDateFormatter = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
 });
 
+const csvTimeFormatter = new Intl.DateTimeFormat("en-GB", { timeZone: COMPANY_TIMEZONE, hour: "2-digit", minute: "2-digit", hour12: false });
+
+/** For CSV exports: the date part (YYYY-MM-DD, company timezone) of a timestamp, "" when empty. */
+export function csvDate(value: Date | string | number | null | undefined): string {
+  const d = toDate(value);
+  return d ? isoDateFormatter.format(d) : "";
+}
+
+/** For CSV exports: the time part (HH:mm, 24-hour, company timezone) of a timestamp, "" when empty. */
+export function csvTime(value: Date | string | number | null | undefined): string {
+  const d = toDate(value);
+  return d ? csvTimeFormatter.format(d) : "";
+}
+
 /** Today's date (YYYY-MM-DD) in the company timezone, not UTC. */
 export function todayISO(): string {
   return isoDateFormatter.format(new Date());

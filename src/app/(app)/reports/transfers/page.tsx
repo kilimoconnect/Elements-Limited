@@ -13,7 +13,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ClickableRow } from "@/components/common/clickable-row";
 import { PeriodFilter, PrintButton, ExportCsvButton, ParamSelect } from "@/components/reports/report-tools";
-import { formatDate, formatDateTime, formatQuantity } from "@/lib/format";
+import { formatDate, formatDateTime, formatQuantity, csvDate, csvTime } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Transfer Report" };
 const s = (sp: SP, k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : "");
@@ -48,10 +48,10 @@ export default async function TransferReportPage(props: { searchParams: Promise<
       <PageHeader title="Transfer Report"
         description="Stock moved between branches, truck by truck: what was loaded, what arrived, what is still on the road, and how long the trips took."
         actions={<div className="flex gap-2"><PrintButton /><ExportCsvButton filename={`transfer-report-${start}-${end}.csv`}
-          header={["Transfer", "Trip / DN", "Delivery note", "From", "To", "Truck", "Trailer", "Driver", "Driver phone", "Order created", "Dispatched", "Expected arrival", "Arrived", "Status", "Late",
+          header={["Transfer", "Trip / DN", "Delivery note", "From", "To", "Truck", "Trailer", "Driver", "Driver phone", "Order created date", "Order created time", "Dispatch date", "Dispatch time", "Expected arrival date", "Expected arrival time", "Arrival date", "Arrival time", "Status", "Late",
             "Transit hours", "SKU", "Product", "Unit", "Loaded", "Received", "In transit", "Short", "Damaged", "Lost"]}
           rows={r.trucks.flatMap((x) => (x.lines.length ? x.lines : [null]).map((l) => [x.transfer, x.trip, x.deliveryNote ?? "", x.from, x.to, x.vehicle ?? "", x.trailer ?? "", x.driver ?? "", x.driverPhone ?? "",
-            x.orderCreated, x.dispatchedAt ?? "", x.eta ?? "", x.arrivedAt ?? "", TRUCK_STATUS[x.status], x.late ? "yes" : "", x.transitHours == null ? "" : x.transitHours.toFixed(1),
+            csvDate(x.orderCreated), csvTime(x.orderCreated), csvDate(x.dispatchedAt), csvTime(x.dispatchedAt), csvDate(x.eta), csvTime(x.eta), csvDate(x.arrivedAt), csvTime(x.arrivedAt), TRUCK_STATUS[x.status], x.late ? "yes" : "", x.transitHours == null ? "" : x.transitHours.toFixed(1),
             l?.sku ?? "", l?.product ?? "", l?.unit ?? "", l?.loaded ?? 0, l?.received ?? 0, l?.inTransit ?? 0, l?.short ?? 0, l?.damaged ?? 0, l?.lost ?? 0]))} /></div>}
       />
 
