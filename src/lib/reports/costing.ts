@@ -128,14 +128,14 @@ export async function branchLandedCost(companyId: string, branchIds: string[] | 
 
 /* ---------------------------- transfer costing -------------------------- */
 export interface TransferCostRow {
-  id: string; number: string; date: string; from: string; to: string; status: string; costing: string; product: string; sku: string;
+  id: string; number: string; date: string; dispatchedAt: string | null; from: string; to: string; status: string; costing: string; product: string; sku: string;
   dispatched: number; received: number; sourceValue: number; loading: number; transport: number; offloading: number; other: number;
   chargesApplied: number; receivedValue: number; inTransitValue: number; lostValue: number; incomingUnit: number | null; destAvgAfter: number | null;
 }
 export async function transferCosting(companyId: string, branchIds: string[] | null, from: string, to: string): Promise<TransferCostRow[]> {
   const admin = createAdminClient();
   const { data } = await admin.from("stock_transfers")
-    .select("id, document_number, transfer_date, status, cost_status, posts_in_transit, source_branch_id, destination_branch_id, src:branches!stock_transfers_source_branch_id_fkey(code), dst:branches!stock_transfers_destination_branch_id_fkey(code), lines:stock_transfer_lines(id, product_id, qty_dispatched, qty_received, dispatched_value, received_value, transit_value, lost_value, charges_applied, product:products(sku, name))")
+    .select("id, document_number, transfer_date, dispatched_at, status, cost_status, posts_in_transit, source_branch_id, destination_branch_id, src:branches!stock_transfers_source_branch_id_fkey(code), dst:branches!stock_transfers_destination_branch_id_fkey(code), lines:stock_transfer_lines(id, product_id, qty_dispatched, qty_received, dispatched_value, received_value, transit_value, lost_value, charges_applied, product:products(sku, name))")
     .eq("company_id", companyId).eq("posts_in_transit", true).neq("status", "draft").gte("transfer_date", from).lte("transfer_date", to).order("transfer_date", { ascending: false });
   const ts = ((data ?? []) as unknown as Array<Record<string, unknown>>)
     .filter((t) => !branchIds || branchIds.includes(t.source_branch_id as string) || branchIds.includes(t.destination_branch_id as string));
@@ -158,7 +158,7 @@ export async function transferCosting(companyId: string, branchIds: string[] | n
       const by = (k: string) => r2(cs.filter((c) => kind(c) === k).reduce((a, c) => a + amt(c), 0) * share);
       const mv = ((moves ?? []) as { source_id: string; product_id: string; avg_cost_after: number }[]).find((m) => m.source_id === t.id && m.product_id === l.product_id);
       out.push({
-        id: t.id as string, number: (t.document_number as string) ?? "—", date: t.transfer_date as string, from: (t.src as { code: string } | null)?.code ?? "—",
+        id: t.id as string, number: (t.document_number as string) ?? "—", date: t.transfer_date as string, dispatchedAt: (t.dispatched_at as string | null) ?? null, from: (t.src as { code: string } | null)?.code ?? "—",
         to: (t.dst as { code: string } | null)?.code ?? "—", status: t.status as string, costing: t.cost_status as string, product: l.product?.name ?? "", sku: l.product?.sku ?? "",
         dispatched: N(l.qty_dispatched), received: N(l.qty_received), sourceValue: N(l.dispatched_value),
         loading: by("loading"), transport: by("transport"), offloading: by("offloading"), other: by("other"), chargesApplied: N(l.charges_applied),

@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PeriodFilter, PrintButton, ExportCsvButton } from "@/components/reports/report-tools";
 import { Pager, PAGE_SIZE, pageOf } from "@/components/reports/pager";
-import { formatDate, formatMoney, formatQuantity } from "@/lib/format";
+import { formatDate, formatMoney, formatQuantity, csvDate, csvTime } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Transfer Costing" };
 
@@ -27,8 +27,8 @@ export default async function TransferCostingPage(props: { searchParams: Promise
     <div>
       <PageHeader title="Transfer Costing" description="Per transfer line (TZS): value at the sending branch's weighted average, capitalised loading / transport / offloading / other charges (by the line's share of value dispatched), value received into the destination, the incoming unit cost and the destination's average after receipt."
         actions={<div className="flex gap-2"><PrintButton /><ExportCsvButton filename="transfer-costing.csv"
-          header={["Transfer", "Date", "From", "To", "SKU", "Product", "Dispatched", "Received", "Source value", "Loading", "Transport", "Offloading", "Other", "Charges applied", "Received value", "In transit", "Lost", "Incoming per unit", "Destination average after"]}
-          rows={all.map((r) => [r.number, r.date, r.from, r.to, r.sku, r.product, r.dispatched, r.received, r.sourceValue, r.loading, r.transport, r.offloading, r.other, r.chargesApplied, r.receivedValue, r.inTransitValue, r.lostValue, r.incomingUnit ?? "", r.destAvgAfter ?? ""])} /></div>} />
+          header={["Transfer", "Transfer date", "Dispatch date", "Dispatch time", "From", "To", "SKU", "Product", "Dispatched", "Received", "Source value", "Loading", "Transport", "Offloading", "Other", "Charges applied", "Received value", "In transit", "Lost", "Incoming per unit", "Destination average after"]}
+          rows={all.map((r) => [r.number, r.date, csvDate(r.dispatchedAt), csvTime(r.dispatchedAt), r.from, r.to, r.sku, r.product, r.dispatched, r.received, r.sourceValue, r.loading, r.transport, r.offloading, r.other, r.chargesApplied, r.receivedValue, r.inTransitValue, r.lostValue, r.incomingUnit ?? "", r.destAvgAfter ?? ""])} /></div>} />
       <div className="mb-4"><PeriodFilter start={start} end={end} /></div>
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Card className="p-4"><p className="text-xs text-muted-foreground">Source value</p><p className="text-lg font-semibold tabular-nums">{formatMoney(sum("sourceValue"))}</p></Card>

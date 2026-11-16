@@ -79,12 +79,14 @@ const csvTimeFormatter = new Intl.DateTimeFormat("en-GB", { timeZone: COMPANY_TI
 
 /** For CSV exports: the date part (YYYY-MM-DD, company timezone) of a timestamp, "" when empty. */
 export function csvDate(value: Date | string | number | null | undefined): string {
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value; // already a date
   const d = toDate(value);
   return d ? isoDateFormatter.format(d) : "";
 }
 
 /** For CSV exports: the time part (HH:mm, 24-hour, company timezone) of a timestamp, "" when empty. */
 export function csvTime(value: Date | string | number | null | undefined): string {
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return ""; // a date has no time
   const d = toDate(value);
   return d ? csvTimeFormatter.format(d) : "";
 }

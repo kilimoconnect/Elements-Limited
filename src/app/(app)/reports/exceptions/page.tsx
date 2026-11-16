@@ -12,7 +12,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ParamSelect, PrintButton, ExportCsvButton } from "@/components/reports/report-tools";
 import { Pager, PAGE_SIZE, pageOf, str } from "@/components/reports/pager";
-import { formatDate } from "@/lib/format";
+import { formatDate, csvDate, csvTime } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Costing Exceptions" };
 
@@ -30,8 +30,8 @@ export default async function ExceptionsPage(props: { searchParams: Promise<SP> 
   return (
     <div>
       <PageHeader title="Costing Exceptions" description="Open items needing attention: unfinalised costs, unallocated charges, unresolved losses, missing documents, overdue arrivals, unmatched accruals (older than 30 days) and stock / GL differences. Current position."
-        actions={<div className="flex gap-2"><PrintButton /><ExportCsvButton filename="costing-exceptions.csv" header={["Severity", "Exception", "Document", "Detail", "Since"]}
-          rows={all.map((e) => [e.severity, e.kind, e.document, e.detail, e.since ?? ""])} /></div>} />
+        actions={<div className="flex gap-2"><PrintButton /><ExportCsvButton filename="costing-exceptions.csv" header={["Severity", "Exception", "Document", "Detail", "Since date", "Since time"]}
+          rows={all.map((e) => [e.severity, e.kind, e.document, e.detail, csvDate(e.since), csvTime(e.since)])} /></div>} />
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {kinds.map((k) => (
           <Card key={k} className="p-4"><p className="text-xs text-muted-foreground">{k}</p><p className="text-lg font-semibold tabular-nums">{everything.filter((e) => e.kind === k).length}</p></Card>
