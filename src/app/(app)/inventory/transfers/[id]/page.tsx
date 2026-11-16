@@ -224,6 +224,7 @@ export default async function TransferDetailPage(props: { params: Params }) {
                 <UndoLoadingButton tripId={trip.id} trip={trip.document_number ?? `Trip ${trip.trip_no}`} />
               )}
               <TripActions transferId={id} tripId={trip.id} status={trip.status} isSender={canDispatch} isReceiver={canReceive} canVoid={can(ctx.user, "transactions.void")} canLicence={canLicence}
+                canEditDraft={isSender && (can(ctx.user, "inventory.transfer_create") || can(ctx.user, "inventory.transfer_dispatch"))}
                 transport={{ driver_name: trip.driver_name ?? "", driver_phone: trip.driver_phone ?? "", ...(canLicence ? { driver_licence: trip.driver_licence ?? "" } : {}),
                   vehicle_registration: trip.vehicle_registration ?? "", trailer_registration: trip.trailer_registration ?? "", transporter_name: trip.transporter_name ?? "", transporter_contact: trip.transporter_contact ?? "" }} />
               </div>

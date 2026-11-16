@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Pencil } from "lucide-react";
 import {
-  dispatchTrip, deleteDraftTrip, voidTrip, changeTripTransport, addAgent, addTransferUpdate,
+  dispatchTrip, deleteDraftTrip, voidTrip, changeTripTransport, editDraftTripTransport, addAgent, addTransferUpdate,
   resolveDiscrepancy, addTransferCharge, accrueTransferCharge, voidTransferChargeEstimate, postTransferCharge,
   changeTransferLineQuantity, changeTripLineQuantity,
 } from "@/lib/transfers/actions";
@@ -37,11 +37,12 @@ function useRun() {
   return { pending, run };
 }
 
-export function TripActions({ transferId, tripId, status, isSender, isReceiver, canVoid, transport, canLicence }: {
-  transferId: string; tripId: string; status: string; isSender: boolean; isReceiver: boolean; canVoid: boolean; canLicence: boolean;
+export function TripActions({ transferId, tripId, status, isSender, isReceiver, canVoid, transport, canLicence, canEditDraft = isSender }: {
+  transferId: string; tripId: string; status: string; isSender: boolean; isReceiver: boolean; canVoid: boolean; canLicence: boolean; canEditDraft?: boolean;
   transport: Record<string, string>;
 }) {
   const { pending, run } = useRun();
+  const draft = status === "draft";
   const [open, setOpen] = React.useState<null | "dispatch" | "delete" | "void" | "change">(null);
   const [form, setForm] = React.useState(transport);
   const [reason, setReason] = React.useState("");
@@ -50,6 +51,7 @@ export function TripActions({ transferId, tripId, status, isSender, isReceiver, 
     ["vehicle_registration", "Truck reg."], ["trailer_registration", "Trailer reg."], ["transporter_name", "Transporter"], ["transporter_contact", "Transporter contact"]];
   return (
     <div className="flex flex-wrap gap-1.5">
+      {status === "draft" && canEditDraft && <Button size="sm" variant="outline" onClick={() => { setForm(transport); setReason(""); setErr(null); setOpen("change"); }}>Edit truck details</Button>}
       {status === "draft" && isSender && <Button size="sm" variant="ghost" onClick={() => setOpen("delete")}>Delete draft</Button>}
       {["dispatched", "arrived"].includes(status) && isReceiver && <Button size="sm" asChild><Link href={`/inventory/transfers/${transferId}/trips/${tripId}/receive`}>Record arrival / receive</Link></Button>}
       {status !== "voided" && <Button size="sm" variant="outline" asChild><a href={`/api/transfers/trips/${tripId}/delivery-note`}>Delivery note (PDF)</a></Button>}
@@ -66,25 +68,25 @@ export function TripActions({ transferId, tripId, status, isSender, isReceiver, 
         onConfirm={(r) => run(() => voidTrip(tripId, r), "Trip voided.").then((e) => e ?? undefined)} />
       <Dialog open={open === "change"} onOpenChange={(o) => setOpen(o ? "change" : null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Change driver / vehicle</DialogTitle></DialogHeader>
-          <div className="grid grid-cols-2 gap-3">
+          <DialogHeader><DialogTitle>{draft ? "Edit truck details" : "Change driver / vehicle"}</DialogTitle></DialogHeader>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {fields.map(([k, l]) => (
-              <div key={k} className="space-y-1"><Label>{l}</Label><Input value={form[k] ?? ""}
+              <div key={k} className="space-y-1"><Label>{l}{draft && ["driver_name", "driver_phone", "driver_licence", "vehicle_registration"].includes(k) ? " *" : ""}</Label><Input value={form[k] ?? ""}
                 onChange={(e) => setForm({ ...form, [k]: k === "vehicle_registration" || k === "trailer_registration" ? normaliseRegistration(e.target.value) : e.target.value })}
                 onBlur={k === "driver_phone" ? (e) => setForm({ ...form, driver_phone: normalisePhone(e.target.value) }) : undefined} /></div>
             ))}
             {(form.vehicle_registration !== transport.vehicle_registration || form.trailer_registration !== transport.trailer_registration) && (
-              <div className="col-span-2"><RecentTruckWarning vehicle={form.vehicle_registration ?? ""} trailer={form.trailer_registration ?? ""} excludeTransferId={transferId} excludeTripId={tripId} /></div>
+              <div className="sm:col-span-2"><RecentTruckWarning vehicle={form.vehicle_registration ?? ""} trailer={form.trailer_registration ?? ""} excludeTransferId={transferId} excludeTripId={tripId} /></div>
             )}
-            <div className="col-span-2 space-y-1"><Label>Reason *</Label><Textarea value={reason} onChange={(e) => setReason(e.target.value)} /></div>
+            <div className="space-y-1 sm:col-span-2"><Label>{draft ? "Reason (optional)" : "Reason *"}</Label><Textarea value={reason} onChange={(e) => setReason(e.target.value)} /></div>
           </div>
-          <p className="text-xs text-muted-foreground">The previous details are kept in the trip history.</p>
+          <p className="text-xs text-muted-foreground">{draft ? "The truck is not loaded yet, so the delivery note is simply issued with these details." : "The previous details are kept in the trip history."}</p>
           {err && <p className="text-sm text-destructive">{err}</p>}
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(null)}>Cancel</Button>
             <Button disabled={pending} onClick={async () => {
               const changes = Object.fromEntries(Object.entries(form).filter(([k, v]) => (transport[k] ?? "") !== (v ?? "")));
-              const e = await run(() => changeTripTransport(tripId, changes, reason), "Transport details updated.");
+              const e = await run(() => (draft ? editDraftTripTransport(tripId, changes, reason) : changeTripTransport(tripId, changes, reason)), "Truck details updated.");
               if (e) setErr(e); else setOpen(null);
             }}>Save change</Button>
           </DialogFooter>

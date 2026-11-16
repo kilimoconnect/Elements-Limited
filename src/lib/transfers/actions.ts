@@ -387,6 +387,43 @@ export async function changeTripTransport(tripId: string, changes: Record<string
   } catch (e) { return fail(e); }
 }
 
+/**
+ * Edit the truck details of a truck still waiting for loading (draft trip):
+ * driver, phone, licence, truck, trailer, transporter. Same required fields as
+ * a new order; the old and new values are kept in the audit log and timeline.
+ */
+export async function editDraftTripTransport(tripId: string, changes: Record<string, string>, reason?: string): Promise<RpcResult> {
+  try {
+    const { user, ctx, admin } = await ctxFor("inventory.transfer_view");
+    if (!(user.isOwner || user.permissions.has("inventory.transfer_create") || user.permissions.has("inventory.transfer_dispatch"))) return { ok: false, error: "You are not allowed to change transfer trucks." };
+    const { trip, t } = await loadTrip(admin, tripId, ctx.companyId, user);
+    if (!user.isOwner && !user.branchIds.includes(t.source_branch_id)) return { ok: false, error: "Only the sending branch changes the truck." };
+    if (trip.status !== "draft") return { ok: false, error: "The truck is already loaded; use Change driver / vehicle." };
+    const allowed = ["driver_name", "driver_phone", "driver_licence", "vehicle_registration", "trailer_registration", "transporter_name", "transporter_contact"];
+    const clean = Object.fromEntries(Object.entries(changes).filter(([k, v]) => allowed.includes(k) && typeof v === "string").map(([k, v]) => [k, v.trim()]));
+    if ("driver_licence" in clean && !canUseLicenceNumber(user)) delete clean.driver_licence;
+    if (Object.keys(clean).length === 0) return { ok: false, error: "Nothing changed." };
+    const { data: before } = await admin.from("stock_transfer_dispatches").select(allowed.join(", ")).eq("id", tripId).single();
+    const next = { ...(before as unknown as Record<string, string | null>), ...clean };
+    if (!next.vehicle_registration?.trim() || !next.driver_name?.trim()) return { ok: false, error: "Enter the truck registration and the driver's name." };
+    if ((next.driver_phone ?? "").replace(/\D/g, "").length < 9) return { ok: false, error: "Enter the driver's phone number." };
+    if (canUseLicenceNumber(user) && !next.driver_licence?.trim()) return { ok: false, error: "Enter the driving licence number." };
+    const { error } = await admin.from("stock_transfer_dispatches")
+      .update(Object.fromEntries(Object.entries(clean).map(([k, v]) => [k, v || null]))).eq("id", tripId).eq("status", "draft");
+    if (error) return { ok: false, error: error.message };
+    const old = Object.fromEntries(Object.keys(clean).filter((k) => k !== "driver_licence").map((k) => [k, (before as unknown as Record<string, string | null>)[k]]));
+    await admin.from("stock_transfer_events").insert({
+      company_id: ctx.companyId, transfer_id: t.id, dispatch_id: tripId, event_type: "transport_changed", created_by: user.id,
+      note: `Trip ${trip.trip_no} (waiting for loading): truck details changed${reason?.trim() ? ` — ${reason.trim()}` : ""}`,
+    });
+    await writeAuditLog({ userId: user.id, companyId: ctx.companyId, branchId: t.source_branch_id, action: "transfer.draft_trip_transport_change",
+      resourceType: "stock_transfer_dispatch", resourceId: tripId, reason: reason?.trim() || undefined, oldValues: old,
+      newValues: Object.fromEntries(Object.entries(clean).filter(([k]) => k !== "driver_licence")) });
+    refresh(t.id);
+    return { ok: true, id: tripId };
+  } catch (e) { return fail(e); }
+}
+
 export async function addTransferUpdate(transferId: string, tripId: string | null, note: string): Promise<RpcResult> {
   try {
     const { user, ctx, admin } = await ctxFor("inventory.transfer_view");
