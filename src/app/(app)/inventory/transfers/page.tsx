@@ -56,13 +56,13 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
   const list = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   // Trucks waiting for the store keeper to confirm loading (sending branches I belong to).
   const { data: waiting } = await admin.from("stock_transfer_dispatches")
-    .select("id, trip_no, dispatch_date, created_at, vehicle_registration, trailer_registration, driver_name, transfer:stock_transfers!inner(id, document_number, status, source_branch_id, dest:branches!stock_transfers_destination_branch_id_fkey(name)), lines:stock_transfer_dispatch_lines(qty, line:stock_transfer_lines(product:products(sku)))")
+    .select("id, trip_no, dispatch_date, created_at, vehicle_registration, trailer_registration, driver_name, transfer:stock_transfers!inner(id, document_number, status, source_branch_id, dest:branches!stock_transfers_destination_branch_id_fkey(name)), lines:stock_transfer_dispatch_lines(qty, line:stock_transfer_lines(product:products(sku, name, unit:units(symbol))))")
     .eq("company_id", ctx.companyId).eq("status", "draft").neq("transfer.status", "voided")
     .in("transfer.source_branch_id", myBranches.length ? myBranches : none)
     .order("created_at").limit(50);
   type W = { id: string; trip_no: number; dispatch_date: string; created_at: string; vehicle_registration: string | null; trailer_registration: string | null; driver_name: string | null;
     transfer: { id: string; document_number: string | null; status: string; source_branch_id: string; dest: { name: string } | null };
-    lines: { qty: number; line: { product: { sku: string } | null } | null }[] };
+    lines: { qty: number; line: { product: { sku: string; name: string; unit: { symbol: string } | null } | null } | null }[] };
   const waits = ((waiting ?? []) as unknown as W[]).filter((w) => !branchF || w.transfer.source_branch_id === branchF);
   const now = new Date().toISOString();
   const overdueOf = (r: Row) => r.trips.some((t) => ["dispatched", "arrived"].includes(t.status) && t.expected_arrival_at && t.expected_arrival_at < now);
@@ -103,7 +103,7 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
                 <TableCell className="text-sm">{w.transfer.dest?.name}</TableCell>
                 <TableCell className="text-sm font-medium">{w.vehicle_registration ?? "—"}{w.trailer_registration && <span className="block text-xs text-muted-foreground">Trailer {w.trailer_registration}</span>}</TableCell>
                 <TableCell className="text-sm">{w.driver_name ?? "—"}</TableCell>
-                <TableCell className="text-xs">{w.lines.map((l, i) => <span key={i} className="block">{formatQuantity(N(l.qty))} {l.line?.product?.sku}</span>)}</TableCell>
+                <TableCell className="text-xs">{w.lines.map((l, i) => <span key={i} className="block">{formatQuantity(N(l.qty))} {l.line?.product?.unit?.symbol ?? ""} {l.line?.product?.name ?? l.line?.product?.sku}</span>)}</TableCell>
                 <TableCell className="text-xs">{formatDateTime(w.created_at)}</TableCell>
               </ClickableRow>
             ))}</TableBody>
