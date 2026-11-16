@@ -242,6 +242,8 @@ export async function createTransferWithTrip(input: NewTransferInput): Promise<R
     const lines = input.lines.filter((l) => l.product_id && l.qty > 0);
     if (lines.length === 0) return { ok: false, error: "Add at least one product line." };
     if (!input.transport.vehicleRegistration?.trim() || !input.transport.driverName?.trim()) return { ok: false, error: "Enter the truck registration and the driver's name." };
+    if ((input.transport.driverPhone ?? "").replace(/\D/g, "").length < 9) return { ok: false, error: "Enter the driver's phone number." };
+    if (canUseLicenceNumber(user) && !input.transport.driverLicence?.trim()) return { ok: false, error: "Enter the driving licence number." };
     const chargeErr = await checkCharges(admin, ctx.companyId, input.charges);
     if (chargeErr) return { ok: false, error: chargeErr };
 

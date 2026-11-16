@@ -57,6 +57,19 @@ export function NewTransferForm({
   const [error, setError] = React.useState<string | null>(null);
   const setT = (k: keyof typeof tp) => (e: React.ChangeEvent<HTMLInputElement>) => setTp({ ...tp, [k]: e.target.value });
 
+  // Mandatory: route, at least one product with a quantity, truck, driver name, phone and licence.
+  const phoneDigits = tp.driverPhone.replace(/\D/g, "").length;
+  const missing = [
+    !source || !dest || dest === source ? "route (from and to branch)" : null,
+    !lines.some((l) => l.product_id && Number(l.quantity) > 0) ? "product and quantity" : null,
+    lines.some((l) => l.product_id && !(Number(l.quantity) > 0)) ? "a quantity for every product" : null,
+    !tp.vehicleRegistration.trim() ? "truck registration" : null,
+    !tp.driverName.trim() ? "driver name" : null,
+    phoneDigits < 9 ? "driver phone" : null,
+    canLicence && !tp.driverLicence.trim() ? "driving licence number" : null,
+  ].filter(Boolean) as string[];
+  const ready = missing.length === 0;
+
   async function submit(dispatch: boolean) {
     setError(null);
     if (!dest) { setError("Choose the receiving branch."); return; }
@@ -70,7 +83,7 @@ export function NewTransferForm({
       setError(`Not enough stock at the sending branch for: ${short.map(([pid]) => { const p = products.find((x) => x.id === pid); return `${p?.sku ?? "product"} (in stock ${available[pid] ?? 0})`; }).join(", ")}.`);
       return;
     }
-    if (!tp.vehicleRegistration.trim() || !tp.driverName.trim()) { setError("Enter the truck registration and the driver's name."); return; }
+    if (!ready) { setError(`Fill in: ${missing.join(", ")}.`); return; }
     const parsedCharges = parseCharges(charges);
     if (!parsedCharges) { setError("Each charge needs a type and an amount above zero (remove empty rows)."); return; }
     setPending(true);
@@ -121,9 +134,9 @@ export function NewTransferForm({
           <div />
           <RecentTruckWarning vehicle={tp.vehicleRegistration} trailer={tp.trailerRegistration} />
           <div className="space-y-1.5"><Label>Driver name *</Label><Input value={tp.driverName} onChange={setT("driverName")} /></div>
-          <div className="space-y-1.5"><Label>Driver phone</Label><PhoneInput value={tp.driverPhone} onChange={setT("driverPhone")} placeholder="e.g. 0712 345 678" /></div>
+          <div className="space-y-1.5"><Label>Driver phone *</Label><PhoneInput value={tp.driverPhone} onChange={setT("driverPhone")} placeholder="e.g. 0712 345 678" /></div>
           {canLicence
-            ? <div className="space-y-1.5"><Label>Driving licence number</Label><Input value={tp.driverLicence} onChange={setT("driverLicence")} /></div>
+            ? <div className="space-y-1.5"><Label>Driving licence number *</Label><Input value={tp.driverLicence} onChange={setT("driverLicence")} /></div>
             : <p className="text-xs text-muted-foreground sm:pt-7">The licence number is recorded by users allowed to see licences.</p>}
           <div className="space-y-1.5"><Label>Transporter company</Label><Input value={tp.transporterName} onChange={setT("transporterName")} /></div>
           <div className="space-y-1.5"><Label>Transporter phone / contact</Label><Input value={tp.transporterContact} onChange={setT("transporterContact")} /></div>
@@ -153,8 +166,9 @@ export function NewTransferForm({
 
       <div className="flex flex-wrap items-center justify-end gap-2">
         {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+        {!ready && !error && <p className="text-xs text-muted-foreground">Still needed: {missing.join(", ")}</p>}
         <Button variant="outline" onClick={() => router.push("/inventory/transfers")} disabled={pending}>Cancel</Button>
-        <Button onClick={() => submit(false)} disabled={pending}>{pending ? "Working..." : "Create transfer order"}</Button>
+        <Button onClick={() => submit(false)} disabled={pending || !ready}>{pending ? "Working..." : "Create transfer order"}</Button>
         {canDispatch && <Button onClick={() => submit(true)} disabled={pending}>{pending ? "Working..." : "Save & Dispatch"}</Button>}
       </div>
     </div>

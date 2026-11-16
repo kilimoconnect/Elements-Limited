@@ -64,7 +64,8 @@ export function parseQty(text: string): number {
 }
 
 /** Turn file rows into transfer orders (one per receiving branch + truck), with row-level errors. */
-export function buildOrders(rows: RawImportRow[], header: string[], branches: ImportBranch[], products: ImportProduct[], sourceBranchId: string): ImportCheck {
+export function buildOrders(rows: RawImportRow[], header: string[], branches: ImportBranch[], products: ImportProduct[], sourceBranchId: string,
+  opts: { requireLicence?: boolean } = {}): ImportCheck {
   const errors: ImportIssue[] = [], warnings: ImportIssue[] = [];
   const idx = headerIndex(header);
   if (!idx) return { orders: [], errors: [{ row: 1, message: `The file needs the columns: ${IMPORT_COLUMNS.join(", ")}. Download the template.` }], warnings };
@@ -111,7 +112,11 @@ export function buildOrders(rows: RawImportRow[], header: string[], branches: Im
     else order.lines.push({ row: r.row, productId: product.id, product: `${product.sku} — ${product.name}`, qty });
   }
   const list = [...orders.values()].filter((o) => o.lines.length > 0);
-  for (const o of list) if (!o.driverName) errors.push({ row: o.rows[0], message: `Truck ${o.vehicle}: enter the driver's name.` });
+  for (const o of list) {
+    if (!o.driverName) errors.push({ row: o.rows[0], message: `Truck ${o.vehicle}: enter the driver's name.` });
+    if (o.driverPhone.replace(/\D/g, "").length < 9) errors.push({ row: o.rows[0], message: `Truck ${o.vehicle}: enter the driver's phone number.` });
+    if (opts.requireLicence && !o.driverLicence) errors.push({ row: o.rows[0], message: `Truck ${o.vehicle}: enter the driving licence number.` });
+  }
   // One truck cannot go to two branches at once.
   const byTruck = new Map<string, ImportOrder[]>();
   for (const o of list) byTruck.set(o.vehicle, [...(byTruck.get(o.vehicle) ?? []), o]);

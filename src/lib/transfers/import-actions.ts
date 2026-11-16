@@ -59,7 +59,7 @@ export async function checkTransferImport(form: FormData): Promise<CheckResult> 
     ]);
     if (!(branches ?? []).some((b) => b.id === source)) return { ok: false, error: "Choose the sending branch." };
     if (rows.length > 2000) return { ok: false, error: "Import at most 2,000 rows at a time." };
-    const check = buildOrders(rows, header, branches ?? [], products ?? [], source);
+    const check = buildOrders(rows, header, branches ?? [], products ?? [], source, { requireLicence: canUseLicenceNumber(user) });
 
     // Enough stock at the sending branch for all trucks together.
     const onHand = new Map((stock ?? []).map((s) => [s.product_id, Number(s.quantity)]));

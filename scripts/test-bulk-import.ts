@@ -33,7 +33,7 @@ check("quantities: 1,200 and 1 200 and 600", parseQty("1,200") === 1200 && parse
 const ok = buildOrders([
   row(2, { "To branch": "Makambako", "Truck registration": "T 760 DWG", "Trailer registration": "t. 761 dwg", "Driver name": "Juma", "Driver phone": "712 345 678", Product: "PRD-0002 — AMMONIUM SULPHATE 21%N – 24%S", Quantity: "600" }),
   row(3, { Product: "PRD-0003", Quantity: "40" }),
-  row(4, { "To branch": "Mlowo - Mbozi ( WIZA CMC LTD )", "Truck registration": "T123ABC", "Driver name": "Ali", Product: "PRD-0002", Quantity: "1,200" }),
+  row(4, { "To branch": "Mlowo - Mbozi ( WIZA CMC LTD )", "Truck registration": "T123ABC", "Driver name": "Ali", "Driver phone": "0755 111 222", Product: "PRD-0002", Quantity: "1,200" }),
   row(5, { "To branch": "Mlowo - Mbozi ( WIZA CMC LTD )", "Truck registration": "t-123-abc", Product: "PRD-0002", Quantity: "100" }),
   row(6, {}),
 ], H, branches, products, "hq");
@@ -60,11 +60,16 @@ check("an unknown product is refused", /was not found/.test(msg(4)));
 check("a zero quantity is refused", /above zero/.test(msg(5)));
 check("a truck without a driver is refused", /driver's name/.test(msg(6)));
 check("one truck for two branches is refused", /One truck goes to one branch/.test(msg(8)));
+const req = buildOrders([row(2, { "To branch": "Makambako", "Truck registration": "T9", "Driver name": "x", Product: "PRD-0002", Quantity: "5" })], H, branches, products, "hq", { requireLicence: true });
+check("driver phone is required", req.errors.some((e) => /phone number/.test(e.message)));
+check("driving licence is required for users who record licences", req.errors.some((e) => /licence number/.test(e.message)));
+check("licence is not asked from users who cannot record it",
+  buildOrders([row(2, { "To branch": "Makambako", "Truck registration": "T9", "Driver name": "x", "Driver phone": "0712345678", Product: "PRD-0002", Quantity: "5" })], H, branches, products, "hq").errors.length === 0);
 check("a file without the template columns is refused", /needs the columns/.test(buildOrders([], ["a", "b"], branches, products, "hq").errors[0]?.message ?? ""));
 
 // CSV
-const csv = parseCsv("﻿To branch,Truck registration,Driver name,Product,Quantity\r\nMakambako,\"T 760, DWG\",Juma,PRD-0002,\"1,200\"\r\n");
-check("CSV with quotes, commas and a BOM", csv.length === 2 && csv[1][1] === "T 760, DWG" && csv[1][4] === "1,200");
+const csv = parseCsv("﻿To branch,Truck registration,Driver name,Driver phone,Product,Quantity\r\nMakambako,\"T 760, DWG\",Juma,0712345678,PRD-0002,\"1,200\"\r\n");
+check("CSV with quotes, commas and a BOM", csv.length === 2 && csv[1][1] === "T 760, DWG" && csv[1][5] === "1,200");
 const semi = parseCsv("To branch;Truck registration;Driver name;Product;Quantity\nMakambako;T1;Juma;PRD-0002;5\n");
 check("CSV with semicolons (Excel in some regions)", semi[1][0] === "Makambako" && semi[1][4] === "5");
 const csvOrders = buildOrders(csv.slice(1).map((values, i) => ({ row: i + 2, values })), csv[0], branches, products, "hq");

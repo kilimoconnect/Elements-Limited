@@ -37,7 +37,7 @@ export async function GET(req: Request) {
   const help = wb.addWorksheet("How to fill");
 
   ws.columns = IMPORT_COLUMNS.map((h) => ({
-    header: ["To branch", "Truck registration", "Driver name", "Product", "Quantity"].includes(h) ? `${h} *` : h,
+    header: ["To branch", "Truck registration", "Driver name", "Driver phone", "Driver licence", "Product", "Quantity"].includes(h) ? `${h} *` : h,
     key: h, width: h === "Product" ? 46 : h === "To branch" ? 30 : 18,
   }));
   const head = ws.getRow(1);
