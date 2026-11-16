@@ -26,7 +26,7 @@ export default async function TransferReportPage(props: { searchParams: Promise<
   const ctx = await getActiveContext();
   const sp = await props.searchParams;
   const { start, end } = resolvePeriod(sp);
-  const filters = { start, end, from: s(sp, "from"), to: s(sp, "to"), product: s(sp, "product"), status: s(sp, "status"), type: s(sp, "type") };
+  const filters = { start, end, from: s(sp, "from"), to: s(sp, "to"), product: s(sp, "product"), status: s(sp, "status") };
   const admin = createAdminClient();
   const [r, { data: branches }, { data: products }] = await Promise.all([
     transferReport(ctx.companyId, ctx.user.isOwner ? null : ctx.user.branchIds, filters),
@@ -41,7 +41,6 @@ export default async function TransferReportPage(props: { searchParams: Promise<
     filters.to && `to ${bOpts.find((b) => b.id === filters.to)?.label}`,
     filters.product && (products ?? []).find((p) => p.id === filters.product)?.sku,
     filters.status && TRUCK_STATUS[filters.status as TruckStatus],
-    filters.type && (filters.type === "import" ? "imports" : "branch transfers"),
   ].filter(Boolean).join(" · ");
 
   return (
@@ -49,9 +48,9 @@ export default async function TransferReportPage(props: { searchParams: Promise<
       <PageHeader title="Transfer Report"
         description="Stock moved between branches, truck by truck: what was loaded, what arrived, what is still on the road, and how long the trips took."
         actions={<div className="flex gap-2"><PrintButton /><ExportCsvButton filename={`transfer-report-${start}-${end}.csv`}
-          header={["Transfer", "Type", "Trip / DN", "Delivery note", "From", "To", "Truck", "Trailer", "Driver", "Driver phone", "Order created", "Dispatched", "Expected arrival", "Arrived", "Status", "Late",
+          header={["Transfer", "Trip / DN", "Delivery note", "From", "To", "Truck", "Trailer", "Driver", "Driver phone", "Order created", "Dispatched", "Expected arrival", "Arrived", "Status", "Late",
             "Transit hours", "SKU", "Product", "Unit", "Loaded", "Received", "In transit", "Short", "Damaged", "Lost"]}
-          rows={r.trucks.flatMap((x) => (x.lines.length ? x.lines : [null]).map((l) => [x.transfer, x.type === "import" ? "Import" : "Branch transfer", x.trip, x.deliveryNote ?? "", x.from, x.to, x.vehicle ?? "", x.trailer ?? "", x.driver ?? "", x.driverPhone ?? "",
+          rows={r.trucks.flatMap((x) => (x.lines.length ? x.lines : [null]).map((l) => [x.transfer, x.trip, x.deliveryNote ?? "", x.from, x.to, x.vehicle ?? "", x.trailer ?? "", x.driver ?? "", x.driverPhone ?? "",
             x.orderCreated, x.dispatchedAt ?? "", x.eta ?? "", x.arrivedAt ?? "", TRUCK_STATUS[x.status], x.late ? "yes" : "", x.transitHours == null ? "" : x.transitHours.toFixed(1),
             l?.sku ?? "", l?.product ?? "", l?.unit ?? "", l?.loaded ?? 0, l?.received ?? 0, l?.inTransit ?? 0, l?.short ?? 0, l?.damaged ?? 0, l?.lost ?? 0]))} /></div>}
       />
@@ -61,9 +60,8 @@ export default async function TransferReportPage(props: { searchParams: Promise<
         <ParamSelect param="from" value={filters.from} placeholder="All sending branches" options={bOpts} />
         <ParamSelect param="to" value={filters.to} placeholder="All receiving branches" options={bOpts} />
         <ParamSelect param="product" value={filters.product} placeholder="All products" options={(products ?? []).map((p) => ({ id: p.id, label: `${p.sku} — ${p.name}` }))} />
-        <ParamSelect param="type" value={filters.type} placeholder="All types" options={[{ id: "branch", label: "Branch transfer" }, { id: "import", label: "Import" }]} />
         <ParamSelect param="status" value={filters.status} placeholder="Any status" options={Object.entries(TRUCK_STATUS).map(([id, label]) => ({ id, label }))} />
-        {(filters.from || filters.to || filters.product || filters.status || filters.type) && <Link href={`/reports/transfers?start=${start}&end=${end}`} className="text-sm text-primary underline">Clear filters</Link>}
+        {(filters.from || filters.to || filters.product || filters.status) && <Link href={`/reports/transfers?start=${start}&end=${end}`} className="text-sm text-primary underline">Clear filters</Link>}
       </div>
       <p className="text-sm text-muted-foreground">Showing {filterText}. A truck counts in the period by its dispatch date; a truck still waiting for loading counts by the date its order was created.</p>
 
@@ -95,7 +93,7 @@ export default async function TransferReportPage(props: { searchParams: Promise<
               </TableRow></TableHeader>
               <TableBody>{r.trucks.map((x) => (
                 <ClickableRow key={x.tripId} href={`/inventory/transfers/${x.transferId}`}>
-                  <TableCell className="text-xs"><span className="font-mono font-medium">{x.transfer}</span>{x.type === "import" && <Badge variant="muted" className="ml-1">Import</Badge>}<span className="block text-muted-foreground">{x.trip}{x.deliveryNote ? ` · DN ${x.deliveryNote}` : ""}</span></TableCell>
+                  <TableCell className="text-xs"><span className="font-mono font-medium">{x.transfer}</span><span className="block text-muted-foreground">{x.trip}{x.deliveryNote ? ` · DN ${x.deliveryNote}` : ""}</span></TableCell>
                   <TableCell className="text-sm">{x.from}<span className="block text-muted-foreground">→ {x.to}</span></TableCell>
                   <TableCell className="text-xs"><span className="font-medium">{x.vehicle ?? "—"}</span>{x.trailer && ` / ${x.trailer}`}<span className="block text-muted-foreground">{x.driver ?? "—"}{x.driverPhone ? ` · ${x.driverPhone}` : ""}</span></TableCell>
                   <TableCell className="whitespace-nowrap text-xs">

@@ -35,14 +35,14 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
 
   // Sender and receiver see the same transfer; other branches see nothing (Stage 1 D3).
   let q = admin.from("stock_transfers")
-    .select("id, document_number, transfer_date, created_at, transfer_type, status, reference, has_open_discrepancy, source_branch_id, destination_branch_id, source:branches!stock_transfers_source_branch_id_fkey(code, name), dest:branches!stock_transfers_destination_branch_id_fkey(code, name), lines:stock_transfer_lines(qty_requested, qty_dispatched, qty_received, qty_quarantined, qty_short_pending, qty_lost_normal, qty_lost_abnormal), trips:stock_transfer_dispatches(id, status, trip_no, document_number, driver_name, driver_phone, vehicle_registration, trailer_registration, dispatched_at, expected_arrival_at), agents:stock_transfer_agents(name, phone, role), events:stock_transfer_events(event_type, note, created_at)")
+    .select("id, document_number, transfer_date, created_at, status, reference, has_open_discrepancy, source_branch_id, destination_branch_id, source:branches!stock_transfers_source_branch_id_fkey(code, name), dest:branches!stock_transfers_destination_branch_id_fkey(code, name), lines:stock_transfer_lines(qty_requested, qty_dispatched, qty_received, qty_quarantined, qty_short_pending, qty_lost_normal, qty_lost_abnormal), trips:stock_transfer_dispatches(id, status, trip_no, document_number, driver_name, driver_phone, vehicle_registration, trailer_registration, dispatched_at, expected_arrival_at), agents:stock_transfer_agents(name, phone, role), events:stock_transfer_events(event_type, note, created_at)")
     .eq("company_id", ctx.companyId)
     .or(`source_branch_id.in.(${(myBranches.length ? myBranches : none).join(",")}),destination_branch_id.in.(${(myBranches.length ? myBranches : none).join(",")})`)
     .order("created_at", { ascending: false }).limit(200);
   if (inTransit) q = q.in("status", ["dispatched", "partially_received", "received"]);
   const { data: rows } = await q;
   type Row = {
-    id: string; document_number: string | null; transfer_date: string; created_at: string; transfer_type: string; status: string; reference: string | null; has_open_discrepancy: boolean;
+    id: string; document_number: string | null; transfer_date: string; created_at: string; status: string; reference: string | null; has_open_discrepancy: boolean;
     source_branch_id: string; destination_branch_id: string; source: { code: string; name: string } | null; dest: { code: string; name: string } | null;
     lines: { qty_requested: number; qty_dispatched: number; qty_received: number; qty_quarantined: number; qty_short_pending: number; qty_lost_normal: number; qty_lost_abnormal: number }[];
     trips: { id: string; status: string; trip_no: number; document_number: string | null; driver_name: string | null; driver_phone: string | null; vehicle_registration: string | null; trailer_registration: string | null; dispatched_at: string | null; expected_arrival_at: string | null }[];
@@ -75,7 +75,7 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
       <PageHeader
         title="Stock Transfers"
         description="One shared transfer for the sending and the receiving branch: trips, cargo, documents and receipt progress."
-        actions={ctx.branchId && can(ctx.user, "inventory.transfer_create") && <Button asChild><Link href="/inventory/transfers/new">New Transfer Order</Link></Button>}
+        actions={ctx.branchId && can(ctx.user, "inventory.transfer_create") && <div className="flex flex-wrap gap-2"><Button asChild variant="outline"><Link href="/inventory/transfers/import">Import from Excel</Link></Button><Button asChild><Link href="/inventory/transfers/new">New Transfer Order</Link></Button></div>}
       />
       <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
         <Link href="/inventory/transfers" className={`rounded-md px-3 py-1.5 ${ordersView ? "bg-primary text-primary-foreground" : "border border-border"}`}>Transfer orders</Link>
@@ -123,7 +123,7 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
               const st = orderStatus(r.status, live.map((t) => t.status), req, disp);
               return (
                 <ClickableRow key={r.id} href={`/inventory/transfers/${r.id}`}>
-                  <TableCell><span className="font-mono text-xs">{r.document_number ?? "Order (not yet loaded)"}</span>{r.transfer_type === "import" && <Badge variant="muted" className="ml-1">Import</Badge>}<p className="text-xs text-muted-foreground">Created {formatDateTime(r.created_at)}</p></TableCell>
+                  <TableCell><span className="font-mono text-xs">{r.document_number ?? "Order (not yet loaded)"}</span><p className="text-xs text-muted-foreground">Created {formatDateTime(r.created_at)}</p></TableCell>
                   <TableCell className="min-w-[12rem] text-sm"><p className="font-medium">{r.source?.name ?? r.source?.code}</p><p className="text-muted-foreground">→ {r.dest?.name ?? r.dest?.code}</p></TableCell>
                   <TableCell className="text-xs">{live.length === 0 ? "—" : live.map((t) => (
                     <p key={t.id}>{t.vehicle_registration ?? `Trip ${t.trip_no}`}{t.trailer_registration ? ` / ${t.trailer_registration}` : ""} · <span className={t.status === "draft" ? "font-medium text-amber-700 dark:text-amber-400" : "text-muted-foreground"}>{TRUCK[t.status] ?? t.status}</span></p>

@@ -117,7 +117,6 @@ export default async function TransferDetailPage(props: { params: Params }) {
       <Card><CardContent className="grid grid-cols-2 gap-x-6 gap-y-3 p-4 text-sm sm:flex sm:flex-wrap sm:gap-x-8 sm:p-5">
         <div><p className="text-xs uppercase text-muted-foreground">Status</p><DocStatusBadge status={t.status} />{t.has_open_discrepancy && <Badge variant="warning" className="ml-1">open discrepancy</Badge>}</div>
         <div><p className="text-xs uppercase text-muted-foreground">Costing</p><p>{t.cost_status}</p></div>
-        <div><p className="text-xs uppercase text-muted-foreground">Type</p><p>{t.transfer_type === "import" ? "Import" : "Branch transfer"}</p></div>
         <div><p className="text-xs uppercase text-muted-foreground">Order created</p><p>{formatDateTime(t.created_at)}</p>{creator && <p className="text-xs text-muted-foreground">by {creator.full_name || creator.email}</p>}</div>
         <div><p className="text-xs uppercase text-muted-foreground">Warehouses</p><p>{t.source_location ?? "—"} → {t.destination_location ?? "—"}</p></div>
         {t.reference && <div><p className="text-xs uppercase text-muted-foreground">Reference</p><p>{t.reference}</p></div>}
