@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { Printer, Download } from "lucide-react";
+import { Printer, Download, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,18 +11,19 @@ export function PeriodFilter({ start, end }: { start: string; end: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
+  const [loading, startLoading] = React.useTransition();
   const [s, setS] = React.useState(start);
   const [e, setE] = React.useState(end);
   function apply() {
     const p = new URLSearchParams(sp.toString());
     p.set("start", s); p.set("end", e);
-    router.push(`${pathname}?${p.toString()}`);
+    startLoading(() => router.push(`${pathname}?${p.toString()}`));
   }
   return (
     <div className="flex flex-wrap items-end gap-2 print-hide">
       <div className="space-y-1"><Label className="text-xs">From</Label><Input type="date" className="h-8 w-40" value={s} onChange={(ev) => setS(ev.target.value)} /></div>
       <div className="space-y-1"><Label className="text-xs">To</Label><Input type="date" className="h-8 w-40" value={e} onChange={(ev) => setE(ev.target.value)} /></div>
-      <Button size="sm" onClick={apply}>Apply</Button>
+      <Button size="sm" onClick={apply} disabled={loading}>{loading ? <><Loader2 className="h-4 w-4 animate-spin" /> Loading…</> : "Apply"}</Button>
     </div>
   );
 }
@@ -31,16 +32,17 @@ export function AsOfFilter({ asOf }: { asOf: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
+  const [loading, startLoading] = React.useTransition();
   const [d, setD] = React.useState(asOf);
   function apply() {
     const p = new URLSearchParams(sp.toString());
     p.set("asOf", d);
-    router.push(`${pathname}?${p.toString()}`);
+    startLoading(() => router.push(`${pathname}?${p.toString()}`));
   }
   return (
     <div className="flex items-end gap-2 print-hide">
       <div className="space-y-1"><Label className="text-xs">As of</Label><Input type="date" className="h-8 w-40" value={d} onChange={(ev) => setD(ev.target.value)} /></div>
-      <Button size="sm" onClick={apply}>Apply</Button>
+      <Button size="sm" onClick={apply} disabled={loading}>{loading ? <><Loader2 className="h-4 w-4 animate-spin" /> Loading…</> : "Apply"}</Button>
     </div>
   );
 }
@@ -49,17 +51,21 @@ export function AccountPicker({ accounts, value }: { accounts: { id: string; cod
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
+  const [loading, startLoading] = React.useTransition();
   function onChange(id: string) {
     const p = new URLSearchParams(sp.toString());
     p.set("account", id);
-    router.push(`${pathname}?${p.toString()}`);
+    startLoading(() => router.push(`${pathname}?${p.toString()}`));
   }
   return (
-    <select value={value} onChange={(e) => onChange(e.target.value)}
-      className="h-8 rounded-md border border-input bg-card px-2 text-sm print-hide">
-      <option value="">Select account…</option>
-      {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
-    </select>
+    <span className="inline-flex items-center gap-1.5 print-hide">
+      <select value={value} onChange={(e) => onChange(e.target.value)} disabled={loading}
+        className="h-8 rounded-md border border-input bg-card px-2 text-sm">
+        <option value="">Select account…</option>
+        {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
+      </select>
+      {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-label="Loading" />}
+    </span>
   );
 }
 
@@ -67,17 +73,21 @@ export function ParamSelect({ param, value, options, placeholder }: { param: str
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
+  const [loading, startLoading] = React.useTransition();
   function onChange(id: string) {
     const p = new URLSearchParams(sp.toString());
     p.set(param, id);
-    router.push(`${pathname}?${p.toString()}`);
+    startLoading(() => router.push(`${pathname}?${p.toString()}`));
   }
   return (
-    <select value={value} onChange={(e) => onChange(e.target.value)}
-      className="h-8 rounded-md border border-input bg-card px-2 text-sm print-hide">
-      <option value="">{placeholder}</option>
-      {options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-    </select>
+    <span className="inline-flex items-center gap-1.5 print-hide">
+      <select value={value} onChange={(e) => onChange(e.target.value)} disabled={loading}
+        className="h-8 rounded-md border border-input bg-card px-2 text-sm">
+        <option value="">{placeholder}</option>
+        {options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+      </select>
+      {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-label="Loading" />}
+    </span>
   );
 }
 
