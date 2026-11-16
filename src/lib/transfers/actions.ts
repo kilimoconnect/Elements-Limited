@@ -71,6 +71,9 @@ export async function createTrip(input: TripInput): Promise<RpcResult> {
     if (prior) return { ok: true, id: prior.id };
     const lines = input.lines.filter((l) => l.qty > 0);
     if (lines.length === 0) return { ok: false, error: "Enter the quantity loaded on this trip." };
+    if (!input.vehicleRegistration?.trim() || !input.driverName?.trim()) return { ok: false, error: "Enter the truck registration and the driver's name." };
+    if ((input.driverPhone ?? "").replace(/\D/g, "").length < 9) return { ok: false, error: "Enter the driver's phone number." };
+    if (canUseLicenceNumber(user) && !input.driverLicence?.trim()) return { ok: false, error: "Enter the driving licence number." };
     const { data: tl } = await admin.from("stock_transfer_lines").select("id, transfer_id, qty_requested, qty_dispatched").in("id", lines.map((l) => l.transfer_line_id));
     const tm = new Map((tl ?? []).map((x) => [x.id, x]));
     for (const l of lines) {

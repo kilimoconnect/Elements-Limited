@@ -32,7 +32,19 @@ export function TripForm({ transferId, lines, canLicence, defaults }: {
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF({ ...f, [k]: e.target.value });
   const totalKg = lines.reduce((a, l) => a + Number(qty[l.id] || 0) * (l.kgPerUnit ?? 0), 0);
 
+  // Mandatory, as on the New Transfer Order: cargo, truck, driver name, phone and licence.
+  const missing = [
+    !lines.some((l) => Number(qty[l.id] || 0) > 0) ? "quantity on this truck" : null,
+    lines.some((l) => Number(qty[l.id] || 0) > l.remaining + 1e-9) ? "quantities within what is left to send" : null,
+    !f.vehicle.trim() ? "truck registration" : null,
+    !f.driverName.trim() ? "driver name" : null,
+    f.driverPhone.replace(/\D/g, "").length < 9 ? "driver phone" : null,
+    canLicence && !f.driverLicence.trim() ? "driving licence number" : null,
+  ].filter(Boolean) as string[];
+  const ready = missing.length === 0;
+
   async function submit() {
+    if (!ready) { setError(`Fill in: ${missing.join(", ")}.`); return; }
     setError(null); setPending(true);
     const res = await createTrip({
       transferId, dispatchDate: todayISO(), expectedArrivalAt: null,
@@ -59,11 +71,11 @@ export function TripForm({ transferId, lines, canLicence, defaults }: {
         <p className="text-xs text-muted-foreground">Total net kg {formatQuantity(totalKg)}</p>
       </CardContent></Card>
       <Card><CardContent className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-3">
-        <div className="space-y-1.5"><Label>Driver name</Label><Input value={f.driverName} onChange={set("driverName")} /></div>
-        <div className="space-y-1.5"><Label>Driver phone</Label><PhoneInput value={f.driverPhone} onChange={set("driverPhone")} /></div>
-        {canLicence ? <div className="space-y-1.5"><Label>Licence number</Label><Input value={f.driverLicence} onChange={set("driverLicence")} /></div>
+        <div className="space-y-1.5"><Label>Driver name *</Label><Input value={f.driverName} onChange={set("driverName")} /></div>
+        <div className="space-y-1.5"><Label>Driver phone *</Label><PhoneInput value={f.driverPhone} onChange={set("driverPhone")} /></div>
+        {canLicence ? <div className="space-y-1.5"><Label>Driving licence number *</Label><Input value={f.driverLicence} onChange={set("driverLicence")} /></div>
           : <p className="text-xs text-muted-foreground sm:pt-7">Licence details are recorded by users allowed to see them.</p>}
-        <div className="space-y-1.5"><Label>Truck registration</Label><Input value={f.vehicle} onChange={(e) => setF({ ...f, vehicle: normaliseRegistration(e.target.value) })} placeholder="e.g. T760DWG" /><p className="text-[11px] text-muted-foreground">Saved without spaces or dots, e.g. T760DWG</p></div>
+        <div className="space-y-1.5"><Label>Truck registration *</Label><Input value={f.vehicle} onChange={(e) => setF({ ...f, vehicle: normaliseRegistration(e.target.value) })} placeholder="e.g. T760DWG" /><p className="text-[11px] text-muted-foreground">Saved without spaces or dots, e.g. T760DWG</p></div>
         <div className="space-y-1.5"><Label>Trailer registration</Label><Input value={f.trailer} onChange={(e) => setF({ ...f, trailer: normaliseRegistration(e.target.value) })} /></div>
         <div />
         <RecentTruckWarning vehicle={f.vehicle} trailer={f.trailer} excludeTransferId={transferId} />
@@ -73,7 +85,8 @@ export function TripForm({ transferId, lines, canLicence, defaults }: {
       </CardContent></Card>
       <div className="flex items-center justify-end gap-2">
         {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
-        <Button onClick={submit} disabled={pending}>{pending ? "Saving..." : "Add truck"}</Button>
+        {!ready && !error && <p className="text-xs text-muted-foreground">Still needed: {missing.join(", ")}</p>}
+        <Button onClick={submit} disabled={pending || !ready}>{pending ? "Saving..." : "Add truck"}</Button>
       </div>
     </div>
   );
