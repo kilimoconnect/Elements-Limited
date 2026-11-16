@@ -31,6 +31,7 @@ export function NewTransferForm({
   const router = useRouter();
   const [source, setSource] = React.useState(sourceBranches.some((b) => b.id === sourceBranchId) ? sourceBranchId : sourceBranches[0]?.id ?? "");
   const [dest, setDest] = React.useState("");
+  const [kind, setKind] = React.useState<"branch" | "import">("branch");
   const [lines, setLines] = React.useState<StockLine[]>([newLine()]);
   const available = stockByBranch[source] ?? {};
   // Another sending branch has different stock: drop lines for products it does not hold.
@@ -75,7 +76,7 @@ export function NewTransferForm({
     if (!parsedCharges) { setError("Each charge needs a type and an amount above zero (remove empty rows)."); return; }
     setPending(true);
     const res = await createTransferWithTrip({
-      sourceBranchId: source, destinationBranchId: dest, transferDate: todayISO(),
+      sourceBranchId: source, destinationBranchId: dest, transferDate: todayISO(), transferType: kind,
       expectedArrivalAt: null, reference: "", notes: "", requestId, dispatch,
       lines: parsed, transport: { ...tp, driverLicence: canLicence ? tp.driverLicence : undefined }, charges: parsedCharges,
     });
@@ -93,6 +94,14 @@ export function NewTransferForm({
     <div className="space-y-4">
       <Card><CardContent className="space-y-4 p-5">
         <h3 className="font-semibold">Route</h3>
+        <div className="space-y-1.5">
+          <Label>Transfer type</Label>
+          <div className="flex flex-wrap gap-2">
+            {([["branch", "Branch transfer"], ["import", "Import"]] as const).map(([k, l]) => (
+              <Button key={k} type="button" size="sm" variant={kind === k ? "default" : "outline"} onClick={() => setKind(k)}>{l}</Button>
+            ))}
+          </div>
+        </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5"><Label>From branch</Label>
             <Select value={source} onValueChange={changeSource}>

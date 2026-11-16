@@ -218,6 +218,8 @@ async function checkCharges(admin: Admin, companyId: string, charges: ChargeInpu
 
 export interface NewTransferInput {
   sourceBranchId: string; destinationBranchId: string; transferDate: string; expectedArrivalAt?: string | null;
+  /** Branch transfer (default) or Import. */
+  transferType?: "branch" | "import";
   reference?: string; notes?: string; requestId: string; dispatch: boolean;
   lines: { product_id: string; qty: number }[];
   transport: {
@@ -254,6 +256,7 @@ export async function createTransferWithTrip(input: NewTransferInput): Promise<R
     const transferId = created.id;
     const tp = input.transport;
     await admin.from("stock_transfers").update({
+      transfer_type: input.transferType === "import" ? "import" : "branch",
       driver_name: tp.driverName || null, driver_phone: tp.driverPhone || null, vehicle_registration: tp.vehicleRegistration || null,
       trailer_registration: tp.trailerRegistration || null, updated_by: user.id,
     }).eq("id", transferId);

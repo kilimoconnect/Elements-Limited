@@ -7,7 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * A truck counts in the period by its dispatch date once loaded, or by the
  * date its order was created while it still waits for loading.
  */
-export interface TransferFilters { start: string; end: string; from?: string; to?: string; product?: string; status?: string }
+export interface TransferFilters { start: string; end: string; from?: string; to?: string; product?: string; status?: string; type?: string }
 
 export type TruckStatus = "waiting" | "in_transit" | "arrived" | "received";
 export const TRUCK_STATUS: Record<TruckStatus, string> = {
@@ -18,7 +18,7 @@ export interface TruckRow {
   tripId: string; transferId: string; transfer: string; trip: string; deliveryNote: string | null;
   from: string; to: string; fromId: string; toId: string;
   vehicle: string | null; trailer: string | null; driver: string | null; driverPhone: string | null;
-  orderCreated: string; date: string; dispatchedAt: string | null; eta: string | null; arrivedAt: string | null;
+  type: "branch" | "import"; orderCreated: string; date: string; dispatchedAt: string | null; eta: string | null; arrivedAt: string | null;
   status: TruckStatus; late: boolean; transitHours: number | null;
   loaded: number; received: number; inTransit: number; short: number; damaged: number; lost: number;
   lines: { productId: string; sku: string; product: string; unit: string; loaded: number; received: number; inTransit: number; short: number; damaged: number; lost: number }[];
@@ -46,7 +46,7 @@ export async function transferReport(companyId: string, branchIds: string[] | nu
   let q = admin.from("stock_transfer_dispatches")
     .select(`id, trip_no, status, document_number, delivery_note_number, vehicle_registration, trailer_registration, driver_name, driver_phone,
       dispatch_date, dispatched_at, expected_arrival_at, arrived_at, created_at,
-      transfer:stock_transfers!inner(id, document_number, status, created_at, source_branch_id, destination_branch_id,
+      transfer:stock_transfers!inner(id, document_number, status, created_at, transfer_type, source_branch_id, destination_branch_id,
         source:branches!stock_transfers_source_branch_id_fkey(name), dest:branches!stock_transfers_destination_branch_id_fkey(name)),
       lines:stock_transfer_dispatch_lines(qty, qty_reported, qty_accepted, qty_quarantined, qty_short, qty_lost_normal, qty_lost_abnormal,
         line:stock_transfer_lines(product_id, product:products(sku, name, unit:units(symbol))))`)
@@ -58,6 +58,7 @@ export async function transferReport(companyId: string, branchIds: string[] | nu
   }
   if (f.from) q = q.eq("transfer.source_branch_id", f.from);
   if (f.to) q = q.eq("transfer.destination_branch_id", f.to);
+  if (f.type === "branch" || f.type === "import") q = q.eq("transfer.transfer_type", f.type);
   const { data, error } = await q;
   if (error) throw new Error(error.message);
 
@@ -65,7 +66,7 @@ export async function transferReport(companyId: string, branchIds: string[] | nu
     id: string; trip_no: number; status: string; document_number: string | null; delivery_note_number: string | null;
     vehicle_registration: string | null; trailer_registration: string | null; driver_name: string | null; driver_phone: string | null;
     dispatch_date: string; dispatched_at: string | null; expected_arrival_at: string | null; arrived_at: string | null; created_at: string;
-    transfer: { id: string; document_number: string | null; status: string; created_at: string; source_branch_id: string; destination_branch_id: string; source: { name: string } | null; dest: { name: string } | null } | null;
+    transfer: { id: string; document_number: string | null; status: string; created_at: string; transfer_type: string; source_branch_id: string; destination_branch_id: string; source: { name: string } | null; dest: { name: string } | null } | null;
     lines: { qty: number; qty_reported: number; qty_accepted: number; qty_quarantined: number; qty_short: number; qty_lost_normal: number; qty_lost_abnormal: number;
       line: { product_id: string; product: { sku: string; name: string; unit: { symbol: string } | null } | null } | null }[];
   };
@@ -97,7 +98,7 @@ export async function transferReport(companyId: string, branchIds: string[] | nu
       tripId: r.id, transferId: t.id, transfer: t.document_number ?? "Order", trip: r.document_number ?? `Trip ${r.trip_no}`, deliveryNote: r.delivery_note_number,
       from: t.source?.name ?? "", to: t.dest?.name ?? "", fromId: t.source_branch_id, toId: t.destination_branch_id,
       vehicle: r.vehicle_registration, trailer: r.trailer_registration, driver: r.driver_name, driverPhone: r.driver_phone,
-      orderCreated: t.created_at, date, dispatchedAt: r.dispatched_at, eta, arrivedAt: r.arrived_at, status, late, transitHours,
+      type: t.transfer_type === "import" ? "import" : "branch", orderCreated: t.created_at, date, dispatchedAt: r.dispatched_at, eta, arrivedAt: r.arrived_at, status, late, transitHours,
       loaded: sum("loaded"), received: sum("received"), inTransit: sum("inTransit"), short: sum("short"), damaged: sum("damaged"), lost: sum("lost"),
       lines: shown,
     });
