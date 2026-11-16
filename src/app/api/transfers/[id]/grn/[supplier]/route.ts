@@ -24,10 +24,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string; su
 
   const admin = createAdminClient();
   const { data: t } = await admin.from("stock_transfers")
-    .select("id, company_id, document_number, transfer_date, reference, status, source:branches!stock_transfers_source_branch_id_fkey(code,name), dest:branches!stock_transfers_destination_branch_id_fkey(code,name,address)")
+    .select("id, company_id, document_number, transfer_date, reference, status, posts_in_transit, source:branches!stock_transfers_source_branch_id_fkey(code,name), dest:branches!stock_transfers_destination_branch_id_fkey(code,name,address)")
     .eq("id", id).maybeSingle();
   if (!t || (!user.isOwner && !user.companyIds.includes(t.company_id))) return notFound;
   if (!(await isHeadOfficeUser(user, t.company_id))) return new Response("Only Head Office can issue GRNs.", { status: 403 });
+  const { count: loaded } = await admin.from("stock_transfer_dispatches").select("id", { count: "exact", head: true })
+    .eq("transfer_id", id).in("status", ["dispatched", "arrived", "received"]);
+  if (!loaded && !(t.posts_in_transit === false && t.status !== "draft")) return new Response("The GRN is available once the store keeper confirms loading.", { status: 409 });
 
   const supplierId = supplier === "none" ? null : supplier;
   const group = (await transferGrnGroups(id)).find((g) => g.supplierId === supplierId);

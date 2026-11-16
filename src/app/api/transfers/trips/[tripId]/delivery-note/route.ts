@@ -20,8 +20,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ tripId: string
   if (!/^[0-9a-f-]{36}$/i.test(tripId) || !userHasPermission(user, "inventory.transfer_view")) return notFound;
 
   const admin = createAdminClient();
-  const { data: trip } = await admin.from("stock_transfer_dispatches").select("id, company_id, transfer_id").eq("id", tripId).maybeSingle();
+  const { data: trip } = await admin.from("stock_transfer_dispatches").select("id, company_id, transfer_id, status").eq("id", tripId).maybeSingle();
   if (!trip || (!user.isOwner && !user.companyIds.includes(trip.company_id))) return notFound;
+  if (trip.status === "draft") return new Response("The delivery note is available once the store keeper confirms loading.", { status: 409 });
 
   // Checks that the user belongs to the sending or receiving branch.
   const { data, error } = await admin.rpc("issue_delivery_note", { p_dispatch: tripId, p_user: user.id });

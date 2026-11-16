@@ -54,7 +54,7 @@ export function TripActions({ transferId, tripId, status, isSender, isReceiver, 
       {status === "draft" && canEditDraft && <Button size="sm" variant="outline" onClick={() => { setForm(transport); setReason(""); setErr(null); setOpen("change"); }}>Edit truck details</Button>}
       {status === "draft" && isSender && <Button size="sm" variant="ghost" onClick={() => setOpen("delete")}>Delete draft</Button>}
       {["dispatched", "arrived"].includes(status) && isReceiver && <Button size="sm" asChild><Link href={`/inventory/transfers/${transferId}/trips/${tripId}/receive`}>Record arrival / receive</Link></Button>}
-      {status !== "voided" && <Button size="sm" variant="outline" asChild><a href={`/api/transfers/trips/${tripId}/delivery-note`}>Delivery note (PDF)</a></Button>}
+      {!["voided", "draft"].includes(status) && <Button size="sm" variant="outline" asChild><a href={`/api/transfers/trips/${tripId}/delivery-note`}>Delivery note (PDF)</a></Button>}
       {["dispatched", "arrived"].includes(status) && (isSender || isReceiver) && <Button size="sm" variant="outline" onClick={() => { setForm(transport); setReason(""); setErr(null); setOpen("change"); }}>Change driver / vehicle</Button>}
       {status === "dispatched" && canVoid && <Button size="sm" variant="ghost" onClick={() => setOpen("void")}>Void trip</Button>}
 

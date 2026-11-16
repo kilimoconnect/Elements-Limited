@@ -71,6 +71,8 @@ export default async function TransferDetailPage(props: { params: Params }) {
     lines: { id: string; transfer_line_id: string; qty: number; net_kg: number | null; value: number; transit_value: number; qty_reported: number; qty_accepted: number; qty_quarantined: number; qty_short: number; qty_lost_normal: number; qty_lost_abnormal: number }[];
     changes: { old_values: Record<string, string>; new_values: Record<string, string>; reason: string; changed_at: string }[] };
   const tripsList = (trips ?? []) as unknown as Trip[];
+  // DN and GRN exist only once the store keeper has confirmed loading of a truck.
+  const anyLoaded = tripsList.some((x) => ["dispatched", "arrived", "received"].includes(x.status)) || (!t.posts_in_transit && t.status !== "draft");
   type Rc = { id: string; document_number: string | null; dispatch_id: string | null; arrived_at: string | null; received_at: string; signed_by_name: string | null; notes: string | null;
     lines: { id: string; transfer_line_id: string; qty_received: number; qty_damaged: number; qty_short: number; qty_released: number; qty_resolved_damaged: number; qty_resolved_short: number; value: number;
       resolutions: { kind: string; resolution: string; qty: number; value: number; created_at: string }[] }[] };
@@ -185,7 +187,7 @@ export default async function TransferDetailPage(props: { params: Params }) {
         </Table>
       </Card>
 
-      {grnGroups.length > 0 && (
+      {grnGroups.length > 0 && anyLoaded && (
         <Card><CardContent className="space-y-3 p-5 text-sm">
           <div>
             <h3 className="font-semibold">Goods Received Notes (Head Office)</h3>
