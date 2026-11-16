@@ -53,10 +53,20 @@ export default async function InventoryPage(props: { searchParams: SP }) {
       category: { name: string } | null; brand: { name: string } | null; unit: { symbol: string } | null } | null;
     branch: { name: string; code: string } | null;
   };
-  let list = (rows ?? []) as unknown as Row[];
+  // A branch with no stock of a product (nothing on hand, nothing in transit) is not shown.
+  let list = ((rows ?? []) as unknown as Row[]).filter((r) => Math.abs(Number(r.quantity)) > 1e-9 || Number(r.qty_in_transit) > 1e-9);
   if (low) list = list.filter((r) => Number(r.quantity) <= Number(r.product?.reorder_level ?? 0));
 
   const totalValue = list.reduce((s, r) => s + Number(r.stock_value), 0);
+  // Totals per unit (bags are not added to litres).
+  const byUnit = new Map<string, { onHand: number; transit: number }>();
+  for (const r of list) {
+    const u = r.product?.unit?.symbol ?? "";
+    const t = byUnit.get(u) ?? { onHand: 0, transit: 0 };
+    t.onHand += Number(r.quantity); t.transit += Number(r.qty_in_transit);
+    byUnit.set(u, t);
+  }
+  const units = [...byUnit.entries()];
 
   return (
     <div>
@@ -76,7 +86,7 @@ export default async function InventoryPage(props: { searchParams: SP }) {
       />
 
       {list.length === 0 ? (
-        <EmptyState title="No stock records" description="Post an opening balance or a purchase to build stock." />
+        <EmptyState title="No stock" description="Branches with no stock of a product are hidden. Post an opening balance or a purchase to build stock." />
       ) : (
         <div className="rounded-lg border border-border bg-card">
           <Table>
@@ -125,16 +135,19 @@ export default async function InventoryPage(props: { searchParams: SP }) {
                   </ClickableRow>
                 );
               })}
+              <TableRow className="border-t-2 bg-muted/40 font-semibold hover:bg-muted/40">
+                <TableCell colSpan={3}>Total ({list.length} {list.length === 1 ? "line" : "lines"})</TableCell>
+                <TableCell className="text-right tabular-nums">{units.map(([u, t]) => <div key={u}>{formatQuantity(t.onHand)} {u}</div>)}</TableCell>
+                <TableCell className="text-right tabular-nums">{units.map(([u, t]) => <div key={u}>{t.transit > 0 ? `${formatQuantity(t.transit)} ${u}` : "—"}</div>)}</TableCell>
+                {showCost && <TableCell />}
+                {showCost && <TableCell className="text-right tabular-nums">{formatMoney(totalValue)}</TableCell>}
+                <TableCell />
+              </TableRow>
             </TableBody>
           </Table>
         </div>
       )}
 
-      {showCost && list.length > 0 && (
-        <p className="mt-3 text-sm text-muted-foreground">
-          Total stock value (shown rows): <span className="font-semibold text-foreground tabular-nums">{formatMoney(totalValue)}</span>
-        </p>
-      )}
     </div>
   );
 }
