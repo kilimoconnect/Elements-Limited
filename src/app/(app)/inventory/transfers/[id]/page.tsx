@@ -302,7 +302,8 @@ export default async function TransferDetailPage(props: { params: Params }) {
               </div>
             )}
             {trip.void_reason && <p className="text-xs text-muted-foreground">Voided: {trip.void_reason}</p>}
-            {attachmentsOn && trip.status !== "draft" && <AttachmentsPanel ownerType="stock_transfer_dispatch" ownerId={trip.id} categories={tripCats} />}
+            {attachmentsOn && <AttachmentsPanel ownerType="stock_transfer_dispatch" ownerId={trip.id}
+              categories={trip.status === "draft" ? tripCats.filter((c) => ["loading_photo", "cargo_papers", "weighbridge_ticket", "driver_licence", "other"].includes(c)) : tripCats} />}
           </CardContent></Card>
         );
       })}
