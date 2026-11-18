@@ -10,7 +10,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { normaliseRegistration } from "@/lib/transfers/registration";
-import { Textarea } from "@/components/ui/textarea";
 import { PhoneInput } from "@/components/common/phone-input";
 
 interface L { id: string; description: string; sku: string; unit: string; remaining: number; kgPerUnit: number | null }
@@ -24,8 +23,6 @@ export function TruckForm({ orderId, mode, canLicence, defaults, lines }: {
   const [qty, setQty] = React.useState<Record<string, string>>(Object.fromEntries(lines.map((l) => [l.id, ""])));
   const [f, setF] = React.useState({
     dispatchDate: todayISO(), expected: "", driverName: "", driverPhone: "", driverLicence: "", vehicle: "", trailer: "",
-    transporter: "", transporterContact: "", notes: "",
-    collectorName: "", collectorPhone: "", collectorId: "",
     destination: defaults.destination, consigneeName: defaults.consignee_name, consigneePhone: defaults.consignee_phone,
   });
   const [key] = React.useState(() => `truck:${orderId}:${crypto.randomUUID()}`);
@@ -40,7 +37,7 @@ export function TruckForm({ orderId, mode, canLicence, defaults, lines }: {
   if (total <= 0) blockers.push("Enter the quantity on this truck.");
   if (over.length) blockers.push(`More than the remaining balance for ${over.map((l) => l.sku).join(", ")}.`);
   if (mode === "delivery" && !f.vehicle.trim()) blockers.push("Enter the truck registration.");
-  if (mode === "collection" && !f.collectorName.trim() && !f.vehicle.trim()) blockers.push("Enter the collector or the truck.");
+  if (mode === "collection" && !f.vehicle.trim() && !f.driverName.trim()) blockers.push("Enter the truck or the driver.");
 
   async function save() {
     setError(null); setPending(true);
@@ -48,8 +45,7 @@ export function TruckForm({ orderId, mode, canLicence, defaults, lines }: {
       dispatch_location: defaults.dispatch_location, planned_dispatch_date: f.dispatchDate,
       expected_arrival_at: f.expected ? new Date(f.expected).toISOString() : "",
       driver_name: f.driverName, driver_phone: f.driverPhone, driver_licence: canLicence ? f.driverLicence : "",
-      vehicle_registration: f.vehicle, trailer_registration: f.trailer, transporter_name: f.transporter, transporter_contact: f.transporterContact,
-      notes: f.notes, collector_name: f.collectorName, collector_phone: f.collectorPhone, collector_id_number: f.collectorId,
+      vehicle_registration: f.vehicle, trailer_registration: f.trailer,
       destination: f.destination, consignee_name: f.consigneeName, consignee_phone: f.consigneePhone,
     };
     const r = await createShipment(orderId, key, header, lines.map((l) => ({ order_line_id: l.id, qty: Number(qty[l.id] || 0) })));
@@ -84,23 +80,13 @@ export function TruckForm({ orderId, mode, canLicence, defaults, lines }: {
         <div className="space-y-1.5"><Label>Truck registration</Label><Input value={f.vehicle} onChange={(e) => setF({ ...f, vehicle: normaliseRegistration(e.target.value) })} placeholder="e.g. T760DWG" /><p className="text-[11px] text-muted-foreground">Saved without spaces or dots, e.g. T760DWG</p></div>
         <div className="space-y-1.5"><Label>Trailer registration</Label><Input value={f.trailer} onChange={(e) => setF({ ...f, trailer: normaliseRegistration(e.target.value) })} /></div>
         <div />
-        <div className="space-y-1.5"><Label>Transporter company</Label><Input value={f.transporter} onChange={set("transporter")} /></div>
-        <div className="space-y-1.5"><Label>Transporter contact</Label><Input value={f.transporterContact} onChange={set("transporterContact")} /></div>
-        <div />
-        {mode === "collection" ? (
-          <>
-            <div className="space-y-1.5"><Label>Collector name</Label><Input value={f.collectorName} onChange={set("collectorName")} /></div>
-            <div className="space-y-1.5"><Label>Collector phone</Label><PhoneInput value={f.collectorPhone} onChange={set("collectorPhone")} /></div>
-            <div className="space-y-1.5"><Label>Collector ID number</Label><Input value={f.collectorId} onChange={set("collectorId")} /></div>
-          </>
-        ) : (
+        {mode === "delivery" && (
           <>
             <div className="space-y-1.5"><Label>Destination</Label><Input value={f.destination} onChange={set("destination")} /></div>
             <div className="space-y-1.5"><Label>Consignee</Label><Input value={f.consigneeName} onChange={set("consigneeName")} /></div>
             <div className="space-y-1.5"><Label>Consignee phone</Label><PhoneInput value={f.consigneePhone} onChange={set("consigneePhone")} /></div>
           </>
         )}
-        <div className="space-y-1.5 sm:col-span-3"><Label>Notes</Label><Textarea value={f.notes} onChange={set("notes")} /></div>
       </CardContent></Card>
 
       <div className="flex flex-wrap items-center justify-end gap-2">

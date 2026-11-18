@@ -40,7 +40,7 @@ function parties(pdf: SimplePdf, s: TruckSnapshot, y: number, left: string): num
     s.customer.address ?? "",
     join(s.customer.contact_name, s.customer.contact_phone ?? s.customer.phone),
     delivery ? `Deliver to: ${join(s.consignee.destination)}` : "Collection by the customer",
-    delivery ? `Consignee: ${join(s.consignee.name, s.consignee.phone) || "-"}` : `Collector: ${join(s.transport.collector, s.transport.collector_phone, s.transport.collector_id && `ID ${s.transport.collector_id}`) || "-"}`,
+    delivery ? `Consignee: ${join(s.consignee.name, s.consignee.phone) || "-"}` : "",
   ].filter(Boolean).flatMap((r, i) => wrapText(r, bw - 18, 8.5).map((t) => ({ t, muted: i === 0 })));
   // Tall enough for every line of the customer panel and the six order / truck rows.
   const h = Math.max(96, 16 + nameLines.length * 13 + detail.length * 11.5 + 10);
