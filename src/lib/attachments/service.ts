@@ -41,6 +41,24 @@ async function ownerCompany(ownerType: OwnerType, ownerId: string): Promise<stri
 }
 
 /**
+ * The same file twice on one document is refused: a file with the same name
+ * (ignoring case and spaces), or exactly the same content under another name.
+ * A new version of a document may keep its name, but not repeat its content.
+ */
+async function duplicateOf(ownerType: OwnerType, ownerId: string, name: string, sha256: string, supersedesId?: string | null): Promise<string | null> {
+  const { data } = await createAdminClient().from("document_attachments").select("id, original_filename, download_name, sha256")
+    .eq("owner_type", ownerType).eq("owner_id", ownerId);
+  const key = (v: string | null | undefined) => (v ?? "").normalize("NFKC").trim().toLowerCase().replace(/\s+/g, " ");
+  for (const r of (data ?? []) as { id: string; original_filename: string | null; download_name: string | null; sha256: string | null }[]) {
+    if (r.sha256 && r.sha256 === sha256) return `This file is already attached${r.download_name ? ` as "${r.download_name}"` : ""}.`;
+    if (!supersedesId && key(r.original_filename) && key(r.original_filename) === key(name)) {
+      return `A file named "${r.original_filename}" is already attached. Delete it first, or rename the file if it is a different document.`;
+    }
+  }
+  return null;
+}
+
+/**
  * Uploads a file to the private bucket and registers its metadata. The object
  * key is random; an existing object is never overwritten (upsert: false); a
  * replacement is a new version that supersedes the previous one.
@@ -63,6 +81,8 @@ export async function uploadAttachment(input: {
   if (!companyId) return { ok: false, error: "Document not found." };
   const path = storagePath(companyId, input.ownerType, input.ownerId, randomUUID(), v.ext);
   const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const dup = await duplicateOf(input.ownerType, input.ownerId, input.file.name || "document", sha256, input.supersedesId);
+  if (dup) return { ok: false, error: dup };
   const admin = createAdminClient();
 
   const up = await admin.storage.from(ATTACHMENT_BUCKET).upload(path, bytes, {
@@ -138,6 +158,8 @@ export async function completeUpload(input: {
   const v = validateAttachment(declared, bytes.byteLength, bytes.subarray(0, 16));
   if (!v.ok) { await drop(); return { ok: false, error: v.error }; }
   const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const dup = await duplicateOf(input.ownerType, input.ownerId, input.originalName || "document", sha256, input.supersedesId);
+  if (dup) { await drop(); return { ok: false, error: dup }; }
   const { data, error } = await admin.rpc("register_attachment", {
     p_user: user.id, p_owner_type: input.ownerType, p_owner_id: input.ownerId, p_category: input.category,
     p_storage_path: input.path, p_original_filename: input.originalName || "document",

@@ -28,6 +28,10 @@ export default async function SalesOrderPage(props: { params: Promise<{ id: stri
   const { o, lines, funds, available, shipments, exceptions, amendments, events } = await loadOrder(admin, ctx.user, ctx.companyId, id);
   const nameOf = await userNames(admin, [o.approved_by, o.request?.created_by, ...events.map((e) => e.user_id), ...amendments.map((a) => a.requested_by),
     ...exceptions.map((x) => x.resolved_by)]);
+  // Payments recorded with the request share its proof of payment; only other payments get their own upload.
+  const { data: reqPays } = o.request ? await admin.from("sales_request_payments").select("receipt_id").eq("request_id", o.request.id) : { data: [] };
+  const fromRequest = new Set(((reqPays ?? []) as { receipt_id: string | null }[]).map((x) => x.receipt_id).filter(Boolean));
+  const otherReceipts = [...new Map(funds.filter((f) => f.receipt?.id && !fromRequest.has(f.receipt.id)).map((f) => [f.receipt!.id, f.receipt!])).values()];
   const truckNo = (sid: string | null) => shipments.find((s) => s.id === sid)?.document_number ?? null;
 
   const open = ["approved", "in_fulfilment"].includes(o.status);
@@ -170,9 +174,9 @@ export default async function SalesOrderPage(props: { params: Promise<{ id: stri
             <AttachmentsPanel ownerType="sales_request" ownerId={o.request.id} categories={["proof_of_payment", "other"]} />
           </div>
         )}
-        {[...new Map(funds.filter((f) => f.receipt?.id).map((f) => [f.receipt!.id, f.receipt!])).values()].map((r) => (
+        {otherReceipts.map((r) => (
           <div key={r.id} className="space-y-1">
-            <p className="text-sm text-muted-foreground">Payment <Link className="font-medium text-primary hover:underline" href={`/sales/customer-payments/${r.id}`}>{r.document_number}</Link>{r.reference ? ` · ${r.reference}` : ""} · {formatMoney(r.amount)}</p>
+            <p className="text-sm text-muted-foreground">Other payment applied to this order · <Link className="font-medium text-primary hover:underline" href={`/sales/customer-payments/${r.id}`}>{r.document_number}</Link>{r.reference ? ` · ${r.reference}` : ""} · {formatMoney(r.amount)}</p>
             <AttachmentsPanel ownerType="customer_receipt" ownerId={r.id} categories={["proof_of_payment", "other"]} />
           </div>
         ))}

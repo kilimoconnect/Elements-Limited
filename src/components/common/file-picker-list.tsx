@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "sonner";
+
 import * as React from "react";
 import { Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -19,7 +21,14 @@ export function FilePickerList<C extends string>({ id, label, value, onChange, c
   categories: { value: C; label: string }[]; required?: boolean; hint?: string;
 }) {
   function add(list: FileList | null) {
-    const picked = Array.from(list ?? []).filter((f) => !value.some((x) => x.file.name === f.name && x.file.size === f.size));
+    // The same file name only once (ignoring case and spaces).
+    const key = (n: string) => n.normalize("NFKC").trim().toLowerCase().replace(/s+/g, " ");
+    const seen = new Set(value.map((x) => key(x.file.name)));
+    const picked: File[] = [], skipped: string[] = [];
+    for (const f of Array.from(list ?? [])) {
+      if (seen.has(key(f.name))) skipped.push(f.name); else { seen.add(key(f.name)); picked.push(f); }
+    }
+    if (skipped.length) toast.error(`Already added: ${skipped.join(", ")}. The same file cannot be attached twice.`);
     onChange([...value, ...picked.map((file) => ({ key: Math.random().toString(36).slice(2), file, category: categories[0].value }))]);
   }
   return (

@@ -51,6 +51,10 @@ export function AttachmentsPanel({ ownerType, ownerId, categories }: { ownerType
     setError(null);
     const tooBig = files.filter((f) => f.size > MAX_BYTES);
     if (tooBig.length) { setError(`Too large (over 20 MB): ${tooBig.map((f) => f.name).join(", ")}.`); return; }
+    const nameKey = (v: string) => v.normalize("NFKC").trim().toLowerCase().replace(/\s+/g, " ");
+    const picked = files.map((f) => nameKey(f.name));
+    const twice = files.filter((f, i) => picked.indexOf(nameKey(f.name)) !== i);
+    if (twice.length) { setError(`The same file is selected twice: ${[...new Set(twice.map((f) => f.name))].join(", ")}.`); return; }
     setPending(true);
     // Several files (or photos) are added side by side; one document replaces the current one as a new version.
     const addAll = files.length > 1 || MULTI.includes(category);
