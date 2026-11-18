@@ -59,7 +59,7 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
     .select("id, trip_no, dispatch_date, created_at, vehicle_registration, trailer_registration, driver_name, transfer:stock_transfers!inner(id, document_number, status, source_branch_id, dest:branches!stock_transfers_destination_branch_id_fkey(name)), lines:stock_transfer_dispatch_lines(qty, line:stock_transfer_lines(product:products(sku, name, unit:units(symbol))))")
     .eq("company_id", ctx.companyId).eq("status", "draft").neq("transfer.status", "voided")
     .in("transfer.source_branch_id", myBranches.length ? myBranches : none)
-    .order("created_at").limit(50);
+    .order("created_at").limit(1000);
   type W = { id: string; trip_no: number; dispatch_date: string; created_at: string; vehicle_registration: string | null; trailer_registration: string | null; driver_name: string | null;
     transfer: { id: string; document_number: string | null; status: string; source_branch_id: string; dest: { name: string } | null };
     lines: { qty: number; line: { product: { sku: string; name: string; unit: { symbol: string } | null } | null } | null }[] };
@@ -92,23 +92,11 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
             r.lines.reduce((a, l) => a + N(l.qty_dispatched), 0), r.lines.reduce((a, l) => a + N(l.qty_received), 0)]))} /></span>
       </div>
       {waits.length > 0 && (
-        <Card className="mb-4 overflow-x-auto border-amber-300 dark:border-amber-700">
-          <div className="flex items-center gap-2 px-4 pt-3 text-sm font-semibold">Waiting for loading <Badge variant="warning">{waits.length}</Badge>
-            <span className="font-normal text-muted-foreground">· open a truck and use Confirm loading</span></div>
-          <Table>
-            <TableHeader><TableRow><TableHead>Transfer / trip</TableHead><TableHead>To</TableHead><TableHead>Truck</TableHead><TableHead>Driver</TableHead><TableHead>Cargo</TableHead><TableHead>Order created</TableHead></TableRow></TableHeader>
-            <TableBody>{waits.map((w) => (
-              <ClickableRow key={w.id} href={`/inventory/transfers/${w.transfer.id}`}>
-                <TableCell className="text-sm font-medium">{w.transfer.document_number ?? "Transfer order"}<span className="block text-xs text-muted-foreground">Trip {w.trip_no}</span></TableCell>
-                <TableCell className="text-sm">{w.transfer.dest?.name}</TableCell>
-                <TableCell className="text-sm font-medium">{w.vehicle_registration ?? "—"}{w.trailer_registration && <span className="block text-xs text-muted-foreground">Trailer {w.trailer_registration}</span>}</TableCell>
-                <TableCell className="text-sm">{w.driver_name ?? "—"}</TableCell>
-                <TableCell className="text-xs">{w.lines.map((l, i) => <span key={i} className="block">{formatQuantity(N(l.qty))} {l.line?.product?.unit?.symbol ?? ""} {l.line?.product?.name ?? l.line?.product?.sku}</span>)}</TableCell>
-                <TableCell className="text-xs">{formatDateTime(w.created_at)}</TableCell>
-              </ClickableRow>
-            ))}</TableBody>
-          </Table>
-        </Card>
+        <Link href={`/inventory/transfers?status=waiting${branchF ? `&branch=${branchF}` : ""}`}
+          className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-card px-4 py-3 text-sm font-semibold hover:bg-muted/40 dark:border-amber-700">
+          Waiting for loading <Badge variant="warning">{waits.length}</Badge>
+          <span className="font-normal text-muted-foreground">· open a truck and use Confirm loading</span>
+        </Link>
       )}
       {ordersView ? (list.length === 0 ? <EmptyState title="No transfer orders yet" /> : (
         <Card className="overflow-x-auto">
