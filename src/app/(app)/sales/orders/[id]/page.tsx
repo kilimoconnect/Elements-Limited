@@ -14,6 +14,7 @@ import { loadOrder, userNames, customerAvailableFunds, ORDER_STATUS, SHIPMENT_ST
 import { formatMoney, formatQuantity, formatDateTime } from "@/lib/format";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { OrderActions } from "./order-actions";
+import { AttachmentsPanel } from "@/components/common/attachments-panel";
 
 export const metadata: Metadata = { title: "Sales Order" };
 
@@ -160,6 +161,22 @@ export default async function SalesOrderPage(props: { params: Promise<{ id: stri
         otherFunds={otherFunds.map((f) => ({ id: f.id, label: `${f.document_number} · ${f.reference ?? ""}`, available: f.available }))}
         branches={(allBranches ?? []).filter((b) => b.id !== o.branch_id)}
         accounts={(accounts ?? []).filter((a) => !a.branch_id || a.branch_id === o.branch_id).map((a) => ({ id: a.id, name: a.name }))} />
+
+      <Card><CardContent className="space-y-4 p-4 sm:p-5">
+        <h3 className="text-sm font-semibold">Proof of payment</h3>
+        {o.request && (
+          <div className="space-y-1">
+            <p className="text-sm text-muted-foreground">Attached when the order was requested · Sales Request <Link className="font-medium text-primary hover:underline" href={`/sales/requests/${o.request.id}`}>{o.request.document_number}</Link></p>
+            <AttachmentsPanel ownerType="sales_request" ownerId={o.request.id} categories={["proof_of_payment", "other"]} />
+          </div>
+        )}
+        {[...new Map(funds.filter((f) => f.receipt?.id).map((f) => [f.receipt!.id, f.receipt!])).values()].map((r) => (
+          <div key={r.id} className="space-y-1">
+            <p className="text-sm text-muted-foreground">Payment <Link className="font-medium text-primary hover:underline" href={`/sales/customer-payments/${r.id}`}>{r.document_number}</Link>{r.reference ? ` · ${r.reference}` : ""} · {formatMoney(r.amount)}</p>
+            <AttachmentsPanel ownerType="customer_receipt" ownerId={r.id} categories={["proof_of_payment", "other"]} />
+          </div>
+        ))}
+      </CardContent></Card>
 
       <Timeline items={events} label={EVENT_LABEL} nameOf={nameOf} shipmentNo={truckNo} />
     </div>
