@@ -22,7 +22,7 @@ export function TruckForm({ orderId, mode, canLicence, defaults, lines }: {
   const router = useRouter();
   const [qty, setQty] = React.useState<Record<string, string>>(Object.fromEntries(lines.map((l) => [l.id, ""])));
   const [f, setF] = React.useState({
-    dispatchDate: todayISO(), expected: "", driverName: "", driverPhone: "", driverLicence: "", vehicle: "", trailer: "",
+    dispatchDate: todayISO(), driverName: "", driverPhone: "", driverLicence: "", vehicle: "", trailer: "",
     destination: defaults.destination, consigneeName: defaults.consignee_name, consigneePhone: defaults.consignee_phone,
   });
   const [key] = React.useState(() => `truck:${orderId}:${crypto.randomUUID()}`);
@@ -43,7 +43,7 @@ export function TruckForm({ orderId, mode, canLicence, defaults, lines }: {
     setError(null); setPending(true);
     const header: ShipmentHeaderInput = {
       dispatch_location: defaults.dispatch_location, planned_dispatch_date: f.dispatchDate,
-      expected_arrival_at: f.expected ? new Date(f.expected).toISOString() : "",
+      expected_arrival_at: "",
       driver_name: f.driverName, driver_phone: f.driverPhone, driver_licence: canLicence ? f.driverLicence : "",
       vehicle_registration: f.vehicle, trailer_registration: f.trailer,
       destination: f.destination, consignee_name: f.consigneeName, consignee_phone: f.consigneePhone,
@@ -71,8 +71,7 @@ export function TruckForm({ orderId, mode, canLicence, defaults, lines }: {
 
       <Card><CardContent className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-3">
         <div className="space-y-1.5"><Label>Dispatch date</Label><Input type="date" value={f.dispatchDate} onChange={set("dispatchDate")} /></div>
-        <div className="space-y-1.5"><Label>Expected arrival</Label><Input type="datetime-local" value={f.expected} onChange={set("expected")} /></div>
-        <div />
+        <div className="hidden sm:col-span-2 sm:block" />
         <div className="space-y-1.5"><Label>Driver name</Label><Input value={f.driverName} onChange={set("driverName")} /></div>
         <div className="space-y-1.5"><Label>Driver phone</Label><PhoneInput value={f.driverPhone} onChange={set("driverPhone")} /></div>
         {canLicence ? <div className="space-y-1.5"><Label>Licence number</Label><Input value={f.driverLicence} onChange={set("driverLicence")} /></div>
