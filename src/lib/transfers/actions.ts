@@ -334,6 +334,23 @@ export async function receiveTrip(input: {
   } catch (e) { return fail(e); }
 }
 
+/** Admin: void a receipt recorded by mistake. Accepted goods go back into transit; the truck can be received again. */
+export async function voidTransferReceipt(receiptId: string, reason: string, requestId: string): Promise<RpcResult> {
+  try {
+    const { user, ctx, admin } = await ctxFor("transactions.void");
+    if (!reason?.trim()) return { ok: false, error: "Enter the reason." };
+    if (!reqOk(requestId)) return { ok: false, error: "Missing request id; reload the page." };
+    const { data: r } = await admin.from("stock_transfer_receipts").select("transfer_id").eq("id", receiptId).maybeSingle();
+    if (!r) return { ok: false, error: "Receipt not found." };
+    const t = await loadTransfer(admin, r.transfer_id, ctx.companyId, user);
+    const res = await callPostingRpc("void_transfer_receipt", { p_receipt: receiptId, p_user: user.id, p_reason: reason.trim(), p_idem: `void_transfer_receipt:${receiptId}:${requestId}` });
+    if (!res.ok) return res;
+    await writeAuditLog({ userId: user.id, companyId: ctx.companyId, branchId: t.destination_branch_id, action: "transfer.receipt_void", resourceType: "stock_transfer_receipt", resourceId: receiptId, reason });
+    refresh(t.id);
+    return res;
+  } catch (e) { return fail(e); }
+}
+
 export async function resolveDiscrepancy(input: {
   receiptLineId: string; kind: "quarantine" | "short"; resolution: "release" | "found" | "normal_loss" | "write_off" | "claim";
   qty: number; notes?: string; requestId: string;

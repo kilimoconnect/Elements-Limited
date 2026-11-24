@@ -20,6 +20,7 @@ import { ChangeRouteButton } from "./change-route";
 import { isHeadOfficeUser, transferGrnGroups } from "@/lib/transfers/grn-data";
 import { canUseLicenceNumber } from "@/lib/transfers/licence";
 import { TripActions, ResolveButton, ChargeForm, ChargeRowActions, ChangeQuantityButton } from "./transfer-file";
+import { VoidReceiptButton } from "./void-receipt";
 import { ConfirmLoadingButton, UndoLoadingButton } from "./confirm-loading";
 
 export const metadata: Metadata = { title: "Transfer" };
@@ -45,6 +46,7 @@ export default async function TransferDetailPage(props: { params: Params }) {
   const canLicencePhoto = can(ctx.user, "documents.view_licence");
   const canResolve = can(ctx.user, "inventory.transfer_resolve") && isReceiver;
   const canReceive = can(ctx.user, "inventory.transfer_receive") && isReceiver;
+  const canVoidReceipt = can(ctx.user, "transactions.void") && isReceiver;
   const canDispatch = can(ctx.user, "inventory.transfer_dispatch") && isSender;
   const logistics = await isFeatureEnabled(ctx.companyId, "transfer_logistics");
   const attachmentsOn = await isFeatureEnabled(ctx.companyId, "attachments");
@@ -57,7 +59,7 @@ export default async function TransferDetailPage(props: { params: Params }) {
   const [{ data: lines }, { data: trips }, { data: receipts }, { data: charges }, { data: categories }] = await Promise.all([
     admin.from("stock_transfer_lines").select("id, line_no, qty_requested, qty_dispatched, qty_received, qty_quarantined, qty_short_pending, qty_lost_normal, qty_lost_abnormal, unit_cost, transit_value, received_value, lost_value, charges_applied, batch_reference, kg_per_unit, product:products(sku,name)").eq("transfer_id", id).order("line_no"),
     admin.from("stock_transfer_dispatches").select("*, lines:stock_transfer_dispatch_lines(id, transfer_line_id, qty, net_kg, value, transit_value, qty_reported, qty_accepted, qty_quarantined, qty_short, qty_lost_normal, qty_lost_abnormal), changes:stock_transfer_dispatch_changes(old_values, new_values, reason, changed_at)").eq("transfer_id", id).order("trip_no"),
-    admin.from("stock_transfer_receipts").select("id, document_number, dispatch_id, arrived_at, received_at, signed_by_name, notes, lines:stock_transfer_receipt_lines(id, transfer_line_id, qty_received, qty_damaged, qty_short, qty_released, qty_resolved_damaged, qty_resolved_short, value, resolutions:stock_transfer_resolutions(kind, resolution, qty, value, created_at))").eq("transfer_id", id).order("received_at"),
+    admin.from("stock_transfer_receipts").select("id, document_number, dispatch_id, arrived_at, received_at, signed_by_name, notes, voided_at, void_reason, lines:stock_transfer_receipt_lines(id, transfer_line_id, qty_received, qty_damaged, qty_short, qty_released, qty_resolved_damaged, qty_resolved_short, value, resolutions:stock_transfer_resolutions(kind, resolution, qty, value, created_at))").eq("transfer_id", id).order("received_at"),
     showCost ? admin.from("cost_sources").select("id, description, status, estimated_amount, accrued_amount, actual_amount, allocation_basis, inventory_treatment, transfer_dispatch_id, category:cost_categories(name)").eq("stock_transfer_id", id).neq("status", "voided").order("created_at") : Promise.resolve({ data: [] }),
     admin.from("cost_categories").select("id, code, name, inventory_treatment").eq("company_id", ctx.companyId).eq("is_active", true).eq("applies_to_transfer", true).order("code"),
   ]);
@@ -73,7 +75,7 @@ export default async function TransferDetailPage(props: { params: Params }) {
   const tripsList = (trips ?? []) as unknown as Trip[];
   // DN and GRN exist only once the store keeper has confirmed loading of a truck.
   const anyLoaded = tripsList.some((x) => ["dispatched", "arrived", "received"].includes(x.status)) || (!t.posts_in_transit && t.status !== "draft");
-  type Rc = { id: string; document_number: string | null; dispatch_id: string | null; arrived_at: string | null; received_at: string; signed_by_name: string | null; notes: string | null;
+  type Rc = { id: string; document_number: string | null; dispatch_id: string | null; voided_at: string | null; void_reason: string | null; arrived_at: string | null; received_at: string; signed_by_name: string | null; notes: string | null;
     lines: { id: string; transfer_line_id: string; qty_received: number; qty_damaged: number; qty_short: number; qty_released: number; qty_resolved_damaged: number; qty_resolved_short: number; value: number;
       resolutions: { kind: string; resolution: string; qty: number; value: number; created_at: string }[] }[] };
   const rcs = (receipts ?? []) as unknown as Rc[];
@@ -276,8 +278,11 @@ export default async function TransferDetailPage(props: { params: Params }) {
             </Table>
             </div>
             {tripReceipts.map((r) => (
-              <div key={r.id} className="rounded-md border border-border p-3">
-                <p className="text-xs font-medium">{r.document_number} · arrived {r.arrived_at ? formatDateTime(r.arrived_at) : "—"} · recorded {formatDateTime(r.received_at)}{r.signed_by_name && ` · signed by ${r.signed_by_name}`}</p>
+              <div key={r.id} className={`rounded-md border p-3 ${r.voided_at ? "border-destructive/40 opacity-70" : "border-border"}`}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-medium">{r.document_number}{r.voided_at && <span className="ml-1 text-destructive">VOIDED{r.void_reason ? ` — ${r.void_reason}` : ""}</span>} · arrived {r.arrived_at ? formatDateTime(r.arrived_at) : "—"} · recorded {formatDateTime(r.received_at)}{r.signed_by_name && ` · signed by ${r.signed_by_name}`}</p>
+                  {!r.voided_at && canVoidReceipt && <VoidReceiptButton id={r.id} number={r.document_number ?? "receipt"} />}
+                </div>
                 {r.lines.map((rl) => {
                   const openQ = N(rl.qty_damaged) - N(rl.qty_released) - N(rl.qty_resolved_damaged);
                   const openS = N(rl.qty_short) - N(rl.qty_resolved_short);
@@ -286,10 +291,10 @@ export default async function TransferDetailPage(props: { params: Params }) {
                       <span>{lname(rl.transfer_line_id)}: {formatQuantity(N(rl.qty_received))} accepted{N(rl.qty_damaged) ? `, ${formatQuantity(N(rl.qty_damaged))} quarantined` : ""}{N(rl.qty_short) ? `, ${formatQuantity(N(rl.qty_short))} short` : ""}
                         {showCost && ` · ${formatMoney(N(rl.value))}`}
                         {rl.resolutions.map((x, i) => <span key={i} className="ml-2 text-muted-foreground">[{x.kind} {formatQuantity(N(x.qty))} → {x.resolution.replace("_", " ")}]</span>)}</span>
-                      <span className="flex gap-1">
+                      {!r.voided_at && <span className="flex gap-1">
                         <ResolveButton receiptLineId={rl.id} kind="quarantine" open={openQ} canResolve={canResolve} canFound={false} />
                         <ResolveButton receiptLineId={rl.id} kind="short" open={openS} canResolve={canResolve} canFound={canReceive} />
-                      </span>
+                      </span>}
                     </div>
                   );
                 })}

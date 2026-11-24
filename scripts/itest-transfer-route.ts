@@ -179,6 +179,35 @@ async function main() {
     await db.query("select dispatch_transfer_trip($1,$2,gen_random_uuid()::text)", [n5, owner]);
     check("the corrected truck can be confirmed again", await stockQty(hq) === hq5 - 6 && await transit(mwz) === tr5 + 6
       && await one(db, "select status from stock_transfer_dispatches where id=$1", [n5]) === "dispatched");
+
+    // ------------------------------------------------------------ voiding a receipt at the receiving branch (0067)
+    const dl5 = await one(db, "select id from stock_transfer_dispatch_lines where dispatch_id=$1", [n5]);
+    const mw0 = await stockQty(mwz), trm0 = await transit(mwz), g1155a = await gl("1155"), g1150a = await gl("1150");
+    const rc5 = await one(db, "select receive_transfer_trip($1,$2,$3::jsonb,now(),null,'Store','rc5-request-000001','rc5-idem-0000000001')",
+      [n5, owner, JSON.stringify([{ dispatch_line_id: dl5, accepted: 4, quarantined: 1, short: 1 }])]);
+    check("receiving puts 4 into stock at the receiving branch and clears 6 from transit", await stockQty(mwz) === mw0 + 4 && await transit(mwz) === trm0 - 6);
+    check("a Sales Officer cannot void a receipt",
+      /not allowed|permission|authoris/i.test(await err(db, "select void_transfer_receipt($1,$2,'x','void-rc5-officer-0001')", [rc5, so])));
+    await db.query("select void_transfer_receipt($1,$2,'counted the wrong truck','void-rc5-key-0000001')", [rc5, owner]);
+    check("voiding the receipt takes the 4 out of stock and puts all 6 back in transit",
+      await stockQty(mwz) === mw0 && await transit(mwz) === trm0, `${await stockQty(mwz) - mw0} ${await transit(mwz) - trm0}`);
+    check("the value goes back from inventory (1150) to goods in transit (1155)", await gl("1155") === g1155a && await gl("1150") === g1150a,
+      `${await gl("1155") - g1155a} ${await gl("1150") - g1150a}`);
+    check("the truck is in transit again with nothing reported, and the receipt is marked voided",
+      await one(db, "select status from stock_transfer_dispatches where id=$1", [n5]) === "dispatched"
+      && Number(await one(db, "select qty_reported from stock_transfer_dispatch_lines where id=$1", [dl5])) === 0
+      && await one(db, "select void_reason from stock_transfer_receipts where id=$1", [rc5]) === "counted the wrong truck");
+    const rl5 = await one(db, "select id from stock_transfer_receipt_lines where receipt_id=$1", [rc5]);
+    check("the damaged cargo of a voided receipt cannot be resolved",
+      /voided/.test(await err(db, "select resolve_transfer_discrepancy($1,'quarantine','release',1,null,$2,'res-rc5-0000000001')", [rl5, owner])));
+    check("a retried void changes nothing", (await err(db, "select void_transfer_receipt($1,$2,'again','void-rc5-key-0000001')", [rc5, owner])) === ""
+      && await stockQty(mwz) === mw0);
+    check("the trip quantity can be corrected again after the void",
+      (await err(db, "select change_trip_line_quantity($1,$2,6,'same',gen_random_uuid()::text)", [dl5, owner])) === "");
+    await db.query("select receive_transfer_trip($1,$2,$3::jsonb,now(),null,'Store','rc6-request-000001','rc6-idem-0000000001')",
+      [n5, owner, JSON.stringify([{ dispatch_line_id: dl5, accepted: 6, quarantined: 0, short: 0 }])]);
+    check("the truck can then be received correctly", await stockQty(mwz) === mw0 + 6
+      && await one(db, "select status from stock_transfer_dispatches where id=$1", [n5]) === "received");
     check("ledger balances", Number(await one(db, `select count(*) from (select je.id from journal_entries je join journal_lines jl on jl.journal_id=je.id
       where je.company_id=$1 group by je.id having sum(jl.debit) <> sum(jl.credit)) x`, [co])) === 0);
 
