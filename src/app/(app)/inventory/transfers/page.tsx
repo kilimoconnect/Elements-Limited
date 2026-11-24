@@ -76,7 +76,10 @@ export default async function TransfersPage(props: { searchParams: SearchParams 
       <PageHeader
         title="Stock Transfers"
         description="One shared transfer for the sending and the receiving branch: trips, cargo, documents and receipt progress."
-        actions={ctx.branchId && can(ctx.user, "inventory.transfer_create") && <div className="flex flex-wrap gap-2"><Button asChild variant="outline"><Link href="/inventory/transfers/import">Import from Excel</Link></Button><Button asChild><Link href="/inventory/transfers/new">New Transfer Order</Link></Button></div>}
+        actions={<div className="flex flex-wrap gap-2">
+          {can(ctx.user, "inventory.transfer_receive") && <Button asChild variant="outline"><Link href="/inventory/transfers/receive">Receive trucks</Link></Button>}
+          {ctx.branchId && can(ctx.user, "inventory.transfer_create") && <><Button asChild variant="outline"><Link href="/inventory/transfers/import">Import from Excel</Link></Button><Button asChild><Link href="/inventory/transfers/new">New Transfer Order</Link></Button></>}
+        </div>}
       />
       <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
         <Link href="/inventory/transfers" className={`rounded-md px-3 py-1.5 ${ordersView ? "bg-primary text-primary-foreground" : "border border-border"}`}>Transfer orders</Link>
