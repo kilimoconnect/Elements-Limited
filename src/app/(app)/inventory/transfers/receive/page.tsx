@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { requirePermissionPage } from "@/lib/auth/guards";
 import { getActiveContext } from "@/lib/context";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isFeatureEnabled } from "@/lib/features";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -43,6 +44,11 @@ export default async function BulkReceivePage() {
       open: Math.max(N(l.qty) - N(l.qty_reported), 0),
     })).filter((l) => l.open > 0),
   })).filter((t) => t.lines.length > 0);
+  const [{ data: categories }, chargesEnabled] = await Promise.all([
+    admin.from("cost_categories").select("id, code, name").eq("company_id", ctx.companyId).eq("is_active", true)
+      .eq("applies_to_transfer", true).eq("inventory_treatment", "capitalize").order("code"),
+    isFeatureEnabled(ctx.companyId, "transfer_logistics"),
+  ]);
   const branches = [...new Map(trucks.map((t) => [t.toId, t.to])).entries()].map(([id, name]) => ({ id, name }));
 
   return (
@@ -51,7 +57,8 @@ export default async function BulkReceivePage() {
       <PageHeader title="Receive Trucks"
         description="Tick the trucks that arrived, check the quantity received on each, then confirm. Each truck is recorded as its own receipt, exactly as when received one by one." />
       {trucks.length === 0 ? <EmptyState title="No trucks in transit to your branches" description="Trucks appear here once the sending branch confirms loading." />
-        : <BulkReceiveForm trucks={trucks} branches={branches} />}
+        : <BulkReceiveForm trucks={trucks} branches={branches} chargesEnabled={chargesEnabled}
+            categories={(categories ?? []).map((c) => ({ id: c.id, code: c.code, name: c.name }))} />}
     </div>
   );
 }
