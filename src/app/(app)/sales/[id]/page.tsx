@@ -78,7 +78,7 @@ export default async function SaleDetailPage(props: { params: Params }) {
         actions={
           <SaleActions id={id} status={s.document_status} approvalStatus={s.approval_status} outstanding={Number(s.outstanding)} customerId={s.customer_id}
             canEdit={inMyBranch && can(ctx.user, "sales.edit_draft")} canSubmit={inMyBranch && can(ctx.user, "sales.create")}
-            canApprove={inMyBranch && can(ctx.user, "sales.approve")} canVoid={can(ctx.user, "transactions.void")}
+            canApprove={inMyBranch && can(ctx.user, "sales.approve")} canVoid={can(ctx.user, "transactions.void") && !sale.shipment_id}
             canDelete={can(ctx.user, "transactions.delete_draft")} canReceive={can(ctx.user, "sales.receive_payment")}
             canReturn={can(ctx.user, "sales.create_return")} truck={Boolean(sale.shipment_id)} />
         }

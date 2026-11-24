@@ -13,6 +13,7 @@ import { StatusBadge, Timeline, Field } from "@/components/sales/sales-ui";
 import { loadShipment, userNames, SHIPMENT_STATUS, EVENT_LABEL } from "@/lib/sales/fulfilment-data";
 import { formatMoney, formatQuantity, formatDate, formatDateTime } from "@/lib/format";
 import { ShipmentActions } from "./shipment-actions";
+import { VoidTruckButton } from "./void-truck";
 import { isHeadOfficeUser, salesShipmentGrnGroups } from "@/lib/transfers/grn-data";
 
 export const metadata: Metadata = { title: "Truck" };
@@ -118,6 +119,12 @@ export default async function ShipmentPage(props: { params: Promise<{ id: string
         </CardContent></Card>
       )}
 
+      {can(ctx.user, "transactions.void") && ["dispatched", "in_transit", "delivered", "collected"].includes(s.status) && (
+        <div className="flex justify-end"><VoidTruckButton id={s.id} number={s.document_number} invoice={s.invoice?.document_number ?? null} collection={collection} /></div>
+      )}
+      {s.status === "voided" && (
+        <p className="rounded-md border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm">This truck was voided{s.void_reason ? `: ${s.void_reason}` : "."} Its invoice is voided and the goods are back in stock.</p>
+      )}
       <ShipmentActions id={s.id} status={s.status} collection={collection} onHold={!!s.order?.on_hold} canFulfil={can(ctx.user, "sales.fulfil")}
         lines={ll.map((l) => ({ id: l.id, label: `${l.order_line?.product?.sku ?? ""} ${l.order_line?.description ?? ""}`, unit: l.order_line?.product?.unit?.code ?? "",
           planned: Number(l.qty_planned), loaded: l.qty_loaded === null ? null : Number(l.qty_loaded), dispatched: Number(l.qty_dispatched), batch: l.batch_reference ?? "",

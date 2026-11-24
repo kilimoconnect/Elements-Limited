@@ -333,6 +333,12 @@ export async function dispatchShipment(shipmentId: string, checked: boolean, ide
 export async function cancelShipment(shipmentId: string, reason: string): Promise<RpcResult> {
   return rpcAction("sales.fulfil", "cancel_sales_shipment", { p_shipment: shipmentId, p_reason: reason }, "sales_shipment.cancel", "sales_shipment", shipmentId, [`/sales/shipments/${shipmentId}`], reason);
 }
+/** Admin: void a dispatched / collected truck (invoice voided, stock back, advance back to the order). */
+export async function voidShipment(shipmentId: string, reason: string, idemKey: string): Promise<RpcResult> {
+  if (!idemKey || idemKey.length < 16) return { ok: false, error: "Missing request id; reload the page." };
+  return rpcAction("transactions.void", "void_sales_shipment", { p_shipment: shipmentId, p_reason: reason, p_idem: `void_shipment:${shipmentId}:${idemKey}` },
+    "sales_shipment.void", "sales_shipment", shipmentId, [`/sales/shipments/${shipmentId}`, "/sales/orders", "/sales/history", "/inventory", "/dashboard"], reason);
+}
 export async function recordDelivery(shipmentId: string, data: {
   recipient_name: string; recipient_phone?: string; notes?: string; delivered_at?: string;
   lines: { shipment_line_id: string; qty_accepted: number; qty_short: number; qty_damaged: number }[];

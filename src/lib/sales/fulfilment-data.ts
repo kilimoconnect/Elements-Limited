@@ -26,13 +26,14 @@ export const SHIPMENT_STATUS: Record<string, { label: string; variant: "muted" |
   dispatched: { label: "Dispatched", variant: "warning" },
   in_transit: { label: "In transit", variant: "warning" },
   delivered: { label: "Delivered", variant: "success" },
+  voided: { label: "Voided", variant: "destructive" },
   collected: { label: "Collected", variant: "success" },
   cancelled: { label: "Cancelled", variant: "muted" },
 };
 export const EVENT_LABEL: Record<string, string> = {
   submitted: "Submitted", returned: "Returned for correction", rejected: "Rejected", approved: "Approved (payment verified, order created)",
   shipment_created: "Truck planned", loading_order: "Loading order issued", loaded: "Actual loading recorded", dispatched: "Dispatched (stock out, invoiced)",
-  shipment_cancelled: "Truck cancelled", delivered: "Delivered", collected: "Collected", completed: "Order completed",
+  shipment_cancelled: "Truck cancelled", shipment_voided: "Truck voided", delivered: "Delivered", collected: "Collected", completed: "Order completed",
   exception_resolved: "Exception resolved", payment_reversed: "Payment reversed", funds_committed: "Funds committed",
   amendment_requested: "Amendment requested", amendment_approved: "Amendment approved", amendment_rejected: "Amendment rejected", cancelled: "Order cancelled", branch_changed: "Branch changed",
 };

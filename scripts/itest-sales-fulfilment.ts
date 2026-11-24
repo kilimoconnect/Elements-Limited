@@ -328,6 +328,33 @@ async function main() {
       && await num(db, "select grand_total from sales where id=$1", [ci2]) === 708000 + 30000);
     check("the collection order completes once its last truck is dispatched", await one(db, "select status from sales_orders where id=$1", [so4]) === "completed");
 
+    // ------------------------------------------------------------ voiding a collected truck (0066)
+    const shipBranch = await one(db, "select branch_id from sales_shipments where id=$1", [c2]);
+    const onHand = async () => num(db, "select coalesce((select quantity from stock_balances where branch_id=$1 and product_id=$2),0)", [shipBranch, prod]);
+    const st0 = await onHand(), adv1 = await bal("2150"), ar1 = await bal("1140"), rev1 = await bal("4100");
+    check("a Sales Officer cannot void a collected truck",
+      /not allowed|permission|authoris/i.test(await err(db, "select void_sales_shipment($1,$2,'wrong truck','void-c2-officer-0001')", [c2, officer])));
+    check("a reason is required to void a truck", (await err(db, "select void_sales_shipment($1,$2,' ','void-c2-noreason-0001')", [c2, owner])) !== "");
+    await db.query("select void_sales_shipment($1,$2,'wrong customer collected','void-c2-key-000001')", [c2, owner]);
+    check("voiding the collected truck voids its invoice and marks the truck voided",
+      await one(db, "select status || '|' || void_reason from sales_shipments where id=$1", [c2]) === "voided|wrong customer collected"
+      && await one(db, "select document_status from sales where id=$1", [ci2]) === "voided");
+    check("the 6 bags go back into stock", await onHand() === st0 + 6, `${await onHand()} vs ${st0 + 6}`);
+    check("the advance goes back to the customer (2150 up by the invoice, receivable unchanged, revenue reversed)",
+      await bal("2150") === adv1 - 738000 && await bal("1140") === ar1 && await bal("4100") === rev1 + 708000 * 100 / 118 + 30000,
+      `2150 ${await bal("2150") - adv1} 1140 ${await bal("1140") - ar1} 4100 ${await bal("4100") - rev1}`);
+    check("the order reopens with 6 bags left to send and its funds available again",
+      await one(db, "select status from sales_orders where id=$1", [so4]) === "in_fulfilment"
+      && await num(db, "select quantity - qty_dispatched from sales_order_lines where id=$1", [ol4]) === 6
+      && await num(db, "select sum(amount_committed - amount_applied - amount_released) from sales_order_funds where order_id=$1", [so4]) === 738000);
+    check("a retried void changes nothing", (await err(db, "select void_sales_shipment($1,$2,'again','void-c2-key-000001')", [c2, owner])) === "" && await onHand() === st0 + 6);
+    const c3 = await truck(so4, ol4, "c3", 6);
+    const ci3 = await one(db, "select dispatch_sales_shipment($1,$2,'c3d',true)", [c3, officer]);
+    check("the corrected truck can be dispatched again and the order completes with invoices that reconcile",
+      await one(db, "select status from sales_orders where id=$1", [so4]) === "completed"
+      && await num(db, "select sum(grand_total) from sales where sales_order_id=$1 and document_status='posted'", [so4]) === 1230000
+      && await num(db, "select grand_total from sales where id=$1", [ci3]) === 738000);
+
     // ------------------------------------------------------------ payment reversal
     const rq5 = await mkRequest([{ product: prod, qty: 4, price: 100000 }], [{ account: bank, amount: 472000, ref: "NMB-BOUNCE" }]);
     await db.query("select submit_sales_request($1,$2)", [rq5, officer]);

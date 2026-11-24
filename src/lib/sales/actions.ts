@@ -413,6 +413,9 @@ export async function voidSale(saleId: string, reason: string): Promise<RpcResul
   try {
     const user = await assertActiveUser();
     assertPermission(user, "transactions.void");
+    // A truck invoice is voided with its truck, so the sales order stays in step.
+    const { data: own } = await createAdminClient().from("sales").select("shipment_id").eq("id", saleId).maybeSingle();
+    if ((own as { shipment_id: string | null } | null)?.shipment_id) return { ok: false, error: "This invoice belongs to a truck of a sales order: open the truck and use Void collection / Void truck." };
     const res = await callPostingRpc("void_sale", { p_id: saleId, p_user: user.id, p_reason: reason });
     if (res.ok) {
       // Free goods this sale earned for a next order are withdrawn (unless already given);
