@@ -202,6 +202,12 @@ async function main() {
       /voided/.test(await err(db, "select resolve_transfer_discrepancy($1,'quarantine','release',1,null,$2,'res-rc5-0000000001')", [rl5, owner])));
     check("a retried void changes nothing", (await err(db, "select void_transfer_receipt($1,$2,'again','void-rc5-key-0000001')", [rc5, owner])) === ""
       && await stockQty(mwz) === mw0);
+    const t5Id = await one(db, "select transfer_id from stock_transfer_dispatches where id=$1", [n5]);
+    check("after the receipt is voided the route can be changed (to Dodoma and back)",
+      (await err(db, "select change_transfer_destination($1,$2,$3,'wrong destination')", [t5Id, owner, dod])) === ""
+      && await one(db, "select destination_branch_id from stock_transfers where id=$1", [t5Id]) === dod
+      && (await err(db, "select change_transfer_destination($1,$2,$3,'back')", [t5Id, owner, mwz])) === ""
+      && await transit(mwz) === trm0);
     check("the trip quantity can be corrected again after the void",
       (await err(db, "select change_trip_line_quantity($1,$2,6,'same',gen_random_uuid()::text)", [dl5, owner])) === "");
     await db.query("select receive_transfer_trip($1,$2,$3::jsonb,now(),null,'Store','rc6-request-000001','rc6-idem-0000000001')",

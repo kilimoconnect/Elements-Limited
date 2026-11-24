@@ -90,7 +90,7 @@ export default async function TransferDetailPage(props: { params: Params }) {
   const canChangeTrip = (trip: { status: string }, x: { qty_reported: number }) =>
     canQty && !legacy && (trip.status === "draft" || (trip.status === "dispatched" && N(x.qty_reported) === 0));
   // Route (destination) can change until anything arrives or is received.
-  const canChangeRoute = canDispatch && ["draft", "dispatched"].includes(t.status) && rcs.length === 0
+  const canChangeRoute = canDispatch && ["draft", "dispatched"].includes(t.status) && rcs.every((r) => r.voided_at)
     && !tripsList.some((x) => x.status === "arrived" || x.status === "received");
   const routeBranches = canChangeRoute
     ? ((await admin.from("branches").select("id, code, name").eq("company_id", ctx.companyId).eq("is_active", true).order("name")).data ?? [])
