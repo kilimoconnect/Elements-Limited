@@ -42,6 +42,7 @@ export function OrderActions({ orderId, open, isManager, canFulfil, userId, canA
   const [reject, setReject] = React.useState<Amd | null>(null);
   const [reverse, setReverse] = React.useState<Fund | null>(null);
   const [amend, setAmend] = React.useState(false);
+  const [amendKind, setAmendKind] = React.useState<"change_lines" | "change_branch">("change_lines");
   const [approveAmd, setApproveAmd] = React.useState<Amd | null>(null);
   const [refund, setRefund] = React.useState<Fund | null>(null);
   const [commit, setCommit] = React.useState(false);
@@ -88,7 +89,8 @@ export function OrderActions({ orderId, open, isManager, canFulfil, userId, canA
 
       {open && (canFulfil || isManager) && (
         <div className="flex flex-wrap gap-2">
-          {canFulfil && <Button variant="outline" onClick={() => setAmend(true)}><FilePen className="h-4 w-4" /> Request amendment</Button>}
+          {canFulfil && <Button variant="outline" onClick={() => { setAmendKind("change_lines"); setAmend(true); }}><FilePen className="h-4 w-4" /> Request amendment</Button>}
+          {canFulfil && branches.length > 0 && <Button variant="outline" onClick={() => { setAmendKind("change_branch"); setAmend(true); }}><FilePen className="h-4 w-4" /> Request branch change</Button>}
           {isManager && otherFunds.length > 0 && <Button variant="outline" onClick={() => setCommit(true)}><HandCoins className="h-4 w-4" /> Commit replacement funds</Button>}
           {isManager && receipts.map((r) => <Button key={r.id} variant="outline" onClick={() => setReverse(r)}><Undo2 className="h-4 w-4" /> Reverse {r.label.split(" · ")[0]}</Button>)}
         </div>
@@ -107,7 +109,7 @@ export function OrderActions({ orderId, open, isManager, canFulfil, userId, canA
         description="Use this when the payment turns out to be invalid (bounced, recalled). Trucks not yet dispatched are blocked, dispatched trucks are flagged and their invoices become unpaid."
         onConfirm={async (r) => { const x = await reverseAdvance(reverse!.id, r); if (!x.ok) return x.error; done("Payment reversed; the order is on hold."); }} />
 
-      <AmendDialog key={amend ? "amend-open" : "amend"} open={amend} onOpenChange={setAmend} lines={lines} delivery={delivery} branches={branches}
+      <AmendDialog key={amend ? `amend-open-${amendKind}` : "amend"} initialKind={amendKind} open={amend} onOpenChange={setAmend} lines={lines} delivery={delivery} branches={branches}
         onSubmit={async (kind, changes, reason) => { const x = await requestAmendment(orderId, kind, changes, reason); if (!x.ok) return x.error; done("Amendment sent for approval."); }} />
       <FundsDialog key={approveAmd?.id ?? "amd"} open={!!approveAmd} onOpenChange={(o) => !o && setApproveAmd(null)} title="Approve amendment" funds={otherFunds}
         description="If the amendment increases the order value, select verified customer funds to cover the increase."
@@ -134,12 +136,12 @@ function AmendmentSummary({ a, lines, branches }: { a: Amd; lines: { id: string;
   return null;
 }
 
-function AmendDialog({ open, onOpenChange, lines, delivery, branches, onSubmit }: {
-  open: boolean; onOpenChange: (o: boolean) => void; lines: { id: string; description: string; quantity: number; unit_price: number; min: number; charge: boolean }[];
+function AmendDialog({ open, onOpenChange, lines, delivery, branches, onSubmit, initialKind = "change_lines" }: {
+  initialKind?: "change_lines" | "change_branch"; open: boolean; onOpenChange: (o: boolean) => void; lines: { id: string; description: string; quantity: number; unit_price: number; min: number; charge: boolean }[];
   delivery: { destination: string; consignee_name: string; consignee_phone: string }; branches: { id: string; name: string }[];
   onSubmit: (kind: "change_lines" | "delivery" | "cancel_remaining" | "change_branch", changes: Record<string, unknown>, reason: string) => Promise<string | void | undefined>;
 }) {
-  const [kind, setKind] = React.useState<"change_lines" | "delivery" | "cancel_remaining" | "change_branch">("change_lines");
+  const [kind, setKind] = React.useState<"change_lines" | "delivery" | "cancel_remaining" | "change_branch">(initialKind);
   const [branch, setBranch] = React.useState("");
   const [location, setLocation] = React.useState("");
   const [q, setQ] = React.useState<Record<string, { quantity: string; unit_price: string }>>(() => Object.fromEntries(lines.map((l) => [l.id, { quantity: String(l.quantity), unit_price: String(l.unit_price) }])));
