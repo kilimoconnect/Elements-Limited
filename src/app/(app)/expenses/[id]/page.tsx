@@ -30,7 +30,7 @@ export default async function ExpenseDetail(props: { params: Params }) {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card><CardContent className="space-y-2 p-5 text-sm">
           <div className="flex justify-between"><span className="text-muted-foreground">Status</span><DocStatusBadge status={e.document_status} /></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Payment</span><PayStatusBadge status={e.payment_status} /></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Payment</span>{e.document_status === "voided" ? <span className="text-muted-foreground">—</span> : <PayStatusBadge status={e.payment_status} />}</div>
           <div className="flex justify-between"><span className="text-muted-foreground">Payee</span><span>{e.supplier?.name ?? "—"}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Reference</span><span>{e.reference ?? "—"}</span></div>
           {e.void_reason && <div className="flex justify-between"><span className="text-muted-foreground">Void reason</span><span>{e.void_reason}</span></div>}
@@ -40,7 +40,7 @@ export default async function ExpenseDetail(props: { params: Params }) {
           <div className="flex justify-between"><span className="text-muted-foreground">Tax</span><span className="tabular-nums">{formatMoney(e.tax_total)}</span></div>
           <div className="flex justify-between font-semibold"><span>Total</span><span className="tabular-nums">{formatMoney(e.grand_total)}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Paid</span><span className="tabular-nums">{formatMoney(e.amount_paid)}</span></div>
-          <div className="flex justify-between font-medium"><span>Outstanding</span><span className="tabular-nums">{formatMoney(e.outstanding)}</span></div>
+          <div className="flex justify-between font-medium"><span>Outstanding</span><span className="tabular-nums">{e.document_status === "voided" ? "—" : formatMoney(e.outstanding)}</span></div>
         </CardContent></Card>
         <Card><CardContent className="p-5"><h3 className="mb-2 text-sm font-semibold">Payments</h3>
           {(payments ?? []).length === 0 ? <p className="text-sm text-muted-foreground">No payments.</p> : <div className="space-y-1 text-sm">{(payments ?? []).map((p, i) => { const pp = p as unknown as { account: { name: string } | null; amount: number; payment_date: string }; return <div key={i} className="flex justify-between"><span className="text-muted-foreground">{pp.account?.name} · {formatDate(pp.payment_date)}</span><span className="tabular-nums">{formatMoney(pp.amount)}</span></div>; })}</div>}

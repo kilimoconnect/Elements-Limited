@@ -53,8 +53,8 @@ export default async function ExpenseHistoryPage(props: { searchParams: SP }) {
                   <TableCell className="text-sm">{r.category?.name}</TableCell>
                   <TableCell className="text-sm">{r.supplier?.name ?? "—"}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatMoney(r.grand_total)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatMoney(r.outstanding)}</TableCell>
-                  <TableCell><PayStatusBadge status={r.payment_status} /></TableCell>
+                  <TableCell className="text-right tabular-nums">{r.document_status === "voided" ? <span className="text-muted-foreground">—</span> : formatMoney(r.outstanding)}</TableCell>
+                  <TableCell>{r.document_status === "voided" ? <span className="text-muted-foreground">—</span> : <PayStatusBadge status={r.payment_status} />}</TableCell>
                   <TableCell><DocStatusBadge status={r.document_status} /></TableCell>
                   <TableCell className="text-right">
                     <TxnActions id={r.id} status={r.document_status} canPost={canPost} canOwner={canOwner}

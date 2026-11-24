@@ -103,8 +103,8 @@ export default async function SalesHistoryPage(props: { searchParams: SP }) {
                   <TableCell className="text-sm">{r.branch?.name ?? r.branch?.code}</TableCell>
                   <TableCell className="text-sm">{r.customer?.name ?? "—"}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatMoney(r.grand_total)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatMoney(r.outstanding)}</TableCell>
-                  <TableCell><PayStatusBadge status={r.payment_status} /></TableCell>
+                  <TableCell className="text-right tabular-nums">{r.document_status === "voided" ? <span className="text-muted-foreground">—</span> : formatMoney(r.outstanding)}</TableCell>
+                  <TableCell>{r.document_status === "voided" ? <span className="text-muted-foreground">—</span> : <PayStatusBadge status={r.payment_status} />}</TableCell>
                   <TableCell><DocStatusBadge status={saleStatus(r.document_status, r.approval_status)} /></TableCell>
                   <TableCell className="text-right">
                     <Link href={`/sales/${r.id}`} className="text-sm font-medium text-primary hover:underline">Open</Link>

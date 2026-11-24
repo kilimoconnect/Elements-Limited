@@ -105,7 +105,7 @@ export default async function SaleDetailPage(props: { params: Params }) {
         </CardContent></Card>
         <Card><CardContent className="space-y-2 p-5 text-sm">
           <div className="flex justify-between"><span className="text-muted-foreground">Status</span><DocStatusBadge status={status} /></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Payment</span><PayStatusBadge status={s.payment_status} /></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Payment</span>{s.document_status === "voided" ? <span className="text-muted-foreground">—</span> : <PayStatusBadge status={s.payment_status} />}</div>
           <div className="flex justify-between"><span className="text-muted-foreground">Due date</span><span>{s.due_date ? formatDate(s.due_date) : "—"}</span></div>
           {s.void_reason && <div className="flex justify-between"><span className="text-muted-foreground">Void reason</span><span>{s.void_reason}</span></div>}
         </CardContent></Card>
@@ -114,7 +114,7 @@ export default async function SaleDetailPage(props: { params: Params }) {
           <div className="flex justify-between"><span className="text-muted-foreground">Tax</span><span className="tabular-nums">{formatMoney(s.tax_total)}</span></div>
           <div className="flex justify-between font-semibold"><span>Total</span><span className="tabular-nums">{formatMoney(s.grand_total)}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Paid</span><span className="tabular-nums">{formatMoney(s.amount_paid)}</span></div>
-          <div className="flex justify-between font-medium"><span>Outstanding</span><span className="tabular-nums">{formatMoney(s.outstanding)}</span></div>
+          <div className="flex justify-between font-medium"><span>Outstanding</span><span className="tabular-nums">{s.document_status === "voided" ? "—" : formatMoney(s.outstanding)}</span></div>
           {showCost && s.document_status === "posted" && (
             <>
               <div className="mt-1 flex justify-between border-t border-border pt-1"><span className="text-muted-foreground">COGS</span><span className="tabular-nums">{formatMoney(s.cogs_total)}</span></div>
