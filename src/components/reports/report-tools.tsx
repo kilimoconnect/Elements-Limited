@@ -121,3 +121,28 @@ export function ExportCsvButton({ filename, header, rows }: { filename: string; 
     </Button>
   );
 }
+
+/**
+ * Excel and PDF downloads of a report, with the filters currently in the page's URL.
+ * `api` is the export route (it reads ?format=xlsx|pdf and the same filters as the page).
+ */
+export function ExportButtons({ api }: { api: string }) {
+  const sp = useSearchParams();
+  const [busy, setBusy] = React.useState<"" | "xlsx" | "pdf">("");
+  const link = (format: "xlsx" | "pdf") => { const p = new URLSearchParams(sp.toString()); p.delete("page"); p.set("format", format); return `${api}?${p.toString()}`; };
+  const go = (format: "xlsx" | "pdf") => {
+    setBusy(format);
+    window.location.assign(link(format));
+    window.setTimeout(() => setBusy(""), 4000);
+  };
+  return (
+    <div className="flex gap-2 print-hide">
+      <Button variant="outline" size="sm" onClick={() => go("xlsx")} disabled={!!busy}>
+        {busy === "xlsx" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} Excel
+      </Button>
+      <Button variant="outline" size="sm" onClick={() => go("pdf")} disabled={!!busy}>
+        {busy === "pdf" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} PDF
+      </Button>
+    </div>
+  );
+}

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Truck } from "lucide-react";
+import { ExportButtons } from "@/components/reports/report-tools";
 import { requirePermissionPage } from "@/lib/auth/guards";
 import { getActiveContext } from "@/lib/context";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -62,7 +63,11 @@ export default async function SalesHistoryPage(props: { searchParams: SP }) {
       <PageHeader
         title="Sales History"
         description="Sales orders and posted, voided sales."
-        actions={<Button asChild><Link href="/sales/new">New Sales Order</Link></Button>}
+        actions={<div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline"><Link href="/sales/history/trucks"><Truck className="h-4 w-4" /> Sales by truck</Link></Button>
+          <ExportButtons api="/api/reports/sales-history" />
+          <Button asChild><Link href="/sales/new">New Sales Order</Link></Button>
+        </div>}
       />
       <ListToolbar
         searchValue={q}
